@@ -11,7 +11,7 @@ enum CLI {
         Usage:
           turnstile init [--shell zsh|bash|fish] [--no-rc]   install shims and add them to PATH
           turnstile doctor                                   check the install, PATH, config, and daemon
-          turnstile status [--json]                          running and queued jobs, memory, recent runs
+          turnstile status [--json] [--watch]                running and queued jobs, memory, recent runs
           turnstile bump <job>                               move a job (number, pid, or name) to the front
           turnstile run [--class compile|test|browser] -- <command>   gate any command
           turnstile classify <command>                       show how a command would be gated
@@ -217,31 +217,40 @@ enum CLI {
 
     static func status(_ args: [String]) -> Never {
         let json = args.contains("--json")
+        guard args.contains("--watch") || args.contains("-w") else {
+            print(statusText(json: json))
+            exit(0)
+        }
+        // Redraw in place until Ctrl-C.
+        while true {
+            let text = statusText(json: json)
+            print("\u{1B}[H\u{1B}[2J" + text + "\n\n(refreshing every second; Ctrl-C to stop)")
+            fflush(stdout)
+            sleep(1)
+        }
+    }
+
+    static func statusText(json: Bool) -> String {
         guard let client = Client.connect(socketPath: paths.socket),
               let reply = client.roundTrip(Message(type: "status")), let snapshot = reply.status else {
-            if json {
-                print(#"{"daemon":false}"#)
-            } else {
-                let level = SystemMemory.level()
-                print("turnstile: daemon not running (starts with the first gated command)")
-                print("memory: \(level)% free of \(Bytes.format(SystemMemory.physical))")
-                if let store = try? Store(path: paths.database) { printRecent(store.recent(limit: 10)) }
+            if json { return #"{"daemon":false}"# }
+            var lines = [
+                "turnstile: daemon not running (starts with the first gated command)",
+                "memory: \(SystemMemory.level())% free of \(Bytes.format(SystemMemory.physical))",
+            ]
+            if let store = try? Store(path: paths.database) {
+                let recent = store.recent(limit: 10)
+                lines.append("")
+                lines.append(recent.isEmpty ? StatusFormatter.nothingYet : StatusFormatter.recent(recent))
             }
-            exit(0)
+            return lines.joined(separator: "\n")
         }
         if json {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-            print(String(decoding: (try? encoder.encode(snapshot)) ?? Data(), as: UTF8.self))
-            exit(0)
+            return String(decoding: (try? encoder.encode(snapshot)) ?? Data(), as: UTF8.self)
         }
-        print(StatusFormatter.render(snapshot, now: Date().timeIntervalSince1970))
-        exit(0)
-    }
-
-    static func printRecent(_ entries: [HistoryEntry]) {
-        guard !entries.isEmpty else { return }
-        print(StatusFormatter.recent(entries))
+        return StatusFormatter.render(snapshot, now: Date().timeIntervalSince1970)
     }
 
     static func bump(_ args: [String]) -> Never {
@@ -341,6 +350,11 @@ enum CLI {
 }
 
 enum StatusFormatter {
+    static let nothingYet = """
+        Nothing has gone through turnstile yet. If you've run builds, their shell may not
+        have the shims on PATH: run `turnstile doctor` in that shell to check.
+        """
+
     static func render(_ snapshot: StatusSnapshot, now: Double) -> String {
         var lines: [String] = []
         let free = snapshot.physicalMemory / 100 * UInt64(snapshot.memoryLevel)
@@ -371,6 +385,9 @@ enum StatusFormatter {
         if !snapshot.recent.isEmpty {
             lines.append("")
             lines.append(recent(snapshot.recent))
+        } else if snapshot.running.isEmpty && snapshot.queued.isEmpty {
+            lines.append("")
+            lines.append(nothingYet)
         }
         return lines.joined(separator: "\n")
     }

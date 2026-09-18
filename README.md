@@ -51,7 +51,7 @@ Gated by default: `swift`, `xcodebuild`, `cargo`, `go`, `gradle`, `make`, `npm`,
 
 | Command | What it does |
 | --- | --- |
-| `turnstile status [--json]` | Running and queued jobs, memory, and recent runs |
+| `turnstile status [--json] [--watch]` | Running and queued jobs, memory, and recent runs. `--watch` redraws every second |
 | `turnstile bump <job>` | Move a job (by number, pid, or name) to the front, or raise a running one to normal priority |
 | `turnstile doctor` | Check the install, PATH order, config, and daemon, with a fix for anything wrong |
 | `turnstile config` | Show the settings in effect here, and where each came from |

@@ -12,21 +12,30 @@ final class Daemon {
         /// Job this client owns, or follows as a joiner.
         var job: Int64?
         var joined = false
+        /// A write failed or timed out part-way, so the stream can't be trusted; the daemon drops it.
+        var broken = false
+        var onBroken: (() -> Void)?
 
         init(fd: Int32) { self.fd = fd }
 
         func send(_ message: Message) {
+            guard !broken else { return }
             let data = message.encoded()
-            data.withUnsafeBytes { buffer in
+            let complete = data.withUnsafeBytes { buffer -> Bool in
                 var offset = 0
                 while offset < buffer.count {
                     let written = write(fd, buffer.baseAddress! + offset, buffer.count - offset)
                     if written < 0 {
                         if errno == EINTR { continue }
-                        return
+                        return false
                     }
                     offset += written
                 }
+                return true
+            }
+            if !complete {
+                broken = true
+                onBroken?()
             }
         }
     }
@@ -229,6 +238,14 @@ final class Daemon {
         }
         source.setCancelHandler { close(fd) }
         connection.source = source
+        // Deferred, since a send can fail in the middle of changing job state.
+        connection.onBroken = { [weak self, weak connection] in
+            DispatchQueue.main.async {
+                guard let self, let connection, self.connections[ObjectIdentifier(connection)] != nil else { return }
+                self.log("dropping a client that stopped reading")
+                self.disconnected(connection)
+            }
+        }
         connections[ObjectIdentifier(connection)] = connection
         source.resume()
     }

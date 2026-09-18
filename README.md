@@ -43,7 +43,7 @@ If you'd rather manage PATH yourself, use `turnstile init --no-rc` and put `eval
 - **Duplicate runs merge.** The same command on identical working-tree contents joins the run in progress and gets its output and exit code. A newer request from the same worktree replaces its queued older one.
 - **Nested calls pass through.** `swift test` calling `swift build` doesn't wait on itself.
 - **Pressure relief.** When memory runs low, turnstile lowers each tool's parallelism (`--jobs`, `--maxWorkers`, `CARGO_BUILD_JOBS`, Node's heap cap). If it gets critical, the newest agent job is paused with SIGSTOP and resumed once memory recovers. A job that runs far past its usual peak is killed, with the reason printed.
-- **It fails open.** If the daemon is missing or broken, commands run ungated rather than failing. If it crashes, waiting jobs requeue with a fresh one instead of all starting at once.
+- **It fails open.** If the daemon is missing or broken, commands run ungated rather than failing. If it crashes, running jobs re-register with a fresh one and waiting jobs requeue, so limits still hold, and anything it had paused carries on.
 
 Gated by default: `swift`, `xcodebuild`, `cargo`, `go`, `gradle`, `make`, `npm`, `pnpm`, `yarn`, `bun`, `npx`, `vitest`, `jest`, `playwright`, and `tsc`. Package scripts are classified by name: `test`, `test:unit`, and `ci` are tests; `e2e` and `playwright` are browser runs; `build`, `lint`, and `typecheck` are compiles; `dev`, `start`, and `watch` pass through. Run `turnstile classify <command>` to see what any command would do.
 
@@ -150,7 +150,7 @@ Start with `turnstile doctor`. It checks each link from your shell to the daemon
 - **Something's wrong and you need to work now.** `turnstile disable` turns gating off everywhere at once; `turnstile enable` turns it back on.
 - **Logs.** The daemon logs to `~/.turnstile/daemon.log`. Output from runs without a terminal is kept in `~/.turnstile/logs` for a day.
 
-Exit codes are the tool's own. turnstile adds `75` when a joined run ended without a result (run it again), `126` when the tool couldn't start, and `127` when it isn't installed.
+Exit codes are the tool's own. turnstile adds `126` when the tool couldn't start, and `127` when it isn't installed. If a run you joined is cancelled, your command runs on its own instead.
 
 ## Limits
 

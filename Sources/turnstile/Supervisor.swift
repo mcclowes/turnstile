@@ -118,6 +118,8 @@ enum Supervisor {
                     }
                 case "notice":
                     if let text = message.text { warn(text) }
+                case "cancelled":
+                    exitCancelled(message)
                 case "joined":
                     follow(client: client, first: message)
                     // The run it joined ended without a result, so run it here instead.
@@ -242,6 +244,7 @@ enum Supervisor {
         var client = client
         var daemonOpen = true
         var released = false
+        var cancelled = false
         var adoptions = 0
         var status: Int32 = 0
         var exited = false
@@ -280,9 +283,15 @@ enum Supervisor {
                         streams[index].read = -1
                     }
                 } else if client.ingest() {
-                    for message in client.takePending() where message.type == "notice" || message.type == "release" {
+                    for message in client.takePending() where ["notice", "release", "cancelled"].contains(message.type) {
                         if let text = message.text { warn(text) }
                         if message.type == "release" { released = true }
+                        // The daemon signals the tree too; this covers a child it hasn't seen start yet.
+                        if message.type == "cancelled" && !cancelled && !exited {
+                            cancelled = true
+                            kill(child, SIGTERM)
+                            resume(child)
+                        }
                     }
                 } else {
                     daemonOpen = false
@@ -315,6 +324,7 @@ enum Supervisor {
                 if message.type == "ok" { break }
             }
         }
+        if cancelled { exit(Turnstile.cancelledExitCode) }
         exitLike(exitCode: finished.exitCode, signal: finished.signal)
     }
 
@@ -331,6 +341,11 @@ enum Supervisor {
         adopt.log = log
         guard let reply = fresh.roundTrip(adopt, timeout: 2), reply.type == "ok", reply.job != nil else { return nil }
         return fresh
+    }
+
+    static func exitCancelled(_ message: Message) -> Never {
+        warn(message.text ?? Turnstile.cancelledText)
+        exit(Turnstile.cancelledExitCode)
     }
 
     static func exitLike(exitCode: Int32?, signal sig: Int32?) -> Never {
@@ -368,6 +383,7 @@ enum Supervisor {
     static func follow(client: Client, first: Message) {
         if let text = first.text { warn(text) }
         var log: Int32 = -1
+        var cancelled = false
         var buffer = [UInt8](repeating: 0, count: 65536)
         defer { if log >= 0 { close(log) } }
 
@@ -396,8 +412,12 @@ enum Supervisor {
                     if log < 0, let path = message.log { log = open(path, O_RDONLY | O_CLOEXEC) }
                 case "notice":
                     if let text = message.text { warn(text) }
+                case "cancelled":
+                    cancelled = true
+                    if let text = message.text { warn(text) }
                 case "done":
                     pump()
+                    if cancelled || message.cancelled == true { exit(Turnstile.cancelledExitCode) }
                     guard message.exitCode != nil || message.signal != nil else {
                         warn("\(message.text ?? "the run this joined ended without a result"); running it here instead")
                         return

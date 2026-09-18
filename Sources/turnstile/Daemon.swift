@@ -73,6 +73,12 @@ final class Daemon {
         var peak: UInt64 = 0
         var ceiling: UInt64 = .max
         var paused = false
+        /// Paused by a person, so it's never resumed automatically.
+        var pausedByUser = false
+        /// Held by a person: stays queued until released.
+        var held = false
+        /// Killed by a person, so callers are told not to retry.
+        var cancelled = false
         var killReason: String?
         var killDeadline: Double?
         var lastWait: String?
@@ -275,7 +281,8 @@ final class Daemon {
             var reply = Message(type: "status")
             reply.status = snapshot()
             connection.send(reply)
-        case "bump": connection.send(bump(message.target ?? ""))
+        case "bump", "kill", "pause", "resume", "hold", "unhold":
+            connection.send(control(message.type, target: message.target ?? ""))
         case "stop":
             connection.send(Message(type: "ok"))
             shutdown(reason: "requested")
@@ -320,6 +327,7 @@ final class Daemon {
         // A newer request from the same worktree replaces its queued one; the older caller gets this run's result.
         for stale in jobs.values where job.captures && stale.id != id && stale.state == .queued && stale.identity == job.identity {
             jobs.removeValue(forKey: stale.id)
+            if stale.held { job.held = true }
             for follower in stale.connections {
                 attach(follower, to: job, text: "superseded by a newer \(job.key) from this worktree (#\(job.id)); reporting its result")
             }
@@ -412,7 +420,8 @@ final class Daemon {
         guard jobs.removeValue(forKey: job.id) != nil else { return }
         let now = Daemon.now()
         let outcome: String
-        if job.killReason != nil { outcome = "killed" }
+        if job.cancelled { outcome = "cancelled" }
+        else if job.killReason != nil { outcome = "killed" }
         else if lost { outcome = "lost" }
         else if exitCode == 0 { outcome = "ok" }
         else if signal != nil { outcome = "signaled" }
@@ -425,6 +434,7 @@ final class Daemon {
         done.job = job.id
         done.exitCode = exitCode
         done.signal = signal
+        if job.cancelled { done.cancelled = true }
         if lost { done.text = "the run this joined ended without a result" }
         else if let reason = job.killReason { done.text = reason }
         for joiner in job.joiners { joiner.send(done) }
@@ -476,7 +486,7 @@ final class Daemon {
         guard !queued.isEmpty else { return }
         let running = jobs.values.filter { $0.state != .queued }
         let decision = Scheduler.decide(
-            queue: queued.map { QueuedJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, agent: $0.agent, bumpedAt: $0.bumpedAt, queuedAt: $0.queuedTick, label: $0.label) },
+            queue: queued.map { QueuedJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, agent: $0.agent, bumpedAt: $0.bumpedAt, queuedAt: $0.queuedTick, label: $0.label, held: $0.held) },
             running: running.map { RunningJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, footprint: $0.footprint, label: $0.label) },
             freeMemory: SystemMemory.free(level: memoryLevel),
             policy: policy
@@ -489,7 +499,7 @@ final class Daemon {
         }
         for (id, reason) in decision.waiting {
             guard let job = jobs[id] else { continue }
-            let text = Scheduler.message(for: reason)
+            let text = reason == .held ? "held; `turnstile release #\(id)` lets it run" : Scheduler.message(for: reason)
             // Repeat now and then, so a long wait never looks like a hang.
             if text != job.lastWait || tick - job.lastWaitSentAt >= 30 {
                 var reply = Message(type: "queued")
@@ -546,10 +556,17 @@ final class Daemon {
 
     func sample(_ job: Job, parents: [pid_t: pid_t]) {
         guard let child = job.childPid else { return }
-        job.tree = ProcessTree.descendants(of: child, parents: parents)
+        let previous = job.tree
+        let tree = ProcessTree.descendants(of: child, parents: parents)
+        job.tree = tree
         if job.tree.isEmpty {
             if job.state == .orphaned { complete(job, exitCode: nil, signal: nil, lost: true) }
             return
+        }
+        // Anything a paused job spawned just before it stopped is paused too.
+        if job.paused {
+            let fresh = Set(tree).subtracting(previous)
+            if !fresh.isEmpty { ProcessTree.signal(Array(fresh), SIGSTOP) }
         }
         job.footprint = ProcessTree.footprint(of: job.tree)
         job.peak = max(job.peak, job.footprint)
@@ -586,7 +603,7 @@ final class Daemon {
     func relievePressure(now: Double) {
         guard now - lastPressureAction >= 3 else { return }
         let candidates = jobs.values.filter { $0.state != .queued && !$0.tree.isEmpty && $0.killReason == nil }.map {
-            Pressure.Candidate(id: $0.id, startedAt: $0.admittedTick ?? 0, paused: $0.paused, pausable: $0.pausable)
+            Pressure.Candidate(id: $0.id, startedAt: $0.admittedTick ?? 0, paused: $0.paused, pausable: $0.pausable, manual: $0.pausedByUser)
         }
         let action = Pressure.action(
             memoryLevel: memoryLevel, jobs: candidates,
@@ -616,7 +633,8 @@ final class Daemon {
 
     // MARK: Commands
 
-    func bump(_ target: String) -> Message {
+    /// A job by number, pid, or a unique piece of its name.
+    func resolve(_ target: String) -> Result<Job, ControlError> {
         let trimmed = target.hasPrefix("#") ? String(target.dropFirst()) : target
         let matches: [Job]
         if let number = Int64(trimmed), let job = jobs[number] {
@@ -624,31 +642,116 @@ final class Daemon {
         } else if let pid = Int32(trimmed), let job = jobs.values.first(where: { $0.clientPid == pid || $0.childPid == pid }) {
             matches = [job]
         } else {
-            matches = jobs.values.filter { "\($0.project) \($0.key)".localizedCaseInsensitiveContains(trimmed) }
+            matches = trimmed.isEmpty ? [] : jobs.values.filter { "\($0.project) \($0.key)".localizedCaseInsensitiveContains(trimmed) }
         }
         guard matches.count == 1, let job = matches.first else {
-            return .error(matches.isEmpty ? "no job matches \(target)" : "\(target) matches \(matches.count) jobs; use a job number")
+            return .failure(ControlError(text: matches.isEmpty ? "no job matches \(target)" : "\(target) matches \(matches.count) jobs; use a job number"))
+        }
+        return .success(job)
+    }
+
+    struct ControlError: Error { let text: String }
+
+    func control(_ action: String, target: String) -> Message {
+        let job: Job
+        switch resolve(target) {
+        case let .success(found): job = found
+        case let .failure(error): return .error(error.text)
+        }
+        let name = "#\(job.id) \(job.project) \(job.key)"
+        let text: String
+        switch action {
+        case "bump": text = bump(job, name: name)
+        case "kill": text = kill(job, name: name)
+        case "pause":
+            guard job.state != .queued else { return .error("\(name) hasn't started; use `turnstile hold` to keep it from starting") }
+            guard !job.tree.isEmpty else { return .error("\(name) is starting; try again in a moment") }
+            let wasPaused = job.paused
+            job.paused = true
+            job.pausedByUser = true
+            if !wasPaused { ProcessTree.signal(job.tree, SIGSTOP) }
+            log("#\(job.id) paused by request")
+            for connection in job.connections { connection.send(.notice("paused by you; `turnstile resume #\(job.id)` to carry on")) }
+            text = wasPaused ? "\(name) was already paused; it now stays paused until you resume it" : "paused \(name)"
+        case "resume":
+            guard job.paused else { return .error("\(name) isn't paused") }
+            job.paused = false
+            job.pausedByUser = false
+            ProcessTree.signal(job.tree, SIGCONT)
+            log("#\(job.id) resumed by request")
+            for connection in job.connections { connection.send(.notice("resumed")) }
+            text = "resumed \(name)"
+        case "hold":
+            guard job.state == .queued else { return .error("\(name) is already running; use `turnstile pause` instead") }
+            guard !job.held else { return .error("\(name) is already held") }
+            job.held = true
+            job.lastWait = nil
+            text = "holding \(name); `turnstile release #\(job.id)` lets it run"
+            schedule()
+        default:  // unhold
+            guard job.held else { return .error("\(name) isn't held") }
+            job.held = false
+            job.lastWait = nil
+            text = "released \(name)"
+            schedule()
         }
         var reply = Message(type: "ok")
+        reply.text = text
+        return reply
+    }
+
+    func bump(_ job: Job, name: String) -> String {
         if job.state == .queued {
             job.bumpedAt = Daemon.clock()
-            reply.text = "bumped #\(job.id) \(job.project) \(job.key) to the front of the queue"
             job.owner?.send(.notice("bumped to the front of the queue"))
             schedule()
-        } else {
-            ProcessTree.foreground(job.tree)
-            if job.paused {
-                job.paused = false
-                ProcessTree.signal(job.tree, SIGCONT)
-            }
-            reply.text = "#\(job.id) is already running; raised it to normal priority"
+            return "bumped \(name) to the front of the queue" + (job.held ? " (still held; release it to run)" : "")
         }
-        return reply
+        ProcessTree.foreground(job.tree)
+        if job.paused {
+            job.paused = false
+            job.pausedByUser = false
+            ProcessTree.signal(job.tree, SIGCONT)
+        }
+        return "#\(job.id) is already running; raised it to normal priority"
+    }
+
+    /// Drops a queued job, or stops a running one: SIGTERM now, SIGKILL after a grace period. Joiners share its fate.
+    func kill(_ job: Job, name: String) -> String {
+        let affected = job.joiners.count
+        let others = affected == 0 ? "" : " and \(affected) joined run\(affected == 1 ? "" : "s")"
+        var cancelled = Message(type: "cancelled")
+        cancelled.text = Turnstile.cancelledText
+        cancelled.job = job.id
+        job.cancelled = true
+        log("#\(job.id) \(job.project) \(job.key): killed by request")
+        if job.state == .queued {
+            jobs.removeValue(forKey: job.id)
+            store.markFinished(job.id, outcome: "cancelled", exitCode: nil, signal: nil, peak: nil, now: Daemon.now())
+            var done = Message(type: "done")
+            done.job = job.id
+            done.cancelled = true
+            done.text = Turnstile.cancelledText
+            for connection in job.connections {
+                connection.send(cancelled)
+                connection.send(done)
+                connection.job = nil
+            }
+            schedule()
+            return "cancelled queued \(name)\(others)"
+        }
+        guard job.killReason == nil else { return "\(name) is already being stopped" }
+        job.killReason = Turnstile.cancelledText
+        job.killDeadline = Daemon.clock() + 5
+        if job.paused { ProcessTree.signal(job.tree, SIGCONT) }
+        ProcessTree.signal(job.tree, SIGTERM)
+        for connection in job.connections { connection.send(cancelled) }
+        return "killed \(name)\(others)"
     }
 
     func snapshot() -> StatusSnapshot {
         let ordered = Scheduler.order(jobs.values.filter { $0.state == .queued }.map {
-            QueuedJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, agent: $0.agent, bumpedAt: $0.bumpedAt, queuedAt: $0.queuedTick)
+            QueuedJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, agent: $0.agent, bumpedAt: $0.bumpedAt, queuedAt: $0.queuedTick, held: $0.held)
         }).map(\.id)
         func describe(_ job: Job) -> JobSnapshot {
             JobSnapshot(
@@ -656,7 +759,8 @@ final class Daemon {
                 project: job.project, key: job.key, cwd: job.cwd, agent: job.agent, estimate: job.estimate,
                 footprint: job.state == .queued ? nil : job.footprint, peak: job.peak > 0 ? job.peak : nil,
                 paused: job.paused, clientPid: job.clientPid, childPid: job.childPid, queuedAt: job.queuedAt,
-                startedAt: job.startedAt, waiting: job.lastWait, joiners: job.joiners.count
+                startedAt: job.startedAt, waiting: job.lastWait, joiners: job.joiners.count,
+                held: job.held, pausedBy: job.paused ? (job.pausedByUser ? "you" : "memory") : nil
             )
         }
         var limits: [String: Int] = [:]

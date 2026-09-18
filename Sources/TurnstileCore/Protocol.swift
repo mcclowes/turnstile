@@ -2,8 +2,9 @@ import Foundation
 
 /// One newline-delimited JSON message between a client and the daemon.
 ///
-/// Client to daemon: `request`, `adopt` (a running job re-registering after a daemon restart), `started`, `finished`, `status`, `bump`.
-/// Daemon to client: `queued`, `admitted`, `joined`, `output`, `done`, `notice`, `release`, `status`, `ok`, `error`.
+/// Client to daemon: `request`, `adopt` (a running job re-registering after a daemon restart), `started`, `finished`, `status`,
+/// and the controls `bump`, `kill`, `pause`, `resume`, `hold`, `unhold`, each with a `target`.
+/// Daemon to client: `queued`, `admitted`, `joined`, `output`, `done`, `notice`, `release`, `cancelled`, `status`, `ok`, `error`.
 public struct Message: Codable, Equatable, Sendable {
     public var type: String
 
@@ -40,8 +41,10 @@ public struct Message: Codable, Equatable, Sendable {
     public var limits: JobLimits?
     public var status: StatusSnapshot?
 
-    // bump
+    // controls
     public var target: String?
+    /// On `done`: someone killed the run, so it shouldn't be retried.
+    public var cancelled: Bool?
 
     public init(type: String) {
         self.type = type
@@ -90,10 +93,14 @@ public struct JobSnapshot: Codable, Equatable, Sendable {
     public var startedAt: Double?
     public var waiting: String?
     public var joiners: Int
+    /// Nil from daemons older than 0.3.
+    public var held: Bool?
+    /// "you" or "memory" while paused.
+    public var pausedBy: String?
 
     public var label: String { "\(project) \(key)" }
 
-    public init(id: Int64, state: String, resourceClass: ResourceClass, project: String, key: String, cwd: String, agent: Bool, estimate: UInt64, footprint: UInt64?, peak: UInt64?, paused: Bool, clientPid: Int32, childPid: Int32?, queuedAt: Double, startedAt: Double?, waiting: String?, joiners: Int) {
+    public init(id: Int64, state: String, resourceClass: ResourceClass, project: String, key: String, cwd: String, agent: Bool, estimate: UInt64, footprint: UInt64?, peak: UInt64?, paused: Bool, clientPid: Int32, childPid: Int32?, queuedAt: Double, startedAt: Double?, waiting: String?, joiners: Int, held: Bool? = nil, pausedBy: String? = nil) {
         self.id = id
         self.state = state
         self.resourceClass = resourceClass
@@ -111,6 +118,8 @@ public struct JobSnapshot: Codable, Equatable, Sendable {
         self.startedAt = startedAt
         self.waiting = waiting
         self.joiners = joiners
+        self.held = held
+        self.pausedBy = pausedBy
     }
 }
 

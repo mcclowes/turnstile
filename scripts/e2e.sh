@@ -253,6 +253,42 @@ kill -CONT "$frozen"
 wait
 check "a suspended client's slot is reclaimed" '[ $elapsed -ge 5 ] && [ $elapsed -lt 25 ] && grep -q "fake swift test" "$T/unstick.out"'
 
+# `kill` drops a queued job and stops a running one; both callers are told not to retry.
+(cd a && FAKE_SLEEP=6 swift test > "$T/k1.out" 2>&1; echo $? > "$T/k1.code") &
+sleep 0.7
+(cd b && swift test > "$T/k2.out" 2>&1; echo $? > "$T/k2.code") &
+sleep 0.7
+queued_out="$(turnstile kill 'b swift test')"
+sleep 0.3
+running_out="$(turnstile kill 'a swift test')"
+wait
+check "kill drops a queued job" '[ "$(cat "$T/k2.code")" = 125 ] && grep -q "cancelled by you, don.t retry" "$T/k2.out" && echo "$queued_out" | grep -q "cancelled queued"'
+check "kill stops a running job" '[ "$(cat "$T/k1.code")" = 125 ] && grep -q "cancelled by you" "$T/k1.out" && echo "$running_out" | grep -q "^killed #"'
+
+# A held job stays queued after its slot frees, until it's released.
+(cd a && FAKE_SLEEP=1 swift test > /dev/null 2>&1) &
+sleep 0.7
+(cd b && swift test > "$T/h.out" 2>&1; echo $? > "$T/h.code") &
+sleep 0.5
+turnstile hold 'b swift test' > /dev/null
+sleep 2.5
+held_json="$(turnstile status --json)"
+held_early="$(cat "$T/h.code" 2>/dev/null)"
+turnstile release 'b swift test' > /dev/null
+wait
+check "held jobs wait until released" '[ -z "$held_early" ] && echo "$held_json" | grep -q "\"held\" : true" && [ "$(cat "$T/h.code")" = 0 ] && grep -q "fake swift test" "$T/h.out"'
+
+# A job paused by hand stays paused, even with plenty of memory, until resumed.
+(cd a && FAKE_SLEEP=1 swift build > "$T/mp.out" 2>&1; echo $? > "$T/mp.code") &
+sleep 0.7
+turnstile pause 'a swift build' > /dev/null
+sleep 2.5
+paused_json="$(turnstile status --json)"
+early="$(cat "$T/mp.code" 2>/dev/null)"
+turnstile resume 'a swift build' > /dev/null
+wait
+check "manual pause holds until resumed" '[ -z "$early" ] && echo "$paused_json" | grep -q "\"pausedBy\" : \"you\"" && [ "$(cat "$T/mp.code")" = 0 ] && grep -q "paused by you" "$T/mp.out"'
+
 # A deliberate stop releases waiting jobs to run ungated.
 (cd a && FAKE_SLEEP=3 swift test > /dev/null 2>&1) &
 sleep 0.7

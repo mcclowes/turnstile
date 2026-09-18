@@ -103,12 +103,15 @@ public enum Pressure {
         public var startedAt: Double
         public var paused: Bool
         public var pausable: Bool
+        /// Paused by a person, so only a person resumes it.
+        public var manual: Bool
 
-        public init(id: Int64, startedAt: Double, paused: Bool, pausable: Bool = true) {
+        public init(id: Int64, startedAt: Double, paused: Bool, pausable: Bool = true, manual: Bool = false) {
             self.id = id
             self.startedAt = startedAt
             self.paused = paused
             self.pausable = pausable
+            self.manual = manual
         }
     }
 
@@ -118,7 +121,7 @@ public enum Pressure {
     }
 
     /// Pauses the newest job when memory runs low, keeping at least one running so work progresses.
-    /// Resumes the oldest paused job once pressure clears.
+    /// Resumes the oldest paused job once pressure clears, leaving jobs a person paused alone.
     public static func action(memoryLevel: Int, jobs: [Candidate], pauseBelow: Int, resumeAbove: Int) -> Action? {
         let running = jobs.filter { !$0.paused }
         if memoryLevel < pauseBelow, running.count > 1,
@@ -127,7 +130,7 @@ public enum Pressure {
             return .pause(newest.id)
         }
         if memoryLevel >= resumeAbove || running.isEmpty,
-           let oldest = jobs.filter(\.paused).min(by: { $0.startedAt < $1.startedAt }) {
+           let oldest = jobs.filter({ $0.paused && !$0.manual }).min(by: { $0.startedAt < $1.startedAt }) {
             return .resume(oldest.id)
         }
         return nil

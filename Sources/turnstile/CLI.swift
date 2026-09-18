@@ -13,6 +13,9 @@ enum CLI {
           turnstile doctor                                   check the install, PATH, config, and daemon
           turnstile status [--json] [--watch]                running and queued jobs, memory, recent runs
           turnstile bump <job>                               move a job (number, pid, or name) to the front
+          turnstile kill <job>                               drop a queued job, or stop a running one
+          turnstile pause <job> | resume <job>               stop a running job's processes, and carry on
+          turnstile hold <job> | release <job>               keep a queued job from starting, and let it go
           turnstile run [--class compile|test|browser] -- <command>   gate any command
           turnstile classify <command>                       show how a command would be gated
           turnstile config [show|check|path|init|edit]       see, validate, and edit settings
@@ -36,7 +39,7 @@ enum CLI {
         switch command {
         case "init": initialize(rest)
         case "status": status(rest)
-        case "bump": bump(rest)
+        case "bump", "kill", "pause", "resume", "hold", "release": control(command, rest)
         case "run": run(rest)
         case "classify": classify(rest)
         case "config": ConfigCommand.main(rest)
@@ -253,26 +256,27 @@ enum CLI {
         return StatusFormatter.render(snapshot, now: Date().timeIntervalSince1970)
     }
 
-    static func bump(_ args: [String]) -> Never {
+    /// `release` on the command line is `unhold` on the wire, since the daemon already sends clients `release`.
+    static func control(_ command: String, _ args: [String]) -> Never {
         guard let target = args.first else {
-            warn("usage: turnstile bump <job number | pid | name>")
+            warn("usage: turnstile \(command) <job number | pid | name>")
             exit(64)
         }
         guard let client = Client.connect(socketPath: paths.socket) else {
-            warn("daemon not running, nothing to bump")
+            warn("daemon not running, so there are no jobs to \(command)")
             exit(1)
         }
-        var message = Message(type: "bump")
+        var message = Message(type: command == "release" ? "unhold" : command)
         message.target = target
         guard let reply = client.roundTrip(message) else {
             warn("no reply from daemon")
             exit(1)
         }
         if reply.type == "error" {
-            warn(reply.text ?? "bump failed")
+            warn(reply.text ?? "\(command) failed")
             exit(1)
         }
-        print(reply.text ?? "bumped")
+        print(reply.text ?? "done")
         exit(0)
     }
 
@@ -370,7 +374,7 @@ enum StatusFormatter {
             let elapsed = job.startedAt.map { formatDuration(now - $0) } ?? "-"
             var flags: [String] = []
             if job.agent { flags.append("agent") }
-            if job.state != "running" { flags.append(job.state) }
+            if job.state != "running" { flags.append(job.pausedBy == "you" ? "paused by you" : job.state) }
             if job.joiners > 0 { flags.append("+\(job.joiners) joined") }
             lines.append("  #\(job.id)  \(job.resourceClass.rawValue.padding(toLength: 7, withPad: " ", startingAt: 0)) \(job.label)  \(detail), \(elapsed)\(flags.isEmpty ? "" : "  [\(flags.joined(separator: ", "))]")")
         }
@@ -379,7 +383,8 @@ enum StatusFormatter {
         lines.append(snapshot.queued.isEmpty ? "queued: none" : "queued:")
         for job in snapshot.queued {
             let waited = formatDuration(now - job.queuedAt)
-            lines.append("  #\(job.id)  \(job.resourceClass.rawValue.padding(toLength: 7, withPad: " ", startingAt: 0)) \(job.label)  ~\(Bytes.format(job.estimate)), waiting \(waited)\(job.agent ? "  [agent]" : "")")
+            let flags = [job.agent ? "agent" : nil, job.held == true ? "held" : nil].compactMap { $0 }
+            lines.append("  #\(job.id)  \(job.resourceClass.rawValue.padding(toLength: 7, withPad: " ", startingAt: 0)) \(job.label)  ~\(Bytes.format(job.estimate)), waiting \(waited)\(flags.isEmpty ? "" : "  [\(flags.joined(separator: ", "))]")")
             if let reason = job.waiting { lines.append("        \(reason)") }
         }
         if !snapshot.recent.isEmpty {

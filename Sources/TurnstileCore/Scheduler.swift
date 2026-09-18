@@ -9,8 +9,10 @@ public struct QueuedJob: Equatable, Sendable {
     public var bumpedAt: Double?
     public var queuedAt: Double
     public var label: String
+    /// Kept in the queue, but never admitted until released.
+    public var held: Bool
 
-    public init(id: Int64, resourceClass: ResourceClass, estimate: UInt64, agent: Bool = true, bumpedAt: Double? = nil, queuedAt: Double, label: String = "") {
+    public init(id: Int64, resourceClass: ResourceClass, estimate: UInt64, agent: Bool = true, bumpedAt: Double? = nil, queuedAt: Double, label: String = "", held: Bool = false) {
         self.id = id
         self.resourceClass = resourceClass
         self.estimate = estimate
@@ -18,6 +20,7 @@ public struct QueuedJob: Equatable, Sendable {
         self.bumpedAt = bumpedAt
         self.queuedAt = queuedAt
         self.label = label
+        self.held = held
     }
 }
 
@@ -59,6 +62,8 @@ public enum WaitReason: Equatable, Sendable {
     case slots(ResourceClass, running: [String])
     /// Not enough free memory.
     case memory(need: UInt64, free: UInt64, running: [String])
+    /// Someone held it; it waits until released.
+    case held
 }
 
 public struct SchedulerDecision: Equatable, Sendable {
@@ -86,7 +91,7 @@ public enum Scheduler {
     ///
     /// A job blocked on a class slot doesn't hold up other classes. A job blocked on memory holds up
     /// everything behind it, so small jobs can't starve a big one forever. With nothing running, the
-    /// head of the queue always starts, since waiting can't free memory.
+    /// head of the queue always starts, since waiting can't free memory. Held jobs are skipped entirely.
     public static func decide(queue: [QueuedJob], running: [RunningJob], freeMemory: UInt64, policy: SchedulerPolicy) -> SchedulerDecision {
         var admit: [Int64] = []
         var waiting: [Int64: WaitReason] = [:]
@@ -102,6 +107,10 @@ public enum Scheduler {
         var waitingCount = 0
 
         for job in order(queue) {
+            if job.held {
+                waiting[job.id] = .held
+                continue
+            }
             defer {
                 if waiting[job.id] != nil {
                     waitingByClass[job.resourceClass, default: []].append(job)
@@ -142,6 +151,8 @@ public enum Scheduler {
             return "waiting for a \(cls.rawValue) slot (running: \(summary(running)))"
         case let .memory(need, free, running):
             return "waiting for memory, needs ~\(Bytes.format(need)), ~\(Bytes.format(free)) spare (running: \(summary(running)))"
+        case .held:
+            return "held; waiting until someone releases it"
         }
     }
 

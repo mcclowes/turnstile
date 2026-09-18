@@ -5,8 +5,29 @@ struct SchedulerTests {
     let gb = Bytes.gb
     let policy = SchedulerPolicy(classLimits: [.compile: 2, .test: 1, .browser: 1], reserve: 2 * Bytes.gb)
 
-    func queued(_ id: Int64, _ cls: ResourceClass = .compile, gb estimate: UInt64 = 2, agent: Bool = true, at time: Double? = nil, bumped: Double? = nil) -> QueuedJob {
-        QueuedJob(id: id, resourceClass: cls, estimate: estimate * gb, agent: agent, bumpedAt: bumped, queuedAt: time ?? Double(id), label: "job\(id), ~\(estimate) GB")
+    func queued(_ id: Int64, _ cls: ResourceClass = .compile, gb estimate: UInt64 = 2, agent: Bool = true, at time: Double? = nil, bumped: Double? = nil, held: Bool = false) -> QueuedJob {
+        QueuedJob(id: id, resourceClass: cls, estimate: estimate * gb, agent: agent, bumpedAt: bumped, queuedAt: time ?? Double(id), label: "job\(id), ~\(estimate) GB", held: held)
+    }
+
+    @Test func heldJobsAreNeverAdmitted() {
+        let decision = Scheduler.decide(queue: [queued(1, held: true)], running: [], freeMemory: 10 * gb, policy: policy)
+        #expect(decision.admit.isEmpty)
+        #expect(decision.waiting[1] == .held)
+    }
+
+    @Test func heldJobsDontHoldUpOthers() {
+        let running = [RunningJob(id: 9, resourceClass: .compile, estimate: 2 * gb, footprint: 2 * gb, label: "r")]
+        let decision = Scheduler.decide(queue: [queued(1, gb: 60, held: true), queued(2, .test, gb: 1)], running: running, freeMemory: 7 * gb, policy: policy)
+        #expect(decision.admit == [2])
+        let test = [RunningJob(id: 9, resourceClass: .test, estimate: gb, footprint: gb)]
+        let queue = Scheduler.decide(queue: [queued(1, .test, held: true), queued(2, .test)], running: test, freeMemory: 12 * gb, policy: policy)
+        #expect(queue.waiting[2] == .slots(.test, running: [""]))
+    }
+
+    @Test func releasingMakesAHeldJobEligible() {
+        let held = Scheduler.decide(queue: [queued(1, held: true)], running: [], freeMemory: 10 * gb, policy: policy)
+        let released = Scheduler.decide(queue: [queued(1)], running: [], freeMemory: 10 * gb, policy: policy)
+        #expect(held.admit.isEmpty && released.admit == [1])
     }
 
     @Test func admitsWhatFits() {

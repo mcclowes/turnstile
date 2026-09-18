@@ -53,6 +53,9 @@ Gated by default: `swift`, `xcodebuild`, `cargo`, `go`, `gradle`, `make`, `npm`,
 | --- | --- |
 | `turnstile status [--json] [--watch]` | Running and queued jobs, memory, and recent runs. `--watch` redraws every second |
 | `turnstile bump <job>` | Move a job (by number, pid, or name) to the front, or raise a running one to normal priority |
+| `turnstile kill <job>` | Drop a queued job, or stop a running one (SIGTERM, then SIGKILL after 5s). Anyone who joined the run is stopped too |
+| `turnstile pause <job>` / `resume <job>` | Stop a running job's processes with SIGSTOP, and carry on. A job you paused stays paused until you resume it |
+| `turnstile hold <job>` / `release <job>` | Keep a queued job from starting, and let it go |
 | `turnstile doctor` | Check the install, PATH order, config, and daemon, with a fix for anything wrong |
 | `turnstile config` | Show the settings in effect here, and where each came from |
 | `turnstile config check` | Validate the config files, catching typos |
@@ -150,7 +153,7 @@ Start with `turnstile doctor`. It checks each link from your shell to the daemon
 - **Something's wrong and you need to work now.** `turnstile disable` turns gating off everywhere at once; `turnstile enable` turns it back on.
 - **Logs.** The daemon logs to `~/.turnstile/daemon.log`. Output from runs without a terminal is kept in `~/.turnstile/logs` for a day.
 
-Exit codes are the tool's own. turnstile adds `126` when the tool couldn't start, and `127` when it isn't installed. If a run you joined is cancelled, your command runs on its own instead.
+Exit codes are the tool's own. turnstile adds `125` when someone ran `turnstile kill` on the job (it prints `cancelled by you, don't retry`, so agents don't mistake it for a flaky failure), `126` when the tool couldn't start, and `127` when it isn't installed. If a run you joined is cancelled, your command runs on its own instead.
 
 ## Limits
 

@@ -67,8 +67,19 @@ struct PressureTests {
         #expect(Pressure.ceiling(usualPeak: 2 * gb, physicalMemory: 16 * gb, config: ThrottleConfig(maxMemory: 3 * gb)) == 3 * gb)
     }
 
-    func job(_ id: Int64, started: Double, paused: Bool = false, pausable: Bool = true) -> Pressure.Candidate {
-        Pressure.Candidate(id: id, startedAt: started, paused: paused, pausable: pausable)
+    func job(_ id: Int64, started: Double, paused: Bool = false, pausable: Bool = true, manual: Bool = false) -> Pressure.Candidate {
+        Pressure.Candidate(id: id, startedAt: started, paused: paused, pausable: pausable, manual: manual)
+    }
+
+    @Test func neverResumesAJobSomeonePaused() {
+        #expect(Pressure.action(memoryLevel: 60, jobs: [job(1, started: 1, paused: true, manual: true)], pauseBelow: 8, resumeAbove: 20) == nil)
+        let jobs = [job(1, started: 1, paused: true, manual: true), job(2, started: 2, paused: true)]
+        #expect(Pressure.action(memoryLevel: 60, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == .resume(2))
+    }
+
+    @Test func aManuallyPausedJobDoesntCountAsRunning() {
+        let jobs = [job(1, started: 1, paused: true, manual: true), job(2, started: 2)]
+        #expect(Pressure.action(memoryLevel: 5, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == nil)
     }
 
     @Test func pausesTheNewestButKeepsOneRunning() {

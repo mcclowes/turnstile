@@ -170,6 +170,51 @@ check "status --json" 'turnstile status --json | /usr/bin/python3 -c "import jso
 check "status text" 'turnstile status | grep -q "recent:"'
 check "classify explains a command" '[ "$(turnstile classify npm run test:e2e)" = "browser (npm run test:e2e)" ]'
 
+daemon_pid() { turnstile status --json | /usr/bin/python3 -c "import json,sys; print(json.load(sys.stdin).get('daemonPid', ''))"; }
+
+# A crashed daemon doesn't let every waiting job start at once: waiters requeue with a new daemon.
+(cd a && FAKE_SLEEP=3 swift test > /dev/null 2>&1) &
+sleep 0.7
+before=$(runs test)
+(cd b && swift test > "$T/crash.out" 2>&1; echo $? > "$T/crash.code") &
+sleep 0.7
+old=$(daemon_pid)
+kill -9 "$old"
+wait
+check "waiters requeue after a daemon crash" '[ "$(cat "$T/crash.code")" = 0 ] && ! grep -q ungated "$T/crash.out" && [ -n "$(daemon_pid)" ] && [ "$(daemon_pid)" != "$old" ]'
+
+# A deliberate stop releases waiting jobs to run ungated.
+(cd a && FAKE_SLEEP=3 swift test > /dev/null 2>&1) &
+sleep 0.7
+(cd b && swift test > "$T/release.out" 2>&1) &
+sleep 0.7
+turnstile stop > /dev/null
+wait
+check "stop releases waiting jobs" 'grep -q "daemon stopped; running ungated" "$T/release.out" && grep -q "fake swift test" "$T/release.out"'
+
+# `turnstile disable` turns gating off everywhere until `enable`.
+turnstile disable > /dev/null
+(cd a && FAKE_SLEEP=2 swift test > /dev/null 2>&1) &
+sleep 0.5
+start=$(date +%s)
+(cd b && swift test > /dev/null 2>&1)
+elapsed=$(( $(date +%s) - start ))
+wait
+turnstile enable > /dev/null
+check "disable passes everything through" '[ $elapsed -lt 2 ] && [ ! -e "$TURNSTILE_HOME/disabled" ]'
+
+# Config mistakes are caught with a suggestion, and a clean install passes the doctor.
+mkdir -p "$T/badconfig" && echo '{"concurency": {"test": 1}}' > "$T/badconfig/config.json"
+out="$(TURNSTILE_CONFIG_DIR="$T/badconfig" turnstile config check)"; code=$?
+check "config check catches a typo" '[ $code = 1 ] && echo "$out" | grep -q "did you mean \"concurrency\""'
+check "config check passes a valid file" 'turnstile config check > /dev/null'
+out="$(TURNSTILE_HOME="$T/fresh" "$BIN" init --no-rc > /dev/null && PATH="$T/fresh/shims:$PATH" TURNSTILE_HOME="$T/fresh" turnstile doctor 2>&1)"; code=$?
+TURNSTILE_HOME="$T/fresh" "$BIN" stop > /dev/null
+check "doctor passes a fresh install" '[ $code = 0 ] && echo "$out" | grep -q "turnstile looks healthy"' 
+out="$(TURNSTILE_HOME="$T/fresh" turnstile doctor 2>&1)"
+check "doctor spots missing PATH setup" 'echo "$out" | grep -q "isn.t on this shell.s PATH"'
+TURNSTILE_HOME="$T/fresh" "$BIN" stop > /dev/null
+
 # The daemon going away fails open.
 turnstile stop > /dev/null
 check "no daemon still runs ungated" '[ "$(TURNSTILE_HOME=/nonexistent/x swift build 2>/dev/null | head -1)" = "fake swift build" ]'

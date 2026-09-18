@@ -29,6 +29,10 @@ enum CLI {
     static func main(_ args: [String]) -> Never {
         let command = args.first ?? "help"
         let rest = Array(args.dropFirst())
+        if command != "run", let first = rest.first, ["--help", "-h", "help"].contains(first) {
+            print(command == "config" ? ConfigCommand.usage : usage)
+            exit(0)
+        }
         switch command {
         case "init": initialize(rest)
         case "status": status(rest)
@@ -93,7 +97,7 @@ enum CLI {
                 warn("can't update \(path): \(error)")
             }
         }
-        print("Open a new shell, or run: eval \"$(turnstile env)\"")
+        print("Open a new shell (or run: eval \"$(turnstile env)\"), then check it with: turnstile doctor")
         exit(0)
     }
 

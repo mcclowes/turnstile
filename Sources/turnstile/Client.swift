@@ -51,6 +51,7 @@ final class Client {
     static func startDaemon(paths: Paths) -> Bool {
         guard let me = executablePath() else { return false }
         try? paths.ensure()
+        rotate(paths.daemonLog, above: 1 << 20)
         var environment = ProcessInfo.processInfo.environment
         environment.removeValue(forKey: "TURNSTILE_TOKEN")
         let pid = spawn(
@@ -62,6 +63,13 @@ final class Client {
             newSession: true
         )
         return pid != nil
+    }
+
+    /// Keeps one previous generation, so the log never grows without bound.
+    static func rotate(_ path: String, above limit: UInt64) {
+        let size = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? UInt64 ?? 0
+        guard size > limit else { return }
+        _ = Darwin.rename(path, path + ".1")
     }
 
     @discardableResult

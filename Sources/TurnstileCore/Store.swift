@@ -41,6 +41,23 @@ public final class Store {
 
     deinit { sqlite3_close(db) }
 
+    /// Opens the store, moving an unreadable database aside and starting fresh rather than failing.
+    /// History only tunes estimates, so losing it is better than a daemon that can't start.
+    public static func openOrReset(path: String, now: Double) throws -> (store: Store, setAside: String?) {
+        if let store = try? Store(path: path), store.isHealthy { return (store, nil) }
+        let aside = path + ".corrupt-\(Int(now))"
+        try? FileManager.default.removeItem(atPath: aside)
+        try FileManager.default.moveItem(atPath: path, toPath: aside)
+        for suffix in ["-wal", "-shm"] { try? FileManager.default.removeItem(atPath: path + suffix) }
+        return (try Store(path: path), aside)
+    }
+
+    var isHealthy: Bool {
+        var ok = false
+        query("PRAGMA quick_check", []) { ok = ok || $0.text(0) == "ok" }
+        return ok
+    }
+
     public func insertJob(state: String, resourceClass: ResourceClass, key: String, root: String, cwd: String, argv: [String], agent: Bool, clientPid: Int32, estimate: UInt64, now: Double) -> Int64 {
         let argvJSON = String(data: (try? JSONEncoder().encode(argv)) ?? Data(), encoding: .utf8) ?? "[]"
         run("""

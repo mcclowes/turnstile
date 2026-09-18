@@ -112,7 +112,9 @@ final class Daemon {
         self.paths = paths
         self.idleExit = idleExit
         try paths.ensure()
-        store = try Store(path: paths.database)
+        let (store, setAside) = try Store.openOrReset(path: paths.database, now: Daemon.now())
+        self.store = store
+        if let setAside { log("history database was unreadable; moved it to \(setAside) and started fresh") }
     }
 
     static func now() -> Double { Date().timeIntervalSince1970 }
@@ -161,7 +163,10 @@ final class Daemon {
         log("stopping: \(reason)")
         for job in jobs.values where job.paused { ProcessTree.signal(job.tree, SIGCONT) }
         for job in jobs.values {
-            for connection in job.connections { connection.send(.notice("daemon stopped; \(job.state == .queued ? "running ungated" : "continuing untracked")")) }
+            // `release` tells a waiting client this stop is deliberate, so it runs rather than restarting the daemon.
+            var message = job.state == .queued ? Message(type: "release") : .notice("daemon stopped; continuing untracked")
+            if job.state == .queued { message.text = "daemon stopped; running ungated" }
+            for connection in job.connections { connection.send(message) }
         }
         unlink(paths.socket)
         exit(0)
@@ -205,6 +210,9 @@ final class Daemon {
         _ = fcntl(fd, F_SETFD, FD_CLOEXEC)
         var on: Int32 = 1
         setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
+        // A client that stops reading (say, suspended with Ctrl-Z) mustn't stall the whole daemon.
+        var limit = timeval(tv_sec: 2, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &limit, socklen_t(MemoryLayout<timeval>.size))
         let connection = Connection(fd: fd)
         let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: .main)
         source.setEventHandler { [weak self, weak connection] in

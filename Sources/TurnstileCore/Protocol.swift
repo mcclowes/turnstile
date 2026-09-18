@@ -3,7 +3,7 @@ import Foundation
 /// One newline-delimited JSON message between a client and the daemon.
 ///
 /// Client to daemon: `request`, `started`, `finished`, `status`, `bump`.
-/// Daemon to client: `queued`, `admitted`, `joined`, `output`, `done`, `notice`, `status`, `ok`, `error`.
+/// Daemon to client: `queued`, `admitted`, `joined`, `output`, `done`, `notice`, `release`, `status`, `ok`, `error`.
 public struct Message: Codable, Equatable, Sendable {
     public var type: String
 

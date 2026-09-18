@@ -49,7 +49,7 @@ enum Supervisor {
     static func gate(tool: String, real: String, args: [String], classification: Classification, config: Config, interactive: Bool) -> Never {
         let environment = ProcessInfo.processInfo.environment
         let paths = Paths(environment: environment)
-        guard let client = Client.connectOrStart(paths: paths) else {
+        guard var client = Client.connectOrStart(paths: paths) else {
             warn("daemon unavailable, running \(tool) ungated (see \(paths.daemonLog))")
             execReal(real, args)
         }
@@ -81,13 +81,30 @@ enum Supervisor {
         }
 
         var lastText: String?
+        var heard = false
+        var reconnects = 0
         while true {
-            switch client.read() {
-            case .closed, .timeout:
-                warn("lost the daemon while waiting, running \(tool) ungated")
+            // A daemon answers at once, and repeats itself every 30s while a job waits; silence means it's wedged.
+            switch client.read(timeout: heard ? 90 : 10) {
+            case .timeout:
+                warn("the daemon stopped answering, running \(tool) ungated (see \(paths.daemonLog))")
+                execReal(real, args)
+            case .closed:
+                // A crashed daemon: requeue with a fresh one rather than letting every waiting job start at once.
+                reconnects += 1
+                if reconnects <= 3, let fresh = Client.connectOrStart(paths: paths), fresh.send(request) {
+                    client = fresh
+                    heard = false
+                    continue
+                }
+                warn("lost the daemon while waiting, running \(tool) ungated (see \(paths.daemonLog))")
                 execReal(real, args)
             case let .message(message):
+                heard = true
                 switch message.type {
+                case "release":
+                    warn(message.text ?? "daemon stopped; running \(tool) ungated")
+                    execReal(real, args)
                 case "queued":
                     if let text = message.text {
                         warn(text)

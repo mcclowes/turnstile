@@ -55,3 +55,29 @@ struct StoreTests {
         #expect(store.recent(limit: 10).first?.outcome == "killed")
     }
 }
+
+struct StoreRecoveryTests {
+    @Test func aCorruptDatabaseIsSetAsideAndReplaced() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("store-\(UUID().uuidString)").path
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let path = dir + "/state.sqlite"
+        try Data(repeating: 0x5A, count: 8192).write(to: URL(fileURLWithPath: path))
+
+        let (store, setAside) = try Store.openOrReset(path: path, now: 1000)
+        #expect(setAside == path + ".corrupt-1000")
+        #expect(FileManager.default.fileExists(atPath: path + ".corrupt-1000"))
+        #expect(store.recent(limit: 1).isEmpty)
+    }
+
+    @Test func aHealthyDatabaseIsKept() throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("store-\(UUID().uuidString).sqlite").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let first = try Store(path: path)
+        _ = first.insertJob(state: "queued", resourceClass: .test, key: "k", root: "/", cwd: "/", argv: [], agent: true, clientPid: 1, estimate: 0, now: 1)
+        first.markFinished(1, outcome: "ok", exitCode: 0, signal: nil, peak: nil, now: 2)
+        let (store, setAside) = try Store.openOrReset(path: path, now: 1000)
+        #expect(setAside == nil)
+        #expect(store.recent(limit: 5).count == 1)
+    }
+}

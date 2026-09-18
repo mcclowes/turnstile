@@ -308,6 +308,8 @@ enum Supervisor {
             }
             streams.removeAll { $0.read < 0 }
         }
+        // A background grandchild still holds the pipes. Closing them would SIGPIPE it, so a relay carries on for it.
+        if !streams.isEmpty { handOff(streams, log: log) }
         if log >= 0 { close(log) }
 
         var finished = Message(type: "finished")
@@ -326,6 +328,62 @@ enum Supervisor {
         }
         if cancelled { exit(Turnstile.cancelledExitCode) }
         exitLike(exitCode: finished.exitCode, signal: finished.signal)
+    }
+
+    static func handOff(_ streams: [(read: Int32, out: Int32)], log: Int32) {
+        guard let me = executablePath() else { return }
+        // Lift each source above the targets first, so one dup2 can't clobber another's source.
+        func lifted(_ fd: Int32) -> Int32 { fcntl(fd, F_DUPFD_CLOEXEC, 100) }
+        var passing: [(Int32, Int32)] = []
+        var argv = ["turnstile", "_relay"]
+        for (index, stream) in streams.enumerated() {
+            passing.append((lifted(stream.read), Int32(3 + index)))
+            argv.append("\(3 + index):\(stream.out)")
+        }
+        if log >= 0 {
+            passing.append((lifted(log), 9))
+            argv += ["--log", "9"]
+        }
+        defer { for (fd, _) in passing { close(fd) } }
+        var environment = ProcessInfo.processInfo.environment
+        environment.removeValue(forKey: "TURNSTILE_TOKEN")
+        _ = spawn(path: me, argv: argv, environment: environment, stdin: "/dev/null", passing: passing)
+    }
+
+    /// `turnstile _relay 3:1 4:2 [--log 9]`: copies each inherited pipe to its output until every writer has gone.
+    static func relay(_ args: [String]) -> Never {
+        signal(SIGPIPE, SIG_IGN)
+        var log: Int32 = -1
+        var streams: [(read: Int32, out: Int32)] = []
+        var index = 0
+        while index < args.count {
+            if args[index] == "--log", index + 1 < args.count {
+                log = Int32(args[index + 1]) ?? -1
+                index += 2
+                continue
+            }
+            let parts = args[index].split(separator: ":").compactMap { Int32($0) }
+            if parts.count == 2 { streams.append((parts[0], parts[1])) }
+            index += 1
+        }
+        var buffer = [UInt8](repeating: 0, count: 65536)
+        while !streams.isEmpty {
+            var descriptors = streams.map { pollfd(fd: $0.read, events: Int16(POLLIN), revents: 0) }
+            guard poll(&descriptors, nfds_t(descriptors.count), -1) >= 0 || errno == EINTR else { break }
+            for (position, descriptor) in descriptors.enumerated() where descriptor.revents != 0 {
+                let count = read(descriptor.fd, &buffer, buffer.count)
+                if count < 0 && errno == EINTR { continue }
+                // Once our reader has gone, close the pipe, so the writer sees EPIPE just as it would without us.
+                if count <= 0 || !writeAll(streams[position].out, buffer, count) {
+                    close(descriptor.fd)
+                    streams[position].read = -1
+                    continue
+                }
+                _ = writeAll(log, buffer, count)
+            }
+            streams.removeAll { $0.read < 0 }
+        }
+        exit(0)
     }
 
     static func resume(_ child: pid_t) {
@@ -361,18 +419,21 @@ enum Supervisor {
         exit(exitCode ?? 1)
     }
 
-    static func writeAll(_ fd: Int32, _ buffer: [UInt8], _ count: Int) {
-        guard fd >= 0 else { return }
+    /// False if the write failed part-way.
+    @discardableResult
+    static func writeAll(_ fd: Int32, _ buffer: [UInt8], _ count: Int) -> Bool {
+        guard fd >= 0 else { return true }
         var offset = 0
-        buffer.withUnsafeBytes { raw in
+        return buffer.withUnsafeBytes { raw in
             while offset < count {
                 let written = write(fd, raw.baseAddress! + offset, count - offset)
                 if written < 0 {
                     if errno == EINTR { continue }
-                    return
+                    return false
                 }
                 offset += written
             }
+            return true
         }
     }
 

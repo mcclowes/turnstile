@@ -25,6 +25,9 @@ echo "run $$ $*" >> "$FAKE_RUNS"
 [ -n "${FAKE_SCRUBBED:-}" ] && [ "$1" = test ] && env -u TURNSTILE_TOKEN FAKE_SCRUBBED= swift test scrubbed
 [ -n "${FAKE_ALLOC_MB:-}" ] && exec /usr/bin/python3 -c "import time; b = bytearray(${FAKE_ALLOC_MB} * 1024 * 1024); [b.__setitem__(i, 1) for i in range(0, len(b), 4096)]; time.sleep(30)"
 [ -n "${FAKE_EXEC_SLEEP:-}" ] && exec sleep "$FAKE_EXEC_SLEEP"
+[ -n "${FAKE_LATE_OUTPUT:-}" ] && { (sleep 3; echo "late output") & exit 0; }
+# A build server: a short-lived client starts it in its own session, then exits, leaving it to launchd.
+[ -n "${FAKE_SERVER_MB:-}" ] && { bash -c '/usr/bin/python3 -c "import os, time; os.setsid(); time.sleep(2.5); b = bytearray(${FAKE_SERVER_MB} * 1024 * 1024); [b.__setitem__(i, 1) for i in range(0, len(b), 4096)]; time.sleep(30)" turnstile-e2e-server & sleep 1.5'; sleep 10; exit 0; }
 sleep "${FAKE_SLEEP:-0}"
 echo "fake swift done" >&2
 exit "${FAKE_EXIT:-0}"
@@ -113,6 +116,16 @@ echo 60 > "$T/level"
 wait
 check "pressure pauses the newest job" 'grep -q "turnstile: paused, memory is low" "$T/p2.out" && ! grep -q paused "$T/p1.out"'
 check "paused job resumes and finishes" 'grep -q "turnstile: resumed" "$T/p2.out" && grep -q "fake swift done" "$T/p2.out"'
+
+# A background writer that outlives the job still gets its output through, instead of a SIGPIPE.
+FAKE_LATE_OUTPUT=1 swift build 2>&1 | cat > "$T/late.out"
+check "late output from a background child isn't cut off" 'grep -q "late output" "$T/late.out"'
+
+# A build server that escapes to launchd still counts against its job, and is killed with it.
+out="$(cd hungry && FAKE_SERVER_MB=400 swift build 2>&1)"; code=$?
+sleep 0.5
+check "escaped build servers are tracked and killed" 'echo "$out" | grep -q "killed swift build, exceeded 150 MB" && [ $code != 0 ] && ! pgrep -f turnstile-e2e-server > /dev/null'
+pkill -f turnstile-e2e-server
 
 # SIGTERM reaches the job, and the caller sees the signal.
 FAKE_SLEEP=10 swift build > /dev/null 2>&1 &

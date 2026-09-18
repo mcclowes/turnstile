@@ -29,6 +29,26 @@ struct SystemTests {
         ProcessTree.signal(tree, SIGKILL)
     }
 
+    @Test func lineageSurvivesReparentingAndSetsid() throws {
+        let pidFile = FileManager.default.temporaryDirectory.appendingPathComponent("lineage-\(UUID().uuidString)").path
+        defer { try? FileManager.default.removeItem(atPath: pidFile) }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        // The inner shell starts a setsid'd sleeper and exits, so the sleeper is reparented to launchd.
+        process.arguments = ["-c", "sh -c '/usr/bin/python3 -c \"import os, time; os.setsid(); time.sleep(5)\" & echo $$ $! > \(pidFile); sleep 0.5'; sleep 5"]
+        try process.run()
+        defer { process.terminate() }
+        usleep(300_000)
+        let pids = try String(contentsOfFile: pidFile, encoding: .utf8).split(separator: " ").compactMap { pid_t($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        let (inner, sleeper) = (pids[0], pids[1])
+        defer { kill(sleeper, SIGKILL) }
+        let innerLineage = try #require(ProcessTree.lineage(inner))
+        #expect(ProcessTree.lineage(process.processIdentifier)?.id == innerLineage.creator)
+        usleep(900_000)
+        #expect(ProcessTree.parents()[sleeper] == 1)
+        #expect(ProcessTree.lineage(sleeper)?.creator == innerLineage.id)
+    }
+
     @Test func descendantsOfAMissingProcessIsEmpty() {
         #expect(ProcessTree.descendants(of: 999_999, parents: [:]).isEmpty)
     }

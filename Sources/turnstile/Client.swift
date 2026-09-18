@@ -151,7 +151,8 @@ func executablePath() -> String? {
 
 /// posix_spawn with default signal handling restored in the child.
 /// `closeOthers` closes every descriptor except stdio; otherwise the child inherits non-CLOEXEC fds.
-func spawn(path: String, argv: [String], environment: [String: String], stdin: String? = nil, output: String? = nil, stdoutFD: Int32? = nil, stderrFD: Int32? = nil, newSession: Bool = false, closeOthers: Bool = true) -> pid_t? {
+/// `passing` hands the child extra descriptors, as (ours, theirs).
+func spawn(path: String, argv: [String], environment: [String: String], stdin: String? = nil, output: String? = nil, stdoutFD: Int32? = nil, stderrFD: Int32? = nil, passing: [(Int32, Int32)] = [], newSession: Bool = false, closeOthers: Bool = true) -> pid_t? {
     var actions: posix_spawn_file_actions_t?
     posix_spawn_file_actions_init(&actions)
     defer { posix_spawn_file_actions_destroy(&actions) }
@@ -162,6 +163,7 @@ func spawn(path: String, argv: [String], environment: [String: String], stdin: S
     }
     if let stdoutFD { posix_spawn_file_actions_adddup2(&actions, stdoutFD, 1) }
     if let stderrFD { posix_spawn_file_actions_adddup2(&actions, stderrFD, 2) }
+    for (ours, theirs) in passing { posix_spawn_file_actions_adddup2(&actions, ours, theirs) }
 
     var attributes: posix_spawnattr_t?
     posix_spawnattr_init(&attributes)

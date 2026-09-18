@@ -53,6 +53,7 @@ enum CLI {
         case "stop": stop()
         case "uninstall": uninstall()
         case "daemon": daemon(rest)
+        case "_relay": Supervisor.relay(rest)
         case "--version", "-v", "version": print(version); exit(0)
         case "help", "--help", "-h": print(usage); exit(0)
         default:

@@ -93,6 +93,24 @@ public enum ProcessTree {
         return nil
     }
 
+    public struct Lineage: Equatable, Sendable {
+        /// Never reused, unlike a pid.
+        public var id: UInt64
+        /// The process that created this one. Unlike the ppid, it survives reparenting to launchd and setsid.
+        public var creator: UInt64
+    }
+
+    /// Reads the private `proc_uniqidentifierinfo` (flavor 17): a 16-byte uuid, then the unique id and the creator's.
+    /// Nil for other users' processes, or if the layout ever changes size.
+    public static func lineage(_ pid: pid_t) -> Lineage? {
+        let size: Int32 = 56
+        var buffer = [UInt8](repeating: 0, count: Int(size))
+        guard proc_pidinfo(pid, 17, 0, &buffer, size) == size else { return nil }
+        return buffer.withUnsafeBytes { raw in
+            Lineage(id: raw.loadUnaligned(fromByteOffset: 16, as: UInt64.self), creator: raw.loadUnaligned(fromByteOffset: 24, as: UInt64.self))
+        }
+    }
+
     /// Physical footprint, the number Activity Monitor calls "Memory".
     public static func footprint(_ pid: pid_t) -> UInt64? {
         var info = rusage_info_v4()

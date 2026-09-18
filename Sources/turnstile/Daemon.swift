@@ -84,6 +84,9 @@ final class Daemon {
         var lastWait: String?
         var lastWaitSentAt: Double = 0
         var tree: [pid_t] = []
+        /// Unique ids of every process seen in the tree, to recognise children that escape to launchd.
+        var lineage: Set<UInt64> = []
+        var escapees: Set<pid_t> = []
 
         init(id: Int64, request: Message, estimate: UInt64, usualPeak: UInt64?, now: Double) {
             self.id = id
@@ -123,6 +126,8 @@ final class Daemon {
     var listener: DispatchSourceRead?
     var timer: DispatchSourceTimer?
     var memoryLevel = 100
+    /// launchd's children, and who created them. Nil when unreadable (another user's).
+    var orphanLineage: [pid_t: ProcessTree.Lineage?] = [:]
     var ticks = 0
     var lastPressureAction: Double = 0
     var idleSince = Daemon.clock()
@@ -535,7 +540,8 @@ final class Daemon {
         let active = jobs.values.filter { $0.state != .queued }
         if !active.isEmpty {
             let parents = ProcessTree.parents()
-            for job in active { sample(job, parents: parents) }
+            let escaped = escapedRoots(parents: parents, active: active)
+            for job in active { sample(job, parents: parents, escaped: escaped[job.id] ?? []) }
             for job in active where jobs[job.id] != nil { enforceCeiling(job, now: now) }
             relievePressure(now: now)
             reclaimUnstarted(now: now)
@@ -554,22 +560,52 @@ final class Daemon {
         connections.values.allSatisfy { $0.job == nil }
     }
 
-    func sample(_ job: Job, parents: [pid_t: pid_t]) {
+    /// `escaped` are processes that left the job's tree for launchd, such as build servers; they still count against it.
+    func sample(_ job: Job, parents: [pid_t: pid_t], escaped: [pid_t] = []) {
         guard let child = job.childPid else { return }
-        let previous = job.tree
-        let tree = ProcessTree.descendants(of: child, parents: parents)
-        job.tree = tree
-        if job.tree.isEmpty {
+        let previous = Set(job.tree)
+        let own = ProcessTree.descendants(of: child, parents: parents)
+        if own.isEmpty {
+            job.tree = []
             if job.state == .orphaned { complete(job, exitCode: nil, signal: nil, lost: true) }
             return
         }
-        // Anything a paused job spawned just before it stopped is paused too.
-        if job.paused {
-            let fresh = Set(tree).subtracting(previous)
-            if !fresh.isEmpty { ProcessTree.signal(Array(fresh), SIGSTOP) }
+        var tree = own
+        var included = Set(own)
+        for root in escaped where included.insert(root).inserted {
+            if job.escapees.insert(root).inserted { log("#\(job.id) pid \(root) left the job for launchd; still counting it") }
+            tree.append(root)
+            for pid in ProcessTree.descendants(of: root, parents: parents) where included.insert(pid).inserted { tree.append(pid) }
         }
+        job.tree = tree
+        let fresh = tree.filter { !previous.contains($0) }
+        for pid in fresh { if let lineage = ProcessTree.lineage(pid) { job.lineage.insert(lineage.id) } }
+        // Anything a paused job spawned just before it stopped is paused too.
+        if job.paused && !fresh.isEmpty { ProcessTree.signal(fresh, SIGSTOP) }
         job.footprint = ProcessTree.footprint(of: job.tree)
         job.peak = max(job.peak, job.footprint)
+    }
+
+    /// Children of launchd that a running job created, found by their creator's unique id, which survives reparenting and setsid.
+    func escapedRoots(parents: [pid_t: pid_t], active: [Job]) -> [Int64: [pid_t]] {
+        var owners: [UInt64: Int64] = [:]
+        for job in active { for id in job.lineage { owners[id] = job.id } }
+        let orphans = parents.compactMap { $0.value == 1 ? $0.key : nil }
+        let live = Set(orphans)
+        orphanLineage = orphanLineage.filter { live.contains($0.key) }
+        guard !owners.isEmpty else { return [:] }
+        var result: [Int64: [pid_t]] = [:]
+        for pid in orphans {
+            let lineage: ProcessTree.Lineage?
+            if let cached = orphanLineage[pid] {
+                lineage = cached
+            } else {
+                lineage = ProcessTree.lineage(pid)
+                orphanLineage[pid] = lineage
+            }
+            if let creator = lineage?.creator, let owner = owners[creator] { result[owner, default: []].append(pid) }
+        }
+        return result
     }
 
     /// An admitted client that never starts its job (suspended, or frozen by its harness) mustn't hold a slot forever.

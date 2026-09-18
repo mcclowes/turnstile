@@ -120,6 +120,18 @@ kill -TERM $job
 wait $job; code=$?
 check "SIGTERM is forwarded" '[ $code = 143 ]'
 
+# If the supervisor is SIGKILLed, the slot is held until its job exits, then freed.
+cd a
+FAKE_SLEEP=3 swift test > /dev/null 2>&1 &
+sup=$!
+cd ..
+sleep 0.7
+kill -KILL $sup
+sleep 0.5
+out="$(cd b && FAKE_SLEEP=0 swift test 2>&1)"
+check "slot survives a SIGKILLed client, then frees" 'echo "$out" | grep -q "waiting for a test slot" && echo "$out" | grep -q "fake swift done"'
+wait
+
 # In a terminal, the job owns the tty and Ctrl-C stops it like any foreground command.
 cat > "$T/ctrlc.py" <<'EOF'
 import os, pty, sys, time, select

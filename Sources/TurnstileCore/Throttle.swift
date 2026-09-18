@@ -12,16 +12,16 @@ public struct JobLimits: Codable, Equatable, Sendable {
 }
 
 public enum Throttle {
-    /// Parallelism and heap sized from memory pressure. Nothing is injected while memory is plentiful.
+    /// Parallelism and heap sized from memory pressure. Nothing is injected at normal levels; macOS idles around 30–50% free.
     public static func limits(memoryLevel: Int, cpuCount: Int, config: ThrottleConfig) -> JobLimits {
         guard config.inject ?? true else { return JobLimits() }
         var jobs = config.jobs
         if jobs == nil {
-            if memoryLevel < 25 { jobs = max(1, cpuCount / 4) }
-            else if memoryLevel < 50 { jobs = max(1, cpuCount / 2) }
+            if memoryLevel < 15 { jobs = max(1, cpuCount / 4) }
+            else if memoryLevel < 25 { jobs = max(1, cpuCount / 2) }
         }
         var heap = config.nodeHeap.map { Int($0 / Bytes.mb) }
-        if heap == nil && memoryLevel < 25 { heap = 2048 }
+        if heap == nil && memoryLevel < 15 { heap = 2048 }
         return JobLimits(jobs: jobs, nodeHeapMB: heap)
     }
 

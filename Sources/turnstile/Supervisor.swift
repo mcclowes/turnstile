@@ -4,6 +4,8 @@ import TurnstileCore
 
 /// Child pid for the signal handlers, which can't capture context.
 nonisolated(unsafe) private var forwardTarget: pid_t = 0
+/// Write end of a pipe that SIGCHLD pokes, so the event loop wakes the moment the child exits.
+nonisolated(unsafe) private var childExitWake: Int32 = -1
 
 enum Supervisor {
     static let taskpolicy = "/usr/sbin/taskpolicy"
@@ -149,7 +151,18 @@ enum Supervisor {
         // Like system(3): the terminal's Ctrl-C reaches the child directly, and we outlive it to report.
         signal(SIGINT, SIG_IGN)
         signal(SIGQUIT, SIG_IGN)
-        signal(SIGCHLD) { _ in }
+        var wake: [Int32] = [-1, -1]
+        if pipe(&wake) == 0 {
+            for fd in wake {
+                _ = fcntl(fd, F_SETFD, FD_CLOEXEC)
+                _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
+            }
+            childExitWake = wake[1]
+        }
+        signal(SIGCHLD) { _ in
+            var byte: UInt8 = 0
+            if childExitWake >= 0 { _ = write(childExitWake, &byte, 1) }
+        }
         for sig in [SIGTERM, SIGHUP] {
             signal(sig) { received in if forwardTarget > 0 { kill(forwardTarget, received) } }
         }
@@ -197,11 +210,14 @@ enum Supervisor {
             if exited && (streams.isEmpty || drainDeadline.map { $0 < Date() } == true) { break }
 
             var descriptors = streams.map { pollfd(fd: $0.read, events: Int16(POLLIN), revents: 0) }
+            descriptors.append(pollfd(fd: wake[0], events: Int16(POLLIN), revents: 0))
             if daemonOpen { descriptors.append(pollfd(fd: client.fd, events: Int16(POLLIN), revents: 0)) }
             _ = poll(&descriptors, nfds_t(descriptors.count), exited ? 100 : 1000)
 
             for (index, descriptor) in descriptors.enumerated() where descriptor.revents != 0 {
-                if index < streams.count {
+                if descriptor.fd == wake[0] {
+                    while read(wake[0], &buffer, buffer.count) > 0 {}
+                } else if index < streams.count {
                     let count = read(descriptor.fd, &buffer, buffer.count)
                     if count > 0 {
                         writeAll(streams[index].out, buffer, count)

@@ -13,7 +13,13 @@ public struct Paths: Sendable {
 
     public var shims: String { home + "/shims" }
     public var bin: String { home + "/bin" }
-    public var socket: String { home + "/turnstiled.sock" }
+    /// Unix socket paths max out at 104 bytes; a deep home falls back to a short per-home path in /tmp.
+    public var socket: String {
+        let preferred = home + "/turnstiled.sock"
+        if preferred.utf8.count < 100 { return preferred }
+        let hash = home.utf8.reduce(UInt64(0xcbf29ce484222325)) { ($0 ^ UInt64($1)) &* 0x100000001b3 }
+        return "/tmp/turnstile-\(getuid())-\(String(hash, radix: 36)).sock"
+    }
     public var database: String { home + "/state.sqlite" }
     public var logs: String { home + "/logs" }
     public var daemonLog: String { home + "/daemon.log" }

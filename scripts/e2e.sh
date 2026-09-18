@@ -120,6 +120,39 @@ kill -TERM $job
 wait $job; code=$?
 check "SIGTERM is forwarded" '[ $code = 143 ]'
 
+# In a terminal, the job owns the tty and Ctrl-C stops it like any foreground command.
+cat > "$T/ctrlc.py" <<'EOF'
+import os, pty, sys, time, select
+pid, fd = pty.fork()
+if pid == 0:
+    os.environ["FAKE_SLEEP"] = "20"
+    os.execvp("sh", ["sh", "-c", 'test -t 1 && echo tty-ok; swift build; echo "status=$?"'])
+out = b""
+deadline = time.time() + 15
+sent = False
+while time.time() < deadline:
+    r, _, _ = select.select([fd], [], [], 0.2)
+    if r:
+        try:
+            chunk = os.read(fd, 4096)
+        except OSError:
+            break
+        if not chunk:
+            break
+        out += chunk
+    if not sent and b"fake swift build" in out:
+        time.sleep(0.5)
+        os.write(fd, b"\x03")
+        sent = True
+    if b"status=" in out:
+        break
+sys.stdout.write(out.decode(errors="replace"))
+_, status = os.waitpid(pid, 0)
+print("shell=signaled" if os.WIFSIGNALED(status) and os.WTERMSIG(status) == 2 else "shell=exit%d" % os.WEXITSTATUS(status))
+EOF
+out="$(TURNSTILE_AGENT=0 /usr/bin/python3 "$T/ctrlc.py")"
+check "Ctrl-C in a terminal stops the job" 'echo "$out" | grep -q "tty-ok" && echo "$out" | grep -q "shell=signaled" && ! pgrep -f "sleep 20" > /dev/null'
+
 # Status is readable by people and tools.
 check "status --json" 'turnstile status --json | /usr/bin/python3 -c "import json,sys; d=json.load(sys.stdin); assert d[\"memoryLevel\"] == 60 and len(d[\"recent\"]) > 0"'
 check "status text" 'turnstile status | grep -q "recent:"'

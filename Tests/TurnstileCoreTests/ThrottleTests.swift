@@ -3,11 +3,11 @@ import Testing
 
 struct ThrottleTests {
     @Test func injectsNothingWhenMemoryIsPlentiful() {
-        #expect(Throttle.limits(memoryLevel: 70, cpuCount: 10, config: ThrottleConfig()) == JobLimits())
+        #expect(Throttle.limits(memoryLevel: 40, cpuCount: 10, config: ThrottleConfig()) == JobLimits())
     }
 
     @Test func shrinksParallelismUnderPressure() {
-        #expect(Throttle.limits(memoryLevel: 40, cpuCount: 10, config: ThrottleConfig()) == JobLimits(jobs: 5))
+        #expect(Throttle.limits(memoryLevel: 20, cpuCount: 10, config: ThrottleConfig()) == JobLimits(jobs: 5))
         #expect(Throttle.limits(memoryLevel: 10, cpuCount: 10, config: ThrottleConfig()) == JobLimits(jobs: 2, nodeHeapMB: 2048))
     }
 

@@ -76,7 +76,7 @@ public struct ThrottleConfig: Decodable, Equatable, Sendable {
         self.pause = pause
     }
 
-    enum CodingKeys: String, CodingKey {
+    enum CodingKeys: String, CodingKey, CaseIterable {
         case inject, jobs, nodeHeap, maxMemory, killMultiplier, pause
     }
 
@@ -120,7 +120,7 @@ public struct MachineConfig: Decodable, Equatable, Sendable {
 
     public init() {}
 
-    enum CodingKeys: String, CodingKey {
+    enum CodingKeys: String, CodingKey, CaseIterable {
         case concurrency, reserve, pauseBelow, resumeAbove, shims, agentEnv
     }
 
@@ -168,7 +168,7 @@ public struct ConfigFile: Decodable, Equatable, Sendable {
         self.machine = machine
     }
 
-    enum CodingKeys: String, CodingKey { case commands, scripts, throttle }
+    enum CodingKeys: String, CodingKey, CaseIterable { case commands, scripts, throttle }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -278,7 +278,9 @@ public struct ConfigError: Error, CustomStringConvertible {
     public var description: String {
         let detail: String
         if case let DecodingError.dataCorrupted(context) = underlying {
-            detail = context.debugDescription
+            let syntax = (context.underlyingError as NSError?)?.userInfo[NSDebugDescriptionErrorKey] as? String
+            let path = context.codingPath.map(\.stringValue).joined(separator: ".")
+            detail = syntax.map { "invalid JSON: \($0)" } ?? (path.isEmpty ? "" : path + ": ") + context.debugDescription
         } else if case let DecodingError.typeMismatch(_, context) = underlying {
             detail = "\(context.codingPath.map(\.stringValue).joined(separator: ".")): \(context.debugDescription)"
         } else {

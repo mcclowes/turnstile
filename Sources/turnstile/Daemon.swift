@@ -580,6 +580,7 @@ final class Daemon {
         do {
             config = try ConfigFile.decode(data)
             log("loaded \(path)")
+            for warning in ConfigLint.warnings(data, scope: .global) { log("config: \(warning)") }
         } catch {
             log("ignoring \(ConfigError(path: path, underlying: error))")
         }

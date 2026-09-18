@@ -14,6 +14,7 @@ enum CLI {
           turnstile bump <job>                               move a job (number, pid, or name) to the front
           turnstile run [--class compile|test|browser] -- <command>   gate any command
           turnstile classify <command>                       show how a command would be gated
+          turnstile config [show|check|path|init|edit]       see, validate, and edit settings
           turnstile env [--shell zsh|bash|fish]              print the PATH setup, for terminal managers
           turnstile shims                                    rebuild the shims directory
           turnstile stop                                     stop the daemon
@@ -32,6 +33,7 @@ enum CLI {
         case "bump": bump(rest)
         case "run": run(rest)
         case "classify": classify(rest)
+        case "config": ConfigCommand.main(rest)
         case "env": env(rest)
         case "shims", "rehash": rebuildShims(announce: true); exit(0)
         case "stop": stop()

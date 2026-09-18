@@ -52,6 +52,7 @@ Gated by default: `swift`, `xcodebuild`, `cargo`, `go`, `gradle`, `make`, `npm`,
 | Command | What it does |
 | --- | --- |
 | `turnstile status [--json] [--watch]` | Running and queued jobs, memory, and recent runs. `--watch` redraws every second |
+| `turnstile top` | Interactive view of the queue. Select a job with ↑↓ or `j`/`k`, then `b` bump, `p` pause/resume, `h` hold/release, `x` kill, `q` quit |
 | `turnstile bump <job>` | Move a job (by number, pid, or name) to the front, or raise a running one to normal priority |
 | `turnstile kill <job>` | Drop a queued job, or stop a running one (SIGTERM, then SIGKILL after 5s). Anyone who joined the run is stopped too |
 | `turnstile pause <job>` / `resume <job>` | Stop a running job's processes with SIGSTOP, and carry on. A job you paused stays paused until you resume it |

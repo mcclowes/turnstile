@@ -289,6 +289,39 @@ turnstile resume 'a swift build' > /dev/null
 wait
 check "manual pause holds until resumed" '[ -z "$early" ] && echo "$paused_json" | grep -q "\"pausedBy\" : \"you\"" && [ "$(cat "$T/mp.code")" = 0 ] && grep -q "paused by you" "$T/mp.out"'
 
+# `turnstile top` drives the same controls from a terminal, and quits cleanly.
+cat > "$T/top.py" <<'EOF'
+import os, pty, sys, time, select, subprocess
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp("turnstile", ["turnstile", "top"])
+out = b""
+def pump(seconds):
+    global out
+    end = time.time() + seconds
+    while time.time() < end:
+        r, _, _ = select.select([fd], [], [], 0.1)
+        if r:
+            try: out += os.read(fd, 65536)
+            except OSError: return
+def status():
+    return subprocess.run(["turnstile", "status", "--json"], capture_output=True, text=True).stdout
+pump(1.5)
+os.write(fd, b"p"); pump(1.5)
+paused = '"pausedBy" : "you"' in status()
+os.write(fd, b"x"); pump(0.5)
+prompted = b"? y/n" in out
+os.write(fd, b"y"); pump(2)
+os.write(fd, b"q"); pump(0.5)
+_, code = os.waitpid(pid, 0)
+print("paused=%s prompted=%s exit=%d restored=%s" % (paused, prompted, os.WEXITSTATUS(code), out.rstrip().endswith(b"\x1b[?1049l")))
+EOF
+(cd a && FAKE_SLEEP=8 swift build > "$T/top.out" 2>&1; echo $? > "$T/top.code") &
+sleep 0.7
+out="$(/usr/bin/python3 "$T/top.py")"
+wait
+check "top pauses and kills the selected job, then restores the terminal" '[ "$out" = "paused=True prompted=True exit=0 restored=True" ] && [ "$(cat "$T/top.code")" = 125 ]'
+
 # A deliberate stop releases waiting jobs to run ungated.
 (cd a && FAKE_SLEEP=3 swift test > /dev/null 2>&1) &
 sleep 0.7

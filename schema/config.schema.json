@@ -1,0 +1,192 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/mcclowes/turnstile/main/schema/config.schema.json",
+  "title": "turnstile machine config (~/.config/turnstile/config.json)",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/rule"
+      },
+      "description": "Command prefixes such as \"swift test\" or \"make docs\". The longest match wins, project rules before global ones."
+    },
+    "scripts": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/rule"
+      },
+      "description": "package.json script names run through npm, pnpm, yarn, or bun."
+    },
+    "throttle": {
+      "$ref": "#/definitions/throttle"
+    },
+    "concurrency": {
+      "type": "object",
+      "description": "Max jobs per class at once.",
+      "properties": {
+        "compile": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "test": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "browser": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "patternProperties": {
+        "^(//|\\$)": {}
+      },
+      "additionalProperties": false
+    },
+    "reserve": {
+      "$ref": "#/definitions/size",
+      "description": "Memory to keep free for everything else. Default 2GB."
+    },
+    "pauseBelow": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "default": 8,
+      "description": "Pause the newest agent job when free memory drops below this percent."
+    },
+    "resumeAbove": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "default": 20,
+      "description": "Resume paused jobs once free memory is back above this percent."
+    },
+    "shims": {
+      "type": "object",
+      "description": "Extra tools to gate, or built-in ones to drop. Run `turnstile shims` after changing.",
+      "properties": {
+        "add": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "remove": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "patternProperties": {
+        "^(//|\\$)": {}
+      },
+      "additionalProperties": false
+    },
+    "agentEnv": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Extra environment variables that mark a shell as an agent's."
+    }
+  },
+  "patternProperties": {
+    "^(//|\\$)": {}
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "size": {
+      "description": "A size such as \"512MB\", \"4GB\", or \"1.5 GB\", or a number of megabytes.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^\\s*[0-9.]+\\s*([kKmMgGtT]([iI]?[bB])?)?\\s*$"
+        },
+        {
+          "type": "number",
+          "minimum": 0
+        }
+      ]
+    },
+    "class": {
+      "enum": [
+        "compile",
+        "test",
+        "browser"
+      ]
+    },
+    "rule": {
+      "description": "A class, \"pass\" to never gate, or an object with a class and a memory estimate.",
+      "oneOf": [
+        {
+          "enum": [
+            "compile",
+            "test",
+            "browser",
+            "pass",
+            "none",
+            "off"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "class": {
+              "$ref": "#/definitions/class"
+            },
+            "memory": {
+              "$ref": "#/definitions/size"
+            }
+          },
+          "patternProperties": {
+            "^(//|\\$)": {}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "throttle": {
+      "type": "object",
+      "description": "Throttling for this project's commands.",
+      "properties": {
+        "inject": {
+          "type": "boolean",
+          "default": true,
+          "description": "Add parallelism and heap limits to commands. Anything you pass yourself wins."
+        },
+        "jobs": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Parallelism to inject. Default: halved under 25% free memory, quartered under 15%."
+        },
+        "nodeHeap": {
+          "$ref": "#/definitions/size",
+          "description": "Node's --max-old-space-size. Default: capped at 2 GB under 15% free memory."
+        },
+        "maxMemory": {
+          "$ref": "#/definitions/size",
+          "description": "Hard ceiling; a job tree above it is killed."
+        },
+        "killMultiplier": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 3,
+          "description": "Kill a job that passes this multiple of its usual peak (at least 2 GB)."
+        },
+        "pause": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow this project's agent jobs to be paused under memory pressure."
+        }
+      },
+      "patternProperties": {
+        "^(//|\\$)": {}
+      },
+      "additionalProperties": false
+    }
+  }
+}

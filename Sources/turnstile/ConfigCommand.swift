@@ -139,10 +139,13 @@ enum ConfigCommand {
         return path.hasPrefix(home + "/") ? "~" + path.dropFirst(home.count) : path
     }
 
+    static let schemaBase = "https://raw.githubusercontent.com/mcclowes/turnstile/main/schema/"
+
     static func template(project: Bool) -> String {
         if project {
             return """
                 {
+                  "$schema": "\(schemaBase)turnstilerc.schema.json",
                   "//": "turnstile settings for this project. Every key is optional. See `turnstile config` and https://github.com/mcclowes/turnstile#configuration",
                   "commands": {},
                   "scripts": {},
@@ -153,6 +156,7 @@ enum ConfigCommand {
         }
         return """
             {
+              "$schema": "\(schemaBase)config.schema.json",
               "//": "turnstile settings for this machine. Every key is optional. See `turnstile config` and https://github.com/mcclowes/turnstile#configuration",
               "concurrency": {},
               "commands": {},

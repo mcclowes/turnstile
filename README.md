@@ -76,6 +76,12 @@ Everything is optional and the defaults are meant to be left alone. There are tw
 
 `turnstile config init` writes a starter file, and `turnstile config check` catches mistakes like `"concurency"` with a suggestion. Keys starting with `//` are comments.
 
+For autocomplete and inline errors as you type, both files have a JSON schema in [`schema/`](schema), and `config init` adds the `$schema` key for you. `.turnstilerc` has no `.json` extension, so tell VS Code what it is in your settings:
+
+```json
+"files.associations": { ".turnstilerc": "json" }
+```
+
 ### Machine settings (global file only)
 
 ```json

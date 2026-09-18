@@ -161,10 +161,15 @@ enum CLI {
         for name in existing where !names.contains(name) {
             try? FileManager.default.removeItem(atPath: paths.shims + "/" + name)
         }
+        // Swap each link in with rename(2), so a command started mid-rebuild never finds its shim missing.
         for name in names {
             let link = paths.shims + "/" + name
-            try? FileManager.default.removeItem(atPath: link)
-            do { try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: target) } catch {
+            let staging = link + ".new"
+            try? FileManager.default.removeItem(atPath: staging)
+            do {
+                try FileManager.default.createSymbolicLink(atPath: staging, withDestinationPath: target)
+                guard Darwin.rename(staging, link) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            } catch {
                 warn("can't create \(link): \(error)")
             }
         }
@@ -271,21 +276,16 @@ enum CLI {
     // MARK: run / classify / daemon
 
     static func run(_ args: [String]) -> Never {
-        var args = args
-        var forced: ResourceClass?
-        if let value = option("--class", in: args) {
-            guard let cls = ResourceClass(rawValue: value) else {
-                warn("unknown class \(value)")
-                exit(64)
-            }
-            forced = cls
-            args.removeAll { $0 == "--class" || $0 == value }
-        }
-        if args.first == "--" { args.removeFirst() }
-        guard let tool = args.first else {
+        let parsed: RunArguments
+        do { parsed = try RunArguments.parse(args) } catch RunArguments.Problem.unknownClass(let value) {
+            warn("unknown class \(value) (use compile, test, or browser)")
+            exit(64)
+        } catch {
             warn("usage: turnstile run [--class compile|test|browser] -- <command>")
             exit(64)
         }
+        let forced = parsed.forced
+        let tool = parsed.command[0]
         let name = (tool as NSString).lastPathComponent
         let environment = self.environment
         let real = tool.contains("/")
@@ -295,7 +295,7 @@ enum CLI {
             warn("\(tool): command not found")
             exit(127)
         }
-        let rest = Array(args.dropFirst())
+        let rest = Array(parsed.command.dropFirst())
         if Supervisor.insideAdmittedJob(environment) || paths.isDisabled { execReal(real, rest) }
         let interactive = isatty(0) == 1 && isatty(1) == 1
         let config = Supervisor.loadConfig(environment: environment)

@@ -168,6 +168,7 @@ check "Ctrl-C in a terminal stops the job" 'echo "$out" | grep -q "tty-ok" && ec
 # Status is readable by people and tools.
 check "status --json" 'turnstile status --json | /usr/bin/python3 -c "import json,sys; d=json.load(sys.stdin); assert d[\"memoryLevel\"] == 60 and len(d[\"recent\"]) > 0"'
 check "status text" 'turnstile status | grep -q "recent:"'
+check "run gates any command, leaving its arguments alone" '[ "$(turnstile run --class test -- /bin/echo --class test)" = "--class test" ]'
 check "classify explains a command" '[ "$(turnstile classify npm run test:e2e)" = "browser (npm run test:e2e)" ]'
 
 daemon_pid() { turnstile status --json | /usr/bin/python3 -c "import json,sys; print(json.load(sys.stdin).get('daemonPid', ''))"; }

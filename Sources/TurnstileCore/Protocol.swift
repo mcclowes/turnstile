@@ -2,7 +2,7 @@ import Foundation
 
 /// One newline-delimited JSON message between a client and the daemon.
 ///
-/// Client to daemon: `request`, `started`, `finished`, `status`, `bump`.
+/// Client to daemon: `request`, `adopt` (a running job re-registering after a daemon restart), `started`, `finished`, `status`, `bump`.
 /// Daemon to client: `queued`, `admitted`, `joined`, `output`, `done`, `notice`, `release`, `status`, `ok`, `error`.
 public struct Message: Codable, Equatable, Sendable {
     public var type: String
@@ -24,6 +24,9 @@ public struct Message: Codable, Equatable, Sendable {
     public var nodeHeap: UInt64?
     public var inject: Bool?
     public var pid: Int32?
+    /// The owner's output goes to a log others can follow, rather than a terminal.
+    public var captures: Bool?
+    public var interactive: Bool?
 
     // started / finished
     public var childPid: Int32?

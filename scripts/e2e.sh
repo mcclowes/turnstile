@@ -22,7 +22,9 @@ cat > "$T/bin/swift" <<'EOF'
 echo "fake swift $*"
 echo "run $$ $*" >> "$FAKE_RUNS"
 [ -n "${FAKE_NESTED:-}" ] && [ "$1" = test ] && FAKE_NESTED= swift build nested
+[ -n "${FAKE_SCRUBBED:-}" ] && [ "$1" = test ] && env -u TURNSTILE_TOKEN FAKE_SCRUBBED= swift test scrubbed
 [ -n "${FAKE_ALLOC_MB:-}" ] && exec /usr/bin/python3 -c "import time; b = bytearray(${FAKE_ALLOC_MB} * 1024 * 1024); [b.__setitem__(i, 1) for i in range(0, len(b), 4096)]; time.sleep(30)"
+[ -n "${FAKE_EXEC_SLEEP:-}" ] && exec sleep "$FAKE_EXEC_SLEEP"
 sleep "${FAKE_SLEEP:-0}"
 echo "fake swift done" >&2
 exit "${FAKE_EXIT:-0}"
@@ -183,6 +185,73 @@ old=$(daemon_pid)
 kill -9 "$old"
 wait
 check "waiters requeue after a daemon crash" '[ "$(cat "$T/crash.code")" = 0 ] && ! grep -q ungated "$T/crash.out" && [ -n "$(daemon_pid)" ] && [ "$(daemon_pid)" != "$old" ]'
+
+# After a crash, running jobs re-register, so the new daemon still counts their slots.
+(cd a && FAKE_SLEEP=3 swift test > /dev/null 2>&1) &
+sleep 0.7
+kill -9 "$(daemon_pid)"
+sleep 1
+(cd b && swift test > "$T/adopt.out" 2>&1)
+wait
+check "running jobs are adopted after a crash" 'grep -q "waiting for a test slot" "$T/adopt.out"'
+
+# A job paused under pressure resumes if its daemon dies, instead of hanging forever.
+(cd a && FAKE_SLEEP=3 swift build > /dev/null 2>&1) &
+sleep 0.5
+(cd b && FAKE_SLEEP=3 swift build > "$T/orphan.out" 2>&1; echo $? > "$T/orphan.code") &
+sleep 1
+echo 5 > "$T/level"
+sleep 4
+echo 60 > "$T/level"
+paused=$(grep -c "paused, memory is low" "$T/orphan.out")
+kill -9 "$(daemon_pid)"
+waited=0
+while [ ! -s "$T/orphan.code" ] && [ $waited -lt 10 ]; do sleep 1; waited=$((waited + 1)); done
+wait
+check "a paused job survives its daemon dying" '[ "$paused" = 1 ] && [ "$(cat "$T/orphan.code" 2>/dev/null)" = 0 ]'
+
+# Without a terminal, SIGINT reaches the job, as it would without turnstile.
+FAKE_EXEC_SLEEP=10 swift build > /dev/null 2>&1 &
+job=$!
+sleep 1
+kill -INT $job
+start=$(date +%s)
+wait $job; code=$?
+check "SIGINT is forwarded without a terminal" '[ $code = 130 ] && [ $(( $(date +%s) - start )) -lt 5 ]'
+
+# A nested call that lost its token still passes through instead of waiting on its own parent.
+out="$(cd a && FAKE_SCRUBBED=1 perl -e 'alarm shift; exec @ARGV' 15 swift test 2>&1)"; code=$?
+check "nested calls with a scrubbed environment don't deadlock" '[ $code = 0 ] && echo "$out" | grep -q "fake swift test scrubbed"'
+
+# A joiner whose run is cancelled before it starts runs the command itself.
+cd repo
+(cd ../a && FAKE_SLEEP=3 swift test > /dev/null 2>&1) &
+sleep 0.5
+(swift test > "$T/owner.out" 2>&1) &
+owner=$!
+sleep 0.7
+before=$(runs test)
+(swift test > "$T/joiner.out" 2>&1; echo $? > "$T/joiner.code") &
+sleep 0.7
+kill -TERM $owner
+wait
+cd ..
+check "a cancelled run's joiner runs it itself" 'grep -q "joining an identical" "$T/joiner.out" && grep -q "running it here instead" "$T/joiner.out" && [ "$(cat "$T/joiner.code")" = 0 ] && [ $(( $(runs test) - before )) -ge 1 ]'
+
+# An admitted client that never starts (suspended) frees its slot.
+(cd a && FAKE_SLEEP=1 swift test > /dev/null 2>&1) &
+sleep 0.5
+(cd b && exec swift test > /dev/null 2>&1) &
+frozen=$!
+sleep 0.3
+kill -STOP "$frozen"
+sleep 1.5
+start=$(date +%s)
+(swift test > "$T/unstick.out" 2>&1)
+elapsed=$(( $(date +%s) - start ))
+kill -CONT "$frozen"
+wait
+check "a suspended client's slot is reclaimed" '[ $elapsed -ge 5 ] && [ $elapsed -lt 25 ] && grep -q "fake swift test" "$T/unstick.out"'
 
 # A deliberate stop releases waiting jobs to run ungated.
 (cd a && FAKE_SLEEP=3 swift test > /dev/null 2>&1) &

@@ -81,3 +81,25 @@ struct StoreRecoveryTests {
         #expect(store.recent(limit: 5).count == 1)
     }
 }
+
+struct AncestryTests {
+    let parents: [pid_t: pid_t] = [10: 1, 20: 10, 30: 20, 40: 1]
+
+    @Test func findsTheJobAProcessDescendsFrom() {
+        #expect(ProcessTree.ancestor(of: 30, among: [10, 40], parents: parents) == 10)
+        #expect(ProcessTree.ancestor(of: 10, among: [10], parents: parents) == 10)
+        #expect(ProcessTree.ancestor(of: 40, among: [10], parents: parents) == nil)
+    }
+
+    @Test func survivesCyclesAndUnknownPids() {
+        #expect(ProcessTree.ancestor(of: 5, among: [10], parents: [5: 6, 6: 5]) == nil)
+        #expect(ProcessTree.ancestor(of: 999, among: [10], parents: parents) == nil)
+    }
+}
+
+struct FingerprintInputTests {
+    @Test func environmentThatChangesResultsIsPartOfTheFingerprint() {
+        let inputs = Workspace.environmentInputs(["CI": "1", "NODE_ENV": "test", "RUN_E2E_TESTS": "1", "HOME": "/x", "TERM": "xterm"])
+        #expect(inputs == ["CI=1", "NODE_ENV=test", "RUN_E2E_TESTS=1"])
+    }
+}

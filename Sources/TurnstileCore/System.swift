@@ -81,6 +81,18 @@ public enum ProcessTree {
         return result
     }
 
+    /// Which of `candidates` is `pid` itself or one of its ancestors.
+    public static func ancestor(of pid: pid_t, among candidates: Set<pid_t>, parents: [pid_t: pid_t]) -> pid_t? {
+        var current = pid
+        var seen = Set<pid_t>()
+        while current > 1, seen.insert(current).inserted {
+            if candidates.contains(current) { return current }
+            guard let parent = parents[current] else { return nil }
+            current = parent
+        }
+        return nil
+    }
+
     /// Physical footprint, the number Activity Monitor calls "Memory".
     public static func footprint(_ pid: pid_t) -> UInt64? {
         var info = rusage_info_v4()

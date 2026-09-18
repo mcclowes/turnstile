@@ -6,6 +6,8 @@ import TurnstileCore
 nonisolated(unsafe) private var forwardTarget: pid_t = 0
 /// Write end of a pipe that SIGCHLD pokes, so the event loop wakes the moment the child exits.
 nonisolated(unsafe) private var childExitWake: Int32 = -1
+/// Set by a forwarded signal: the event loop then resumes the whole tree, since a paused job can't act on it.
+nonisolated(unsafe) private var resumeRequested: sig_atomic_t = 0
 
 enum Supervisor {
     static let taskpolicy = "/usr/sbin/taskpolicy"
@@ -54,7 +56,7 @@ enum Supervisor {
             execReal(real, args)
         }
         let cwd = FileManager.default.currentDirectoryPath
-        let workspace = Workspace.inspect(cwd: cwd, argv: [tool] + args)
+        let workspace = Workspace.inspect(cwd: cwd, argv: [tool] + args, environment: environment)
         let throttle = config.throttle
         let agent = Agent.isAgent(environment: environment, extraMarkers: config.machine.agentEnv ?? [], interactive: interactive)
 
@@ -75,6 +77,8 @@ enum Supervisor {
         request.nodeHeap = throttle.nodeHeap
         request.inject = throttle.inject
         request.pid = getpid()
+        request.captures = isatty(1) == 0 && isatty(2) == 0
+        request.interactive = interactive
         guard client.send(request) else {
             warn("daemon unavailable, running \(tool) ungated")
             execReal(real, args)
@@ -83,6 +87,7 @@ enum Supervisor {
         var lastText: String?
         var heard = false
         var reconnects = 0
+        var reruns = 0
         while true {
             // A daemon answers at once, and repeats itself every 30s while a job waits; silence means it's wedged.
             switch client.read(timeout: heard ? 90 : 10) {
@@ -103,7 +108,8 @@ enum Supervisor {
                 heard = true
                 switch message.type {
                 case "release":
-                    warn(message.text ?? "daemon stopped; running \(tool) ungated")
+                    // No text: a nested call inside a running job, which passes straight through.
+                    if let text = message.text { warn(text) }
                     execReal(real, args)
                 case "queued":
                     if let text = message.text {
@@ -114,9 +120,18 @@ enum Supervisor {
                     if let text = message.text { warn(text) }
                 case "joined":
                     follow(client: client, first: message)
+                    // The run it joined ended without a result, so run it here instead.
+                    reruns += 1
+                    guard reruns <= 3, let fresh = Client.connectOrStart(paths: paths), fresh.send(request) else {
+                        warn("running \(tool) ungated")
+                        execReal(real, args)
+                    }
+                    client = fresh
+                    heard = false
+                    lastText = nil
                 case "admitted":
                     run(
-                        client: client, tool: tool, real: real, args: args, job: message.job ?? 0,
+                        client: client, request: request, tool: tool, real: real, args: args, job: message.job ?? 0,
                         limits: message.limits ?? JobLimits(), agent: agent, paths: paths,
                         announce: lastText != nil ? message.text : nil
                     )
@@ -132,7 +147,7 @@ enum Supervisor {
 
     // MARK: Running an admitted job
 
-    static func run(client: Client, tool: String, real: String, args: [String], job: Int64, limits: JobLimits, agent: Bool, paths: Paths, announce: String?) -> Never {
+    static func run(client: Client, request: Message, tool: String, real: String, args: [String], job: Int64, limits: JobLimits, agent: Bool, paths: Paths, announce: String?) -> Never {
         if let announce { warn(announce) }
         var environment = ProcessInfo.processInfo.environment
         environment["TURNSTILE_TOKEN"] = "\(job):\(getpid())"
@@ -165,9 +180,16 @@ enum Supervisor {
             }
         }
 
-        // Like system(3): the terminal's Ctrl-C reaches the child directly, and we outlive it to report.
-        signal(SIGINT, SIG_IGN)
-        signal(SIGQUIT, SIG_IGN)
+        // Like system(3): when the child shares our terminal, Ctrl-C reaches it directly and we outlive it to report.
+        // Otherwise (a harness signalling this process), pass interrupts on like any other signal.
+        let childOwnsTerminal = isatty(0) == 1 && tcgetpgrp(0) == getpgrp()
+        var forwarded = [SIGTERM, SIGHUP]
+        if childOwnsTerminal {
+            signal(SIGINT, SIG_IGN)
+            signal(SIGQUIT, SIG_IGN)
+        } else {
+            forwarded += [SIGINT, SIGQUIT]
+        }
         var wake: [Int32] = [-1, -1]
         if pipe(&wake) == 0 {
             for fd in wake {
@@ -180,8 +202,15 @@ enum Supervisor {
             var byte: UInt8 = 0
             if childExitWake >= 0 { _ = write(childExitWake, &byte, 1) }
         }
-        for sig in [SIGTERM, SIGHUP] {
-            signal(sig) { received in if forwardTarget > 0 { kill(forwardTarget, received) } }
+        for sig in forwarded {
+            signal(sig) { received in
+                guard forwardTarget > 0 else { return }
+                kill(forwardTarget, received)
+                kill(forwardTarget, SIGCONT)
+                resumeRequested = 1
+                var byte: UInt8 = 0
+                if childExitWake >= 0 { _ = write(childExitWake, &byte, 1) }
+            }
         }
 
         guard let child = spawn(
@@ -210,7 +239,10 @@ enum Supervisor {
             streams = [(outPipe[0], 1), (errPipe[0], 2)]
         }
 
+        var client = client
         var daemonOpen = true
+        var released = false
+        var adoptions = 0
         var status: Int32 = 0
         var exited = false
         var drainDeadline: Date?
@@ -234,6 +266,10 @@ enum Supervisor {
             for (index, descriptor) in descriptors.enumerated() where descriptor.revents != 0 {
                 if descriptor.fd == wake[0] {
                     while read(wake[0], &buffer, buffer.count) > 0 {}
+                    if resumeRequested != 0 {
+                        resumeRequested = 0
+                        resume(child)
+                    }
                 } else if index < streams.count {
                     let count = read(descriptor.fd, &buffer, buffer.count)
                     if count > 0 {
@@ -244,11 +280,21 @@ enum Supervisor {
                         streams[index].read = -1
                     }
                 } else if client.ingest() {
-                    for message in client.takePending() where message.type == "notice" {
+                    for message in client.takePending() where message.type == "notice" || message.type == "release" {
                         if let text = message.text { warn(text) }
+                        if message.type == "release" { released = true }
                     }
                 } else {
                     daemonOpen = false
+                    // A daemon that died may have paused this job, and nothing else would ever resume it.
+                    resume(child)
+                    if !released && !exited && adoptions < 3 {
+                        adoptions += 1
+                        if let fresh = adopt(request: request, child: child, log: logPath, paths: paths) {
+                            client = fresh
+                            daemonOpen = true
+                        }
+                    }
                 }
             }
             streams.removeAll { $0.read < 0 }
@@ -270,6 +316,21 @@ enum Supervisor {
             }
         }
         exitLike(exitCode: finished.exitCode, signal: finished.signal)
+    }
+
+    static func resume(_ child: pid_t) {
+        ProcessTree.signal(ProcessTree.descendants(of: child, parents: ProcessTree.parents()), SIGCONT)
+    }
+
+    /// Re-registers a running job with a fresh daemon, so it still counts against slots and memory.
+    static func adopt(request: Message, child: pid_t, log: String?, paths: Paths) -> Client? {
+        guard let fresh = Client.connectOrStart(paths: paths) else { return nil }
+        var adopt = request
+        adopt.type = "adopt"
+        adopt.childPid = child
+        adopt.log = log
+        guard let reply = fresh.roundTrip(adopt, timeout: 2), reply.type == "ok", reply.job != nil else { return nil }
+        return fresh
     }
 
     static func exitLike(exitCode: Int32?, signal sig: Int32?) -> Never {
@@ -303,10 +364,12 @@ enum Supervisor {
     // MARK: Joining a run already in progress
 
     /// Follows another job's output and exits with its result.
-    static func follow(client: Client, first: Message) -> Never {
+    /// Returns if that run ends without a result, so the caller can run the command itself.
+    static func follow(client: Client, first: Message) {
         if let text = first.text { warn(text) }
         var log: Int32 = -1
         var buffer = [UInt8](repeating: 0, count: 65536)
+        defer { if log >= 0 { close(log) } }
 
         func pump() {
             guard log >= 0 else { return }
@@ -316,35 +379,34 @@ enum Supervisor {
                 writeAll(1, buffer, count)
             }
         }
-        func handle(_ message: Message) -> Never? {
-            switch message.type {
-            case "output":
-                if log < 0, let path = message.log { log = open(path, O_RDONLY | O_CLOEXEC) }
-            case "notice":
-                if let text = message.text { warn(text) }
-            case "done":
-                pump()
-                if let text = message.text { warn(text) }
-                if message.exitCode == nil && message.signal == nil { exit(75) }
-                exitLike(exitCode: message.exitCode, signal: message.signal)
-            default:
-                break
-            }
-            return nil
-        }
 
         if let path = first.log { log = open(path, O_RDONLY | O_CLOEXEC) }
         while true {
             switch client.read(timeout: 0.2) {
             case .closed:
                 pump()
-                warn("lost the daemon; the run this joined may still be going")
-                exit(75)
+                warn("lost the daemon while following another run; running it here instead")
+                return
             case .timeout:
                 pump()
             case let .message(message):
                 pump()
-                _ = handle(message)
+                switch message.type {
+                case "output":
+                    if log < 0, let path = message.log { log = open(path, O_RDONLY | O_CLOEXEC) }
+                case "notice":
+                    if let text = message.text { warn(text) }
+                case "done":
+                    pump()
+                    guard message.exitCode != nil || message.signal != nil else {
+                        warn("\(message.text ?? "the run this joined ended without a result"); running it here instead")
+                        return
+                    }
+                    if let text = message.text { warn(text) }
+                    exitLike(exitCode: message.exitCode, signal: message.signal)
+                default:
+                    break
+                }
             }
         }
     }

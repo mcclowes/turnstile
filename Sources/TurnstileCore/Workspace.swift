@@ -8,7 +8,16 @@ public struct Workspace: Equatable, Sendable {
     public var fingerprint: String?
 
     /// Identifies the working tree's contents: HEAD, the staged and unstaged diff, and untracked files' sizes and mtimes.
-    public static func inspect(cwd: String, argv: [String]) -> Workspace {
+    /// Variables that commonly change what a build or test does, so runs that differ in them never merge.
+    public static func environmentInputs(_ environment: [String: String]) -> [String] {
+        let exact: Set<String> = ["CI", "NODE_ENV", "RAILS_ENV", "RUST_BACKTRACE", "RUSTFLAGS", "CFLAGS", "GOFLAGS", "SWIFT_ACTIVE_COMPILATION_CONDITIONS", "CONFIGURATION"]
+        return environment.keys
+            .filter { exact.contains($0) || $0.uppercased().contains("TEST") }
+            .sorted()
+            .map { "\($0)=\(environment[$0]!)" }
+    }
+
+    public static func inspect(cwd: String, argv: [String], environment: [String: String] = [:]) -> Workspace {
         guard let top = git(["rev-parse", "--show-toplevel", "HEAD"], cwd: cwd) else {
             return Workspace(root: cwd, fingerprint: nil)
         }
@@ -20,11 +29,19 @@ public struct Workspace: Equatable, Sendable {
         hash.update(data: Data(lines[1].utf8))
         hash.update(data: Data(cwd.utf8))
         for arg in argv { hash.update(data: Data((arg + "\u{0}").utf8)) }
+        for input in environmentInputs(environment) { hash.update(data: Data((input + "\u{0}").utf8)) }
         guard let diff = git(["diff", "HEAD", "--no-color", "--no-ext-diff", "--binary"], cwd: root),
               let untracked = git(["ls-files", "--others", "--exclude-standard", "-z"], cwd: root) else {
             return Workspace(root: root, fingerprint: nil)
         }
         hash.update(data: diff)
+        // Ignored .env files change test results without showing up in git.
+        let envFiles = ((try? FileManager.default.contentsOfDirectory(atPath: root)) ?? []).filter { $0.hasPrefix(".env") }.sorted()
+        for name in envFiles {
+            let attributes = try? FileManager.default.attributesOfItem(atPath: root + "/" + name)
+            let mtime = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+            hash.update(data: Data("\(name)\u{0}\((attributes?[.size] as? NSNumber)?.int64Value ?? -1)\u{0}\(mtime)\u{0}".utf8))
+        }
         for path in untracked.split(separator: 0).map({ String(decoding: $0, as: UTF8.self) }) {
             let attributes = try? FileManager.default.attributesOfItem(atPath: root + "/" + path)
             let size = (attributes?[.size] as? NSNumber)?.int64Value ?? -1

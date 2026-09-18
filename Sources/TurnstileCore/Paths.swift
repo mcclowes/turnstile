@@ -1,0 +1,64 @@
+import Foundation
+
+public struct Paths: Sendable {
+    public let home: String
+
+    public init(environment: [String: String] = ProcessInfo.processInfo.environment) {
+        home = environment["TURNSTILE_HOME"] ?? (homeDirectory(environment) + "/.turnstile")
+    }
+
+    public init(home: String) {
+        self.home = home
+    }
+
+    public var shims: String { home + "/shims" }
+    public var bin: String { home + "/bin" }
+    public var socket: String { home + "/turnstiled.sock" }
+    public var database: String { home + "/state.sqlite" }
+    public var logs: String { home + "/logs" }
+    public var daemonLog: String { home + "/daemon.log" }
+    public var lock: String { home + "/daemon.lock" }
+
+    public func ensure() throws {
+        for dir in [home, shims, logs] {
+            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        }
+    }
+}
+
+public enum Agent {
+    /// Variables that agent harnesses set in the shells they run.
+    public static let defaultMarkers = [
+        "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_SANDBOX", "CODEX_MANAGED_BY_NPM", "CODEX_THREAD_ID",
+        "GEMINI_CLI", "CURSOR_AGENT", "AIDER_MODEL", "OPENCODE", "AMP_THREAD_ID",
+    ]
+
+    /// `TURNSTILE_AGENT=1/0` forces the answer. Otherwise agent markers, or no terminal at all, mean an agent.
+    public static func isAgent(environment: [String: String], extraMarkers: [String] = [], interactive: Bool) -> Bool {
+        if let forced = environment["TURNSTILE_AGENT"] { return forced != "0" && forced != "" }
+        if (defaultMarkers + extraMarkers).contains(where: { environment[$0] != nil }) { return true }
+        return !interactive
+    }
+}
+
+public enum Resolver {
+    /// First executable named `tool` on PATH that isn't a turnstile shim.
+    public static func realBinary(_ tool: String, path: String, shimsDir: String, selfPath: String?) -> String? {
+        let shims = canonical(shimsDir)
+        let me = selfPath.map(canonical)
+        for dir in path.split(separator: ":").map(String.init) where !dir.isEmpty {
+            if canonical(dir) == shims { continue }
+            let candidate = (dir as NSString).appendingPathComponent(tool)
+            guard FileManager.default.isExecutableFile(atPath: candidate) else { continue }
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: candidate, isDirectory: &isDir), isDir.boolValue { continue }
+            if let me, canonical(candidate) == me { continue }
+            return candidate
+        }
+        return nil
+    }
+
+    public static func canonical(_ path: String) -> String {
+        URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
+    }
+}

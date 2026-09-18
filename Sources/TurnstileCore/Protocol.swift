@@ -120,8 +120,10 @@ public struct StatusSnapshot: Codable, Equatable, Sendable {
     public var queued: [JobSnapshot]
     public var recent: [HistoryEntry]
     public var daemonPid: Int32
+    /// Nil from daemons older than 0.2.
+    public var version: String?
 
-    public init(memoryLevel: Int, physicalMemory: UInt64, reserve: UInt64, limits: [String: Int], running: [JobSnapshot], queued: [JobSnapshot], recent: [HistoryEntry], daemonPid: Int32) {
+    public init(memoryLevel: Int, physicalMemory: UInt64, reserve: UInt64, limits: [String: Int], running: [JobSnapshot], queued: [JobSnapshot], recent: [HistoryEntry], daemonPid: Int32, version: String? = Turnstile.version) {
         self.memoryLevel = memoryLevel
         self.physicalMemory = physicalMemory
         self.reserve = reserve
@@ -130,6 +132,7 @@ public struct StatusSnapshot: Codable, Equatable, Sendable {
         self.queued = queued
         self.recent = recent
         self.daemonPid = daemonPid
+        self.version = version
     }
 }
 

@@ -3,13 +3,14 @@ import Foundation
 import TurnstileCore
 
 enum CLI {
-    static let version = "0.1.0"
+    static let version = Turnstile.version
 
     static let usage = """
         turnstile: a machine-wide, memory-aware gate for builds and tests
 
         Usage:
           turnstile init [--shell zsh|bash|fish] [--no-rc]   install shims and add them to PATH
+          turnstile doctor                                   check the install, PATH, config, and daemon
           turnstile status [--json]                          running and queued jobs, memory, recent runs
           turnstile bump <job>                               move a job (number, pid, or name) to the front
           turnstile run [--class compile|test|browser] -- <command>   gate any command
@@ -17,6 +18,7 @@ enum CLI {
           turnstile config [show|check|path|init|edit]       see, validate, and edit settings
           turnstile env [--shell zsh|bash|fish]              print the PATH setup, for terminal managers
           turnstile shims                                    rebuild the shims directory
+          turnstile disable | enable                         turn gating off and on for every shell
           turnstile stop                                     stop the daemon
           turnstile uninstall                                remove shims and PATH setup
           turnstile daemon                                   run the scheduler in the foreground
@@ -34,6 +36,9 @@ enum CLI {
         case "run": run(rest)
         case "classify": classify(rest)
         case "config": ConfigCommand.main(rest)
+        case "doctor": Doctor.main(rest)
+        case "disable": setEnabled(false)
+        case "enable": setEnabled(true)
         case "env": env(rest)
         case "shims", "rehash": rebuildShims(announce: true); exit(0)
         case "stop": stop()
@@ -66,6 +71,7 @@ enum CLI {
         guard installBinary(paths: paths) else { exit(1) }
         rebuildShims(announce: false)
         print("Installed shims in \(paths.shims)")
+        retireOldDaemon(paths: paths)
 
         if args.contains("--no-rc") {
             print("Skipped shell startup files. Put \(paths.shims) first on PATH, or run: eval \"$(turnstile env)\"")
@@ -110,6 +116,32 @@ enum CLI {
             warn("can't install to \(target): \(error)")
             return false
         }
+    }
+
+    /// A daemon from an earlier version keeps running until idle; stop it now if that costs nothing.
+    static func retireOldDaemon(paths: Paths) {
+        guard let client = Client.connect(socketPath: paths.socket),
+              let status = client.roundTrip(Message(type: "status"))?.status,
+              status.version != Turnstile.version else { return }
+        if status.running.isEmpty && status.queued.isEmpty {
+            _ = client.roundTrip(Message(type: "stop"))
+            print("Stopped the old daemon; the next gated command starts the new one")
+        } else {
+            print("An older daemon is still running jobs; run `turnstile stop` once they finish")
+        }
+    }
+
+    static func setEnabled(_ enabled: Bool) -> Never {
+        let paths = self.paths
+        if enabled {
+            try? FileManager.default.removeItem(atPath: paths.disabledFlag)
+            print("turnstile is on: heavy commands are gated again")
+        } else {
+            try? paths.ensure()
+            FileManager.default.createFile(atPath: paths.disabledFlag, contents: Data())
+            print("turnstile is off: every command runs ungated until `turnstile enable`")
+        }
+        exit(0)
     }
 
     static func shimNames(config: MachineConfig) -> [String] {
@@ -264,7 +296,7 @@ enum CLI {
             exit(127)
         }
         let rest = Array(args.dropFirst())
-        if Supervisor.insideAdmittedJob(environment) { execReal(real, rest) }
+        if Supervisor.insideAdmittedJob(environment) || paths.isDisabled { execReal(real, rest) }
         let interactive = isatty(0) == 1 && isatty(1) == 1
         let config = Supervisor.loadConfig(environment: environment)
         var classification = Classifier.classify(tool: name, args: rest, context: ClassifierContext(config: config, interactive: interactive))

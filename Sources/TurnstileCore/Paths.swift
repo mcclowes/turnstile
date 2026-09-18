@@ -1,5 +1,9 @@
 import Foundation
 
+public enum Turnstile {
+    public static let version = "0.2.0"
+}
+
 public struct Paths: Sendable {
     public let home: String
 
@@ -24,6 +28,10 @@ public struct Paths: Sendable {
     public var logs: String { home + "/logs" }
     public var daemonLog: String { home + "/daemon.log" }
     public var lock: String { home + "/daemon.lock" }
+    /// While this file exists every shim passes straight through (`turnstile disable`).
+    public var disabledFlag: String { home + "/disabled" }
+
+    public var isDisabled: Bool { FileManager.default.fileExists(atPath: disabledFlag) }
 
     public func ensure() throws {
         for dir in [home, shims, logs] {

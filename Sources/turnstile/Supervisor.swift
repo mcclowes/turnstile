@@ -18,7 +18,7 @@ enum Supervisor {
             warn("\(tool): command not found (outside turnstile's shims)")
             exit(127)
         }
-        if environment["TURNSTILE_DISABLE"] == "1" || insideAdmittedJob(environment) {
+        if environment["TURNSTILE_DISABLE"] == "1" || paths.isDisabled || insideAdmittedJob(environment) {
             execReal(real, args)
         }
         let interactive = isatty(0) == 1 && isatty(1) == 1

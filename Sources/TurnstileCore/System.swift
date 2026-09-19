@@ -54,6 +54,16 @@ public enum SystemMemory {
     }
 }
 
+public enum Sandbox {
+    /// Running under a macOS sandbox profile, as agent harnesses like Codex apply. Such a sandbox usually blocks
+    /// the daemon's socket, and a daemon started from inside one would inherit its limits.
+    public static var isActive: Bool {
+        typealias Check = @convention(c) (pid_t, UnsafePointer<CChar>?, Int32) -> Int32
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "sandbox_check") else { return false }
+        return unsafeBitCast(symbol, to: Check.self)(getpid(), nil, 0) != 0
+    }
+}
+
 public enum MemoryPressure: Int, Comparable, Sendable {
     case normal = 1, warn = 2, critical = 4
 

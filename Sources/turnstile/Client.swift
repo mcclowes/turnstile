@@ -6,7 +6,7 @@ extension Client {
     /// Connects, starting the daemon if it isn't running.
     static func connectOrStart(paths: Paths) -> Client? {
         if let client = connect(socketPath: paths.socket) { return client }
-        guard startDaemon(paths: paths) else { return nil }
+        guard !Sandbox.isActive, startDaemon(paths: paths) else { return nil }
         // Generous, because this runs when the machine is busiest.
         for _ in 0..<125 {
             usleep(40_000)

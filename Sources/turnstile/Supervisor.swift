@@ -52,7 +52,9 @@ enum Supervisor {
         let environment = ProcessInfo.processInfo.environment
         let paths = Paths(environment: environment)
         guard var client = Client.connectOrStart(paths: paths) else {
-            warn("daemon unavailable, running \(tool) ungated (see \(paths.daemonLog))")
+            warn(Sandbox.isActive
+                ? "can't reach the daemon from inside this sandbox, running \(tool) ungated (`turnstile doctor` says how to allow it)"
+                : "daemon unavailable, running \(tool) ungated (see \(paths.daemonLog))")
             execReal(real, args)
         }
         let cwd = FileManager.default.currentDirectoryPath

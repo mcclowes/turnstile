@@ -129,6 +129,12 @@ enum Doctor {
     /// Starts the daemon if needed, so a broken daemon shows up here rather than on the next build.
     static func daemon(paths: Paths) -> [Finding] {
         guard let client = Client.connectOrStart(paths: paths) else {
+            if Sandbox.isActive {
+                return [Finding(
+                    level: .problem, topic: "daemon", text: "this shell is sandboxed and can't reach the daemon on \(paths.socket), so commands here run ungated",
+                    fix: "let the agent's sandbox connect to that unix socket (for Codex, that may mean network access), and run `turnstile doctor` once outside the sandbox to start the daemon"
+                )]
+            }
             return [Finding(level: .problem, topic: "daemon", text: "can't start or reach the daemon on \(paths.socket)", fix: "check \(paths.daemonLog); gated commands run ungated until this is fixed")]
         }
         guard let reply = client.roundTrip(Message(type: "status")), let status = reply.status else {

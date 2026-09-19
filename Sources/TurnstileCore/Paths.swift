@@ -75,6 +75,12 @@ public enum Resolver {
         return nil
     }
 
+    /// For a Homebrew install, the prefix's `bin/turnstile` link, which `brew upgrade` repoints; the Cellar path it resolves to doesn't survive an upgrade.
+    public static func homebrewLink(for executable: String) -> String? {
+        guard let range = executable.range(of: "/Cellar/turnstile/") else { return nil }
+        return executable[..<range.lowerBound] + "/bin/turnstile"
+    }
+
     public static func canonical(_ path: String) -> String {
         URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
     }

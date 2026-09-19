@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches the version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          grep -q "version = \"$version\"" Sources/TurnstileCore/Paths.swift || {
+            echo "Tag $GITHUB_REF_NAME doesn't match Turnstile.version in Sources/TurnstileCore/Paths.swift"; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Test
+        run: swift test && ./scripts/e2e.sh
+
+      - name: Build a universal binary
+        run: |
+          swift build -c release --arch arm64 --arch x86_64
+          bin="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)"
+          lipo -info "$bin/turnstile"
+          [ "$("$bin/turnstile" --version)" = "$VERSION" ]
+          mkdir dist
+          tar -czf "dist/turnstile-$VERSION-macos.tar.gz" -C "$bin" turnstile
+          ./scripts/formula.sh "$VERSION" "dist/turnstile-$VERSION-macos.tar.gz" > dist/turnstile.rb
+          (cd dist && shasum -a 256 *.tar.gz > SHA256SUMS)
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "turnstile $VERSION" --generate-notes
+
+      # Needs a HOMEBREW_TAP_TOKEN secret with write access to mcclowes/homebrew-tap; skipped without one.
+      - name: Update the Homebrew tap
+        if: env.TAP_TOKEN != ''
+        run: |
+          git clone "https://x-access-token:$TAP_TOKEN@github.com/mcclowes/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cp dist/turnstile.rb tap/Formula/turnstile.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/turnstile.rb
+          git commit -m "turnstile $VERSION"
+          git push

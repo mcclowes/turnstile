@@ -367,6 +367,17 @@ out="$(TURNSTILE_HOME="$T/fresh" turnstile doctor 2>&1)"
 check "doctor spots missing PATH setup" 'echo "$out" | grep -q "isn.t on this shell.s PATH"'
 TURNSTILE_HOME="$T/fresh" "$BIN" stop > /dev/null
 
+# A Homebrew install is linked, not copied, so the shims follow `brew upgrade`.
+brew="$T/brew"
+mkdir -p "$brew/Cellar/turnstile/1/bin" "$brew/Cellar/turnstile/2/bin" "$brew/bin"
+cp "$BIN" "$brew/Cellar/turnstile/1/bin/turnstile"
+ln -s ../Cellar/turnstile/1/bin/turnstile "$brew/bin/turnstile"
+TURNSTILE_HOME="$T/brewhome" "$brew/bin/turnstile" init --no-rc > /dev/null
+printf '#!/bin/sh\necho upgraded\n' > "$brew/Cellar/turnstile/2/bin/turnstile" && chmod +x "$brew/Cellar/turnstile/2/bin/turnstile"
+ln -sfn ../Cellar/turnstile/2/bin/turnstile "$brew/bin/turnstile"
+rm -rf "$brew/Cellar/turnstile/1"
+check "a Homebrew install follows upgrades" '[ "$("$T/brewhome/shims/turnstile")" = upgraded ]'
+
 # The daemon going away fails open.
 turnstile stop > /dev/null
 check "no daemon still runs ungated" '[ "$(TURNSTILE_HOME=/nonexistent/x swift build 2>/dev/null | head -1)" = "fake swift build" ]'

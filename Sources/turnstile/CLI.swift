@@ -114,12 +114,18 @@ enum CLI {
             return false
         }
         let target = paths.bin + "/turnstile"
-        if Resolver.canonical(target) == me { return true }
+        let link = Resolver.homebrewLink(for: me).flatMap { FileManager.default.isExecutableFile(atPath: $0) ? $0 : nil }
+        if link == nil && Resolver.canonical(target) == me { return true }
         do {
             try FileManager.default.createDirectory(atPath: paths.bin, withIntermediateDirectories: true)
             let staging = target + ".new"
             try? FileManager.default.removeItem(atPath: staging)
-            try FileManager.default.copyItem(atPath: me, toPath: staging)
+            // A Homebrew install is linked rather than copied, so `brew upgrade` carries the shims along.
+            if let link {
+                try FileManager.default.createSymbolicLink(atPath: staging, withDestinationPath: link)
+            } else {
+                try FileManager.default.copyItem(atPath: me, toPath: staging)
+            }
             _ = rename(staging, target)
             return true
         } catch {

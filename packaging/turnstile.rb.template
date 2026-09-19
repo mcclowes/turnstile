@@ -1,0 +1,26 @@
+class Turnstile < Formula
+  desc "Machine-wide, memory-aware gate for builds and tests on macOS"
+  homepage "https://github.com/mcclowes/turnstile"
+  url "https://github.com/mcclowes/turnstile/releases/download/v@VERSION@/turnstile-@VERSION@-macos.tar.gz"
+  sha256 "@SHA256@"
+  version "@VERSION@"
+
+  depends_on :macos
+
+  def install
+    bin.install "turnstile"
+  end
+
+  def caveats
+    <<~EOS
+      Put the shims on PATH (once per machine), then check the install:
+        turnstile init
+        turnstile doctor
+      Upgrades carry over; there's no need to rerun init.
+    EOS
+  end
+
+  test do
+    assert_equal version.to_s, shell_output("#{bin}/turnstile --version").strip
+  end
+end

@@ -15,7 +15,14 @@ turnstile: starting after 41s
 
 ## Install
 
-Requires macOS 13+ and a Swift 6 toolchain (Xcode 16 or later).
+Requires macOS 13+.
+
+```sh
+brew install mcclowes/tap/turnstile
+turnstile init
+```
+
+Or download the universal binary from [releases](https://github.com/mcclowes/turnstile/releases) and run `./turnstile init`. To build from source, you'll need a Swift 6 toolchain (Xcode 16 or later):
 
 ```sh
 git clone https://github.com/mcclowes/turnstile && cd turnstile
@@ -23,7 +30,7 @@ swift build -c release
 .build/release/turnstile init
 ```
 
-`init` copies the binary to `~/.turnstile/bin`, creates the shims, and adds them to the front of PATH in your shell's startup files (zsh, bash, or fish). Open a new shell, then check everything's wired up:
+`init` installs the binary in `~/.turnstile/bin` (linked, for Homebrew, so `brew upgrade` carries over), creates the shims, and adds them to the front of PATH in your shell's startup files (zsh, bash, or fish). Open a new shell, then check everything's wired up:
 
 ```sh
 turnstile doctor
@@ -175,3 +182,5 @@ Exit codes are the tool's own. turnstile adds `125` when someone ran `turnstile 
 swift test             # unit tests
 ./scripts/e2e.sh       # end-to-end, with fake tools in a throwaway turnstile home
 ```
+
+To release, bump `Turnstile.version` in `Sources/TurnstileCore/Paths.swift` and push a matching tag (`v0.3.0`). The release workflow tests, builds a universal binary, publishes it with a Homebrew formula, and updates `mcclowes/homebrew-tap` when the `HOMEBREW_TAP_TOKEN` secret is set.

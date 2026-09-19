@@ -26,6 +26,11 @@ let package = Package(
             name: "TurnstileCoreTests",
             dependencies: ["TurnstileCore"]
         ),
+        // Drives the daemon and the shim's supervisor, which live in the executable.
+        .testTarget(
+            name: "TurnstileTests",
+            dependencies: ["turnstile", "TurnstileCore"]
+        ),
     ],
     swiftLanguageModes: [.v5]
 )

@@ -1,0 +1,58 @@
+name: Bug report
+description: Something turnstile did, or didn't do, that it should have.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what happened instead. Paste turnstile's output if it printed anything.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: The smallest set of steps that shows it. Note whether the command came from you or an agent.
+  - type: textarea
+    id: doctor
+    attributes:
+      label: turnstile doctor
+      description: Output of `turnstile doctor`.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: status
+    attributes:
+      label: turnstile status
+      description: For queueing, memory, or pausing problems, the output of `turnstile status` while it's happening.
+      render: text
+  - type: textarea
+    id: log
+    attributes:
+      label: Daemon log
+      description: Relevant lines from `~/.turnstile/daemon.log`.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: turnstile version
+      description: Output of `turnstile --version`.
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac
+      placeholder: macOS 26.1, M3 Pro, 36 GB
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installed with
+      options:
+        - Homebrew
+        - Release download
+        - Built from source

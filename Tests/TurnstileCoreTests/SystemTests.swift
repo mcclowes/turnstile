@@ -181,4 +181,35 @@ struct FingerprintInputTests {
         let inputs = Workspace.environmentInputs(["CI": "1", "NODE_ENV": "test", "RUN_E2E_TESTS": "1", "HOME": "/x", "TERM": "xterm"])
         #expect(inputs == ["CI=1", "NODE_ENV=test", "RUN_E2E_TESTS=1"])
     }
+
+    static func makeRepo() throws -> String {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("repo-\(UUID().uuidString)").path
+        try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
+        try "one\n".write(toFile: root + "/a.txt", atomically: true, encoding: .utf8)
+        for args in [["init", "-q"], ["add", "."], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init"]] {
+            _ = Workspace.git(args, cwd: root, deadline: .distantFuture)
+        }
+        return Workspace.git(["rev-parse", "--show-toplevel"], cwd: root, deadline: .distantFuture)
+            .map { String(decoding: $0, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) } ?? root
+    }
+
+    @Test func fingerprintFollowsUncommittedChanges() throws {
+        let root = try Self.makeRepo()
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let clean = Workspace.inspect(cwd: root, argv: ["swift", "build"])
+        #expect(clean.root == root)
+        #expect(clean.fingerprint != nil)
+        #expect(Workspace.inspect(cwd: root, argv: ["swift", "build"]).fingerprint == clean.fingerprint)
+
+        try "two\n".write(toFile: root + "/a.txt", atomically: true, encoding: .utf8)
+        #expect(Workspace.inspect(cwd: root, argv: ["swift", "build"]).fingerprint != clean.fingerprint)
+    }
+
+    @Test func slowGitGivesUpOnTheFingerprintButKeepsTheRoot() throws {
+        let root = try Self.makeRepo()
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let workspace = Workspace.inspect(cwd: root, argv: ["swift", "build"], budget: 0)
+        #expect(workspace.root == root)
+        #expect(workspace.fingerprint == nil)
+    }
 }

@@ -18,10 +18,12 @@ turnstile: starting after 41s
 Requires macOS 13+.
 
 ```sh
-brew install mcclowes/turnstile/turnstile             # CLI only
-brew install --cask mcclowes/turnstile/turnstile-app  # CLI + menu bar app
+brew install mcclowes/turnstile/turnstile                                # CLI only
+brew install mcclowes/turnstile/turnstile mcclowes/turnstile/turnstile-app  # CLI + menu bar app
 turnstile init
 ```
+
+Name the formula alongside the app: Homebrew only trusts third-party formulae you name, so `brew install --cask mcclowes/turnstile/turnstile-app` on its own refuses to load the CLI it depends on, unless you've run `brew trust mcclowes/turnstile`.
 
 Or download the universal binary from [releases](https://github.com/mcclowes/homebrew-turnstile/releases) and run `./turnstile init`. To build from source, you'll need a Swift 6 toolchain (Xcode 16 or later):
 
@@ -80,7 +82,7 @@ Gated by default: `swift`, `xcodebuild`, `cargo`, `go`, `gradle`, `make`, `npm`,
 turnstile works in the background, so there's also a menu bar app for when no terminal is open on it. The icon shows how many jobs are queued, and turns into a warning when memory is low or a job has been paused for it. Each job in the menu has bump, pause or hold, and kill. You get a notification when a job is paused for memory or killed as a runaway.
 
 ```sh
-brew install --cask mcclowes/turnstile/turnstile-app
+brew install mcclowes/turnstile/turnstile mcclowes/turnstile/turnstile-app
 ```
 
 The cask depends on the `turnstile` formula rather than bundling its own CLI, so uninstalling the app leaves the CLI in place. To build it from source instead, run `./scripts/package.sh --dev && open .build/Turnstile.app`.

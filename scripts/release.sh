@@ -50,8 +50,8 @@ gh release create "$TAG" "$TARBALL" "$DIST/Turnstile-$VERSION.zip" "$DIST/SHA256
   --notes "Universal CLI and the signed, notarized menu bar app. Changes: https://github.com/mcclowes/turnstile/compare/$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || echo main)...$TAG
 
 \`\`\`sh
-brew install mcclowes/turnstile/turnstile             # CLI only
-brew install --cask mcclowes/turnstile/turnstile-app  # CLI + menu bar app
+brew install mcclowes/turnstile/turnstile                                # CLI only
+brew install mcclowes/turnstile/turnstile mcclowes/turnstile/turnstile-app  # CLI + menu bar app
 \`\`\`"
 
 tap="$(mktemp -d)/homebrew-turnstile"

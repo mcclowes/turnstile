@@ -27,7 +27,7 @@ echo "run $$ $*" >> "$FAKE_RUNS"
 [ -n "${FAKE_EXEC_SLEEP:-}" ] && exec sleep "$FAKE_EXEC_SLEEP"
 [ -n "${FAKE_LATE_OUTPUT:-}" ] && { (sleep 3; echo "late output") & exit 0; }
 # A build server: a short-lived client starts it in its own session, then exits, leaving it to launchd.
-[ -n "${FAKE_SERVER_MB:-}" ] && { bash -c '/usr/bin/python3 -c "import os, time; os.setsid(); time.sleep(2.5); b = bytearray(${FAKE_SERVER_MB} * 1024 * 1024); [b.__setitem__(i, 1) for i in range(0, len(b), 4096)]; time.sleep(30)" turnstile-e2e-server & sleep 1.5'; sleep 10; exit 0; }
+[ -n "${FAKE_SERVER_MB:-}" ] && { bash -c '/usr/bin/python3 -c "import os, time; os.setsid(); time.sleep(2.5); b = bytearray(${FAKE_SERVER_MB} * 1024 * 1024); [b.__setitem__(i, 1) for i in range(0, len(b), 4096)]; time.sleep(30)" turnstile-e2e-server > /dev/null 2>&1 & sleep 1.5'; sleep 10; exit 0; }
 sleep "${FAKE_SLEEP:-0}"
 echo "fake swift done" >&2
 exit "${FAKE_EXIT:-0}"

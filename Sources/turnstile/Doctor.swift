@@ -151,9 +151,22 @@ enum Doctor {
         return [Finding(level: .ok, topic: "daemon", text: "pid \(status.daemonPid), \(status.running.count) running, \(status.queued.count) queued")]
     }
 
+    /// What ran without gating: shims that failed open, and builds the daemon saw outside every job.
     static func ungated(paths: Paths, environment: [String: String]) -> [Finding] {
-        guard let text = UngatedLog.describe(UngatedLog.read(paths.ungatedLog), now: Date().timeIntervalSince1970, home: homeDirectory(environment)) else { return [] }
-        return [Finding(level: .note, topic: "ungated", text: text, fix: "the full list is in \(paths.ungatedLog)")]
+        let now = Date().timeIntervalSince1970
+        let home = homeDirectory(environment)
+        var findings: [Finding] = []
+        if let store = try? Store(path: paths.database),
+           let report = Escapes.report(store.escapes(since: now - 86400), home: home) {
+            findings.append(Finding(
+                level: .note, topic: "ungated", text: "ran outside turnstile in the last day: \(report)",
+                fix: "start these through a shimmed tool, or add one with `shims.add`; Xcode's own builds can't be gated"
+            ))
+        }
+        if let text = UngatedLog.describe(UngatedLog.read(paths.ungatedLog), now: now, home: home) {
+            findings.append(Finding(level: .note, topic: "ungated", text: text, fix: "the full list is in \(paths.ungatedLog)"))
+        }
+        return findings
     }
 
     static func system(environment: [String: String], config: Config) -> [Finding] {

@@ -15,6 +15,14 @@ struct TopScreenTests {
         StatusSnapshot(memoryLevel: 40, physicalMemory: 16 * Bytes.gb, reserve: 2 * Bytes.gb, limits: [:], running: running, queued: queued, recent: [], daemonPid: 1)
     }
 
+    @Test func showsWhatRanOutsideTurnstile() {
+        var state = snapshot([job(1)])
+        state.ungated = [EscapeRow(label: "swift-frontend", via: "Xcode", cwd: "/Users/me/app", count: 14, lastSeen: 0)]
+        let lines = TopScreen.render(state, selected: nil, now: 20, width: 120, height: 40, footer: "")
+        #expect(lines.contains { $0.contains("outside turnstile") && $0.contains("14 × swift-frontend under Xcode") })
+        #expect(!TopScreen.render(snapshot([job(1)]), selected: nil, now: 20, width: 120, height: 40, footer: "").contains { $0.contains("outside turnstile") })
+    }
+
     @Test func arrowsAndLettersMapToKeys() {
         #expect(TopScreen.keys([0x1B, 0x5B, 0x41, 0x6A, 0x78, 0x71]) == [.up, .down, .kill, .quit])
         #expect(TopScreen.keys([0x03]) == [.quit])

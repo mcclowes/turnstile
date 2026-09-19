@@ -66,6 +66,18 @@ public final class Store {
             try execute("ALTER TABLE jobs ADD COLUMN \(column) \(type)")
         }
         try execute("CREATE INDEX IF NOT EXISTS jobs_cost ON jobs(key, root, finished_at)")
+        try execute("""
+            CREATE TABLE IF NOT EXISTS escapes (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              seen_at REAL NOT NULL,
+              label TEXT NOT NULL,
+              via TEXT NOT NULL,
+              cwd TEXT NOT NULL,
+              executable TEXT,
+              chain TEXT
+            )
+            """)
+        try execute("CREATE INDEX IF NOT EXISTS escapes_seen ON escapes(seen_at)")
     }
 
     deinit { sqlite3_close(db) }
@@ -191,6 +203,29 @@ public final class Store {
 
     public func prune(olderThan cutoff: Double) {
         run("DELETE FROM jobs WHERE state = 'finished' AND finished_at < ?", [cutoff])
+        run("DELETE FROM escapes WHERE seen_at < ?", [cutoff])
+    }
+
+    // MARK: Runs that went around the shims
+
+    public func insertEscape(label: String, via: String, cwd: String, executable: String, chain: [String], at: Double) {
+        run("INSERT INTO escapes (seen_at, label, via, cwd, executable, chain) VALUES (?, ?, ?, ?, ?, ?)",
+            [at, label, via, cwd, executable, chain.joined(separator: " < ")])
+    }
+
+    /// The same command from the same place, counted together, busiest first.
+    public func escapes(since: Double, limit: Int = 5) -> [EscapeRow] {
+        var rows: [EscapeRow] = []
+        query("""
+            SELECT label, via, cwd, COUNT(*), MAX(seen_at) FROM escapes WHERE seen_at >= ?
+            GROUP BY label, via, cwd ORDER BY COUNT(*) DESC, MAX(seen_at) DESC LIMIT ?
+            """, [since, Int64(limit)]) { row in
+            rows.append(EscapeRow(
+                label: row.text(0) ?? "?", via: row.text(1) ?? "?", cwd: row.text(2) ?? "?",
+                count: Int(row.int(3) ?? 0), lastSeen: row.double(4) ?? 0
+            ))
+        }
+        return rows
     }
 
     // MARK: SQLite plumbing

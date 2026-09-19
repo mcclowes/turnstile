@@ -240,3 +240,34 @@ struct FingerprintInputTests {
         #expect(workspace.fingerprint == nil)
     }
 }
+
+struct ProcessDetailTests {
+    @Test func readsItsOwnProcess() {
+        let me = getpid()
+        let table = ProcessTree.table()
+        #expect(table[me]?.parent == getppid())
+        #expect(table[me]?.name.isEmpty == false)
+        #expect(ProcessTree.executable(me)?.isEmpty == false)
+        #expect(ProcessTree.arguments(me)?.isEmpty == false)
+        #expect(ProcessTree.workingDirectory(me) == FileManager.default.currentDirectoryPath)
+    }
+
+    @Test func readsAnotherProcessesDirectoryAndArguments() throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        process.arguments = ["5"]
+        process.currentDirectoryURL = URL(fileURLWithPath: "/private/tmp")
+        try process.run()
+        defer { process.terminate() }
+        usleep(200_000)
+        let pid = process.processIdentifier
+        #expect(ProcessTree.workingDirectory(pid) == "/private/tmp")
+        #expect(ProcessTree.arguments(pid)?.dropFirst().first == "5")
+    }
+
+    @Test func namesTheAncestorsItCanSee() {
+        let chain = ProcessTree.chain(from: getppid(), table: ProcessTree.table())
+        #expect(!chain.isEmpty)
+        #expect(chain.count <= 8)
+    }
+}

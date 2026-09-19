@@ -155,6 +155,12 @@ final class Daemon {
     /// launchd's children, and who created them. Nil when unreadable (another user's).
     var orphanLineage: [pid_t: ProcessTree.Lineage?] = [:]
     var ticks = 0
+    /// How the escape scan reads the process table; tests substitute their own.
+    var probe = ProcessProbe.live
+    /// Unique ids of processes already accounted for: a job's own, and escapes already recorded.
+    var knownLineage: Set<UInt64> = []
+    /// Escape kinds logged this run, so a thousand compiler processes make one log line.
+    var loggedEscapes: Set<String> = []
     var lastPressureAction: Double = 0
     var idleSince = Daemon.clock()
     let idleExit: Double
@@ -169,6 +175,9 @@ final class Daemon {
         self.store = store
         if let setAside { log("history database was unreadable; moved it to \(setAside) and started fresh") }
     }
+
+    /// Escape scans walk the whole process table, so they run every other tick rather than every one.
+    static let escapeScanTicks = 2
 
     static func now() -> Double { Date().timeIntervalSince1970 }
     static func clock() -> Double { Double(clock_gettime_nsec_np(CLOCK_MONOTONIC)) / 1e9 }
@@ -607,6 +616,7 @@ final class Daemon {
             relievePressure(now: now)
             reclaimUnstarted(now: now)
         }
+        if ticks % Daemon.escapeScanTicks == 0 { watchForEscapes(now: Daemon.now()) }
         schedule()
 
         if jobs.isEmpty && connectionsAreIdle() {
@@ -654,11 +664,47 @@ final class Daemon {
         }
         job.tree = tree
         let fresh = tree.filter { !previous.contains($0) }
-        for pid in fresh { if let lineage = ProcessTree.lineage(pid) { job.lineage.insert(lineage.id) } }
+        for pid in fresh {
+            if let lineage = ProcessTree.lineage(pid) {
+                job.lineage.insert(lineage.id)
+                knownLineage.insert(lineage.id)
+            }
+        }
         // Anything a paused job spawned just before it stopped is paused too.
         if job.paused && !fresh.isEmpty { ProcessTree.signal(fresh, SIGSTOP) }
         job.footprint = ProcessTree.footprint(of: job.tree)
         job.peak = max(job.peak, job.footprint)
+    }
+
+    /// Builds and test runs that never went through a shim: started by absolute path, by `xcrun`, from
+    /// `node_modules/.bin`, or by Xcode itself. They can't be gated, so they're recorded instead, once each.
+    func watchForEscapes(now: Double) {
+        let table = probe.table()
+        let uid = getuid()
+        let me = getpid()
+        let gated = Set(jobs.values.flatMap(\.tree))
+        let roots = Set(jobs.values.compactMap(\.childPid))
+        let parents = table.mapValues(\.parent)
+        if knownLineage.count > 100_000 { knownLineage.removeAll(keepingCapacity: true) }
+        for (pid, entry) in table
+        where pid != me && entry.uid == uid && Escapes.isCandidate(entry.name) && !gated.contains(pid) {
+            // Skipping the children of something already recorded keeps one build to one row, since a
+            // compiler driver forks a process per file.
+            guard let lineage = probe.lineage(pid),
+                  !knownLineage.contains(lineage.id), !knownLineage.contains(lineage.creator) else { continue }
+            knownLineage.insert(lineage.id)
+            guard ProcessTree.ancestor(of: pid, among: roots, parents: parents) == nil else { continue }
+            let executable = probe.executable(pid) ?? entry.name
+            let args = probe.arguments(pid).map { Array($0.dropFirst()) } ?? []
+            guard let label = Escapes.label(executable: executable, args: args) else { continue }
+            let chain = ProcessTree.chain(from: entry.parent, table: table)
+            let via = Escapes.via(chain: chain)
+            let cwd = probe.workingDirectory(pid) ?? "an unknown directory"
+            store.insertEscape(label: label, via: via, cwd: cwd, executable: executable, chain: chain, at: now)
+            if loggedEscapes.insert("\(label) \(via) \(cwd)").inserted {
+                log("\(label) ran outside turnstile, under \(via) in \(cwd)")
+            }
+        }
     }
 
     /// Children of launchd that a running job created, found by their creator's unique id, which survives reparenting and setsid.
@@ -887,7 +933,8 @@ final class Daemon {
             running: jobs.values.filter { $0.state != .queued }.sorted { ($0.startedAt ?? 0) < ($1.startedAt ?? 0) }.map(describe),
             queued: ordered.compactMap { jobs[$0] }.map(describe),
             recent: store.recent(limit: 10),
-            daemonPid: getpid()
+            daemonPid: getpid(),
+            ungated: store.escapes(since: Daemon.now() - 3600, limit: 3)
         )
     }
 

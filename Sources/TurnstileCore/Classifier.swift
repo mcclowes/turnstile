@@ -106,8 +106,8 @@ public enum Classifier {
 
     static func swift(_ args: [String]) -> Classification? {
         switch args.first {
-        case "build": return Classification(.compile, key: "swift build")
-        case "test": return Classification(.test, key: "swift test")
+        case "build": return Classification(.compile, key: "swift build" + configuration(args, flags: ["-c", "--configuration"], default: "debug"))
+        case "test": return Classification(.test, key: "swift test" + configuration(args, flags: ["-c", "--configuration"], default: "debug"))
         default: return nil  // run, package, format, repl, scripts
         }
     }
@@ -121,19 +121,19 @@ public enum Classifier {
         ]
         if args.contains(where: queries.contains) { return nil }
         if args.contains("test") || args.contains("test-without-building") {
-            return Classification(.test, key: "xcodebuild test")
+            return Classification(.test, key: "xcodebuild test" + configuration(args, flags: ["-configuration"], default: "Debug"))
         }
         if args.contains("clean") && !args.contains("build") { return nil }
-        return Classification(.compile, key: "xcodebuild build")
+        return Classification(.compile, key: "xcodebuild build" + configuration(args, flags: ["-configuration"], default: "Debug"))
     }
 
     static func cargo(_ args: [String]) -> Classification? {
         let sub = firstPositional(args, valueFlags: ["-C", "--config", "-Z", "--color"], skip: { $0.hasPrefix("+") })
         switch sub {
         case "build", "b", "check", "c", "clippy", "doc", "d", "install", "rustc", "rustdoc", "fix":
-            return Classification(.compile, key: "cargo \(canonical(sub!, ["b": "build", "c": "check", "d": "doc"]))")
+            return Classification(.compile, key: "cargo \(canonical(sub!, ["b": "build", "c": "check", "d": "doc"]))" + cargoProfile(args))
         case "test", "t", "bench", "nextest", "miri":
-            return Classification(.test, key: "cargo \(canonical(sub!, ["t": "test"]))")
+            return Classification(.test, key: "cargo \(canonical(sub!, ["t": "test"]))" + cargoProfile(args))
         default: return nil
         }
     }
@@ -262,6 +262,30 @@ public enum Classifier {
         let rest = Array(args[(index + 1)...])
         if nodeRunners.contains(inner) || inner == "npx" { return nil }
         return classify(tool: inner, args: rest, context: context)
+    }
+
+    /// " -c release" for a non-default build configuration, so its history stays apart from debug builds.
+    static func configuration(_ args: [String], flags: [String], default fallback: String) -> String {
+        guard let (flag, value) = flagValue(args, flags), value != fallback else { return "" }
+        return " \(flag) \(value)"
+    }
+
+    static func cargoProfile(_ args: [String]) -> String {
+        if let (_, profile) = flagValue(args, ["--profile"]), profile != "dev" { return " --profile \(profile)" }
+        return args.contains("--release") || args.contains("-r") ? " --release" : ""
+    }
+
+    /// The last value given for any of these flags, as `-c release` or `-c=release`.
+    static func flagValue(_ args: [String], _ flags: [String]) -> (flag: String, value: String)? {
+        var found: (String, String)?
+        for (index, arg) in args.enumerated() {
+            if flags.contains(arg), index + 1 < args.count {
+                found = (arg, args[index + 1])
+            } else if let flag = flags.first(where: { arg.hasPrefix($0 + "=") }) {
+                found = (flag, String(arg.dropFirst(flag.count + 1)))
+            }
+        }
+        return found
     }
 
     static func canonical(_ word: String, _ aliases: [String: String]) -> String {

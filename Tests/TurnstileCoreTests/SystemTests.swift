@@ -57,7 +57,7 @@ struct SystemTests {
 }
 
 struct StoreTests {
-    @Test func learnsUsualPeakPerProjectThenAcrossProjects() throws {
+    @Test func learnsUsualPeakPerProject() throws {
         let path = FileManager.default.temporaryDirectory.appendingPathComponent("store-\(UUID().uuidString).sqlite").path
         defer { try? FileManager.default.removeItem(atPath: path) }
         let store = try Store(path: path)
@@ -68,13 +68,31 @@ struct StoreTests {
         }
         #expect(store.usualPeak(key: "swift test", root: "/a") == nil)
         record(root: "/b", peak: 3 * Bytes.gb, at: 1)
-        #expect(store.usualPeak(key: "swift test", root: "/a") == 3 * Bytes.gb)
+        #expect(store.usualPeak(key: "swift test", root: "/a") == nil)
         record(root: "/a", peak: 1 * Bytes.gb, at: 2)
         record(root: "/a", peak: 2 * Bytes.gb, at: 3)
         record(root: "/a", peak: 9 * Bytes.gb, outcome: "killed", at: 4)
         #expect(store.usualPeak(key: "swift test", root: "/a") == 2 * Bytes.gb)
         #expect(store.recent(limit: 10).count == 4)
         #expect(store.recent(limit: 10).first?.outcome == "killed")
+    }
+
+    @Test func firstRunsInAProjectTakeTheMedianFromOthers() throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("store-\(UUID().uuidString).sqlite").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let store = try Store(path: path)
+        func record(root: String, peak: UInt64, at time: Double) {
+            let id = store.insertJob(state: "queued", resourceClass: .compile, key: "swift build", root: root, cwd: root, argv: ["swift", "build"], agent: true, clientPid: 1, estimate: 0, now: time)
+            store.markFinished(id, outcome: "ok", exitCode: 0, signal: nil, peak: peak, now: time + 1)
+        }
+        #expect(store.typicalPeak(key: "swift build", excluding: "/a") == nil)
+        record(root: "/b", peak: 600 * Bytes.mb, at: 1)
+        record(root: "/c", peak: 2400 * Bytes.mb, at: 2)
+        record(root: "/d", peak: 500 * Bytes.mb, at: 3)
+        record(root: "/a", peak: 9 * Bytes.gb, at: 4)
+        #expect(store.typicalPeak(key: "swift build", excluding: "/a") == 600 * Bytes.mb)
+        record(root: "/e", peak: 800 * Bytes.mb, at: 5)
+        #expect(store.typicalPeak(key: "swift build", excluding: "/a") == 700 * Bytes.mb)
     }
 }
 

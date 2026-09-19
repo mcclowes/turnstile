@@ -88,14 +88,26 @@ public final class Store {
         run("UPDATE jobs SET state = 'finished', outcome = 'lost', finished_at = ? WHERE state != 'finished'", [now])
     }
 
-    /// Usual peak for a command: the highest of its last five completed runs in this project,
-    /// falling back to the same command in any project.
+    /// Usual peak for a command: the highest of its last five completed runs in this project.
     public func usualPeak(key: String, root: String) -> UInt64? {
-        let recent = "SELECT peak FROM jobs WHERE key = ? %@ AND outcome IN ('ok', 'failed') AND peak > 0 ORDER BY finished_at DESC LIMIT 5"
-        if let peak = scalar("SELECT MAX(peak) FROM (\(String(format: recent, "AND root = ?")))", [key, root]) {
-            return UInt64(peak)
-        }
-        return scalar("SELECT MAX(peak) FROM (\(String(format: recent, "")))", [key]).map(UInt64.init)
+        scalar("""
+            SELECT MAX(peak) FROM (SELECT peak FROM jobs WHERE key = ? AND root = ? AND outcome IN ('ok', 'failed') AND peak > 0
+            ORDER BY finished_at DESC LIMIT 5)
+            """, [key, root]).map(UInt64.init)
+    }
+
+    /// A first guess for a command new to a project: the median of its last ten runs in other projects.
+    /// Not the max, since one big project would otherwise hold that much memory for every first run.
+    public func typicalPeak(key: String, excluding root: String) -> UInt64? {
+        var peaks: [UInt64] = []
+        query("""
+            SELECT peak FROM jobs WHERE key = ? AND root != ? AND outcome IN ('ok', 'failed') AND peak > 0
+            ORDER BY finished_at DESC LIMIT 10
+            """, [key, root]) { row in row.int(0).map { peaks.append(UInt64($0)) } }
+        guard !peaks.isEmpty else { return nil }
+        peaks.sort()
+        let middle = peaks.count / 2
+        return peaks.count % 2 == 1 ? peaks[middle] : peaks[middle - 1] / 2 + peaks[middle] / 2
     }
 
     public func recent(limit: Int) -> [HistoryEntry] {

@@ -53,6 +53,7 @@ final class Daemon {
         let clientPid: Int32
         let fingerprint: String?
         let estimate: UInt64
+        let estimateSource: String?
         let usualPeak: UInt64?
         let throttle: ThrottleConfig
         let pausable: Bool
@@ -88,7 +89,7 @@ final class Daemon {
         var lineage: Set<UInt64> = []
         var escapees: Set<pid_t> = []
 
-        init(id: Int64, request: Message, estimate: UInt64, usualPeak: UInt64?, now: Double) {
+        init(id: Int64, request: Message, cost: Cost, now: Double) {
             self.id = id
             resourceClass = request.resourceClass ?? .compile
             key = request.key ?? request.tool ?? "?"
@@ -98,8 +99,9 @@ final class Daemon {
             agent = request.agent ?? true
             clientPid = request.pid ?? 0
             fingerprint = request.fingerprint
-            self.estimate = estimate
-            self.usualPeak = usualPeak
+            estimate = cost.estimate
+            estimateSource = cost.source
+            usualPeak = cost.usualPeak
             throttle = ThrottleConfig(
                 inject: request.inject, jobs: request.throttleJobs, nodeHeap: request.nodeHeap,
                 maxMemory: request.maxMemory, killMultiplier: request.killMultiplier
@@ -307,14 +309,13 @@ final class Daemon {
         let now = Daemon.now()
         let key = message.key ?? message.tool ?? "?"
         let root = message.root ?? message.cwd ?? "/"
-        let usual = store.usualPeak(key: key, root: root)
-        let estimate = message.memory ?? usual ?? (message.resourceClass ?? .compile).defaultEstimate
+        let cost = cost(of: message, key: key, root: root)
         let id = store.insertJob(
             state: "queued", resourceClass: message.resourceClass ?? .compile, key: key, root: root,
             cwd: message.cwd ?? root, argv: message.argv ?? [], agent: message.agent ?? true,
-            clientPid: message.pid ?? 0, estimate: estimate, now: now
+            clientPid: message.pid ?? 0, estimate: cost.estimate, now: now
         )
-        let job = Job(id: id, request: message, estimate: estimate, usualPeak: usual, now: now)
+        let job = Job(id: id, request: message, cost: cost, now: now)
         connection.job = id
 
         // The same command on the same tree contents joins the run in progress.
@@ -343,6 +344,24 @@ final class Daemon {
         schedule()
     }
 
+    struct Cost {
+        var estimate: UInt64
+        var source: String?
+        /// This project's history only; runaway limits shouldn't come from another project.
+        var usualPeak: UInt64?
+    }
+
+    /// Config first, then this project's history, then other projects', then the class default.
+    func cost(of request: Message, key: String, root: String) -> Cost {
+        let usual = store.usualPeak(key: key, root: root)
+        if let memory = request.memory { return Cost(estimate: memory, source: "config", usualPeak: usual) }
+        if let usual { return Cost(estimate: usual, usualPeak: usual) }
+        if let typical = store.typicalPeak(key: key, excluding: root) {
+            return Cost(estimate: typical, source: "other projects", usualPeak: nil)
+        }
+        return Cost(estimate: (request.resourceClass ?? .compile).defaultEstimate, source: "the class default", usualPeak: nil)
+    }
+
     /// Only merge with a run whose output can be followed, that behaves the same way, and that still has an owner.
     func canJoin(_ job: Job, _ twin: Job, fingerprint: String) -> Bool {
         twin.fingerprint == fingerprint && twin.root == job.root && twin.killReason == nil
@@ -368,22 +387,21 @@ final class Daemon {
         let now = Daemon.now()
         let key = request.key ?? request.tool ?? "?"
         let root = request.root ?? request.cwd ?? "/"
-        let usual = store.usualPeak(key: key, root: root)
-        let estimate = request.memory ?? usual ?? (request.resourceClass ?? .compile).defaultEstimate
+        let cost = cost(of: request, key: key, root: root)
         let id = store.insertJob(
             state: "running", resourceClass: request.resourceClass ?? .compile, key: key, root: root,
             cwd: request.cwd ?? root, argv: request.argv ?? [], agent: request.agent ?? true,
-            clientPid: request.pid ?? 0, estimate: estimate, now: now
+            clientPid: request.pid ?? 0, estimate: cost.estimate, now: now
         )
         store.markStarted(id, childPid: child, now: now)
-        let job = Job(id: id, request: request, estimate: estimate, usualPeak: usual, now: now)
+        let job = Job(id: id, request: request, cost: cost, now: now)
         job.state = .running
         job.startedAt = now
         job.admittedTick = Daemon.clock()
         job.childPid = child
         job.log = request.log
         job.owner = connection
-        job.ceiling = Pressure.ceiling(usualPeak: usual, physicalMemory: physical, config: job.throttle)
+        job.ceiling = Pressure.ceiling(usualPeak: cost.usualPeak, physicalMemory: physical, config: job.throttle)
         jobs[id] = job
         connection.job = id
         log("#\(id) adopted \(job.project) \(job.key), pid \(child), after a daemon restart")
@@ -798,7 +816,8 @@ final class Daemon {
                 footprint: job.state == .queued ? nil : job.footprint, peak: job.peak > 0 ? job.peak : nil,
                 paused: job.paused, clientPid: job.clientPid, childPid: job.childPid, queuedAt: job.queuedAt,
                 startedAt: job.startedAt, waiting: job.lastWait, joiners: job.joiners.count,
-                held: job.held, pausedBy: job.paused ? (job.pausedByUser ? "you" : "memory") : nil
+                held: job.held, pausedBy: job.paused ? (job.pausedByUser ? "you" : "memory") : nil,
+                estimateSource: job.estimateSource
             )
         }
         var limits: [String: Int] = [:]

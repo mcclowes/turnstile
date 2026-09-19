@@ -97,10 +97,12 @@ public struct JobSnapshot: Codable, Equatable, Sendable {
     public var held: Bool?
     /// "you" or "memory" while paused.
     public var pausedBy: String?
+    /// Where the estimate came from when it isn't this project's history, e.g. "other projects".
+    public var estimateSource: String?
 
     public var label: String { "\(project) \(key)" }
 
-    public init(id: Int64, state: String, resourceClass: ResourceClass, project: String, key: String, cwd: String, agent: Bool, estimate: UInt64, footprint: UInt64?, peak: UInt64?, paused: Bool, clientPid: Int32, childPid: Int32?, queuedAt: Double, startedAt: Double?, waiting: String?, joiners: Int, held: Bool? = nil, pausedBy: String? = nil) {
+    public init(id: Int64, state: String, resourceClass: ResourceClass, project: String, key: String, cwd: String, agent: Bool, estimate: UInt64, footprint: UInt64?, peak: UInt64?, paused: Bool, clientPid: Int32, childPid: Int32?, queuedAt: Double, startedAt: Double?, waiting: String?, joiners: Int, held: Bool? = nil, pausedBy: String? = nil, estimateSource: String? = nil) {
         self.id = id
         self.state = state
         self.resourceClass = resourceClass
@@ -120,6 +122,7 @@ public struct JobSnapshot: Codable, Equatable, Sendable {
         self.joiners = joiners
         self.held = held
         self.pausedBy = pausedBy
+        self.estimateSource = estimateSource
     }
 }
 

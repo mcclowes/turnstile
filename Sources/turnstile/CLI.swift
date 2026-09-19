@@ -379,7 +379,7 @@ enum StatusFormatter {
         for job in snapshot.running {
             var detail = "\(Bytes.format(job.footprint ?? 0)) now"
             if let peak = job.peak { detail += ", peak \(Bytes.format(peak))" }
-            detail += ", est ~\(Bytes.format(job.estimate))"
+            detail += ", est ~\(Bytes.format(job.estimate))\(job.estimateSource.map { " from \($0)" } ?? "")"
             let elapsed = job.startedAt.map { formatDuration(now - $0) } ?? "-"
             var flags: [String] = []
             if job.agent { flags.append("agent") }
@@ -393,7 +393,7 @@ enum StatusFormatter {
         for job in snapshot.queued {
             let waited = formatDuration(now - job.queuedAt)
             let flags = [job.agent ? "agent" : nil, job.held == true ? "held" : nil].compactMap { $0 }
-            lines.append("  #\(job.id)  \(job.resourceClass.rawValue.padding(toLength: 7, withPad: " ", startingAt: 0)) \(job.label)  ~\(Bytes.format(job.estimate)), waiting \(waited)\(flags.isEmpty ? "" : "  [\(flags.joined(separator: ", "))]")")
+            lines.append("  #\(job.id)  \(job.resourceClass.rawValue.padding(toLength: 7, withPad: " ", startingAt: 0)) \(job.label)  ~\(Bytes.format(job.estimate))\(job.estimateSource.map { " from \($0)" } ?? ""), waiting \(waited)\(flags.isEmpty ? "" : "  [\(flags.joined(separator: ", "))]")")
             if let reason = job.waiting { lines.append("        \(reason)") }
         }
         if !snapshot.recent.isEmpty {

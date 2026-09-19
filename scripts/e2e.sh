@@ -344,6 +344,10 @@ turnstile stop > /dev/null
 wait
 check "stop releases waiting jobs" 'grep -q "daemon stopped; running ungated" "$T/release.out" && grep -q "fake swift test" "$T/release.out"'
 
+# Fail-open runs leave a record, so doctor can say what went around the gate.
+check "a fail-open run is recorded" 'grep -q "daemon stopped" "$TURNSTILE_HOME/ungated.log"'
+check "doctor reports ungated runs" 'turnstile doctor 2>&1 | grep -q "went ungated in the last day"'
+
 # `turnstile disable` turns gating off everywhere until `enable`.
 turnstile disable > /dev/null
 (cd a && FAKE_SLEEP=2 swift test > /dev/null 2>&1) &
@@ -384,6 +388,11 @@ out="$(sandboxed swift build 2>&1)"
 check "a sandboxed agent runs ungated and says why" '[[ "$out" == *"fake swift build"* && "$out" == *"inside this sandbox"* ]]'
 out="$(sandboxed turnstile doctor 2>&1)"
 check "doctor explains a sandbox blocking the daemon" '[[ "$out" == *"sandbox"* ]]'
+check "a sandboxed run records its cause" 'grep -q "a sandbox blocked" "$TURNSTILE_HOME/ungated.log"'
+
+# The PATH check reaches other shells, not just this one.
+out="$(turnstile doctor --shells 2>&1)"
+check "doctor --shells checks other shells" '[[ "$out" == *"zsh -lc"* && "$out" == *"bash -lc"* ]]'
 turnstile stop > /dev/null
 start=$(date +%s)
 out="$(sandboxed swift build 2>&1)"

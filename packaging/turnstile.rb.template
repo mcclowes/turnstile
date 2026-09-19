@@ -4,6 +4,7 @@ class Turnstile < Formula
   url "https://github.com/mcclowes/turnstile/releases/download/v@VERSION@/turnstile-@VERSION@-macos.tar.gz"
   sha256 "@SHA256@"
   version "@VERSION@"
+  license "MIT"
 
   depends_on :macos
 

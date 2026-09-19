@@ -40,6 +40,10 @@ struct ClassifierTests {
         ("xcrun --sdk macosx swift test", .test, "swift test"),
         ("xcrun -sdk iphonesimulator xcodebuild -scheme App test", .test, "xcodebuild test"),
         ("xcrun -r --toolchain swift swift build -c release", .compile, "swift build -c release"),
+        ("corepack pnpm test", .test, "pnpm run test"),
+        ("corepack yarn build", .compile, "yarn run build"),
+        ("corepack pnpm@9.1.0 exec vitest run", .test, "vitest run"),
+        ("corepack npm test", .test, "npm run test"),
     ])
     func gates(command: String, cls: ResourceClass, key: String) {
         let result = classify(command)
@@ -57,10 +61,15 @@ struct ClassifierTests {
         "vitest watch", "vitest --watch", "jest --watch", "playwright install", "tsc --watch",
         "git status", "ls -la",
         "xcrun", "xcrun --version", "xcrun --find swift", "xcrun -f clang", "xcrun --show-sdk-path",
+        "corepack enable", "corepack prepare pnpm@9 --activate", "corepack use pnpm@9", "corepack pnpm install", "corepack",
         "xcrun --sdk macosx --show-sdk-path", "xcrun simctl list", "xcrun swift --version", "xcrun clang -c a.c",
     ])
     func passesThrough(command: String) {
         #expect(classify(command) == nil)
+    }
+
+    @Test func corepackIsShimmed() {
+        #expect(Classifier.defaultShims.contains("corepack"))
     }
 
     @Test func vitestWatchesOnlyInATerminal() {

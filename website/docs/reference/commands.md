@@ -41,6 +41,7 @@ Jobs can be named by queue number, pid, or name.
 | `turnstile env` | Print the shell setup, for `eval "$(turnstile env)"` |
 | `turnstile shims` | Rebuild the shims after changing `shims.add` or `shims.remove` |
 | `turnstile doctor` | Check the install, PATH order, config, and daemon, with a fix for anything wrong |
+| `turnstile doctor --shells` | Also check the other shells an agent might start, and the newest Claude Code shell snapshot |
 | `turnstile config` | Show the settings in effect here, and where each came from |
 | `turnstile config init` | Write a starter config file |
 | `turnstile config check` | Validate the config files, catching typos |

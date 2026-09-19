@@ -20,6 +20,10 @@ Calls by absolute path, such as `/usr/bin/make`, always go around the shims. See
 
 Agent sandboxes, such as Codex's, usually block the daemon's socket, so gated commands there run ungated and print `can't reach the daemon from inside this sandbox`. To gate them, allow the sandbox to connect to `~/.turnstile/turnstiled.sock` (for Codex, that may mean turning on network access in its sandbox settings). turnstile never starts the daemon from inside a sandbox, so it can't pick up the sandbox's limits. Run `turnstile doctor` once from an ordinary shell to start it.
 
+## Checking other shells
+
+`turnstile doctor --shells` runs `zsh -c`, `zsh -lc`, `zsh -ic`, and `bash -lc` from a bare environment and reports any shell where a tool resolves ahead of the shims. It also checks the newest Claude Code shell snapshot: a session that started before `turnstile init` keeps the PATH it had, so its commands run ungated until you start a new one.
+
 ## Finding runs that went ungated
 
 When a gated command can't reach the daemon it runs anyway, and records the run in `~/.turnstile/ungated.log`: the time, the cause, the directory, and the command. `turnstile doctor` reports the last day's count and the most recent cause.

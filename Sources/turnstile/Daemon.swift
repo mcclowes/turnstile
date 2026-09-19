@@ -73,7 +73,18 @@ final class Daemon {
         var footprint: UInt64 = 0
         var peak: UInt64 = 0
         var ceiling: UInt64 = .max
-        var paused = false
+        var paused = false {
+            didSet {
+                guard paused != oldValue else { return }
+                let now = Daemon.clock()
+                if paused { pausedTick = now } else if let since = pausedTick { pausedFor += now - since; pausedTick = nil }
+            }
+        }
+        var pausedTick: Double?
+        var pausedFor: Double = 0
+        var usualDuration: Double?
+        /// Started under an earlier daemon, so its run time here is unknown.
+        var adopted = false
         /// Paused by a person, so it's never resumed automatically.
         var pausedByUser = false
         /// Held by a person: stays queued until released.
@@ -102,6 +113,7 @@ final class Daemon {
             estimate = cost.estimate
             estimateSource = cost.source
             usualPeak = cost.usualPeak
+            usualDuration = cost.usualDuration
             throttle = ThrottleConfig(
                 inject: request.inject, jobs: request.throttleJobs, nodeHeap: request.nodeHeap,
                 maxMemory: request.maxMemory, killMultiplier: request.killMultiplier
@@ -117,6 +129,12 @@ final class Daemon {
         /// Same command in the same place, whatever the tree's contents.
         var identity: String { ([root, cwd] + argv).joined(separator: "\u{0}") }
         var connections: [Connection] { (owner.map { [$0] } ?? []) + joiners }
+
+        /// Seconds spent running since admission, not counting time paused.
+        func ranFor(now: Double) -> Double? {
+            guard let admittedTick else { return nil }
+            return now - admittedTick - pausedFor - (pausedTick.map { now - $0 } ?? 0)
+        }
     }
 
     let paths: Paths
@@ -349,10 +367,17 @@ final class Daemon {
         var source: String?
         /// This project's history only; runaway limits shouldn't come from another project.
         var usualPeak: UInt64?
+        var usualDuration: Double?
     }
 
     /// Config first, then this project's history, then other projects', then the class default.
     func cost(of request: Message, key: String, root: String) -> Cost {
+        var cost = memoryCost(of: request, key: key, root: root)
+        cost.usualDuration = store.usualDuration(key: key, root: root)
+        return cost
+    }
+
+    private func memoryCost(of request: Message, key: String, root: String) -> Cost {
         let usual = store.usualPeak(key: key, root: root)
         if let memory = request.memory { return Cost(estimate: memory, source: "config", usualPeak: usual) }
         if let usual { return Cost(estimate: usual, usualPeak: usual) }
@@ -398,6 +423,8 @@ final class Daemon {
         job.state = .running
         job.startedAt = now
         job.admittedTick = Daemon.clock()
+        job.adopted = true
+        job.usualDuration = nil
         job.childPid = child
         job.log = request.log
         job.owner = connection
@@ -450,7 +477,8 @@ final class Daemon {
         else if signal != nil { outcome = "signaled" }
         else { outcome = "failed" }
         if job.paused { ProcessTree.signal(job.tree, SIGCONT) }
-        store.markFinished(job.id, outcome: outcome, exitCode: exitCode, signal: signal, peak: job.peak > 0 ? job.peak : nil, now: now)
+        let ranFor = job.adopted ? nil : job.ranFor(now: Daemon.clock())
+        store.markFinished(job.id, outcome: outcome, exitCode: exitCode, signal: signal, peak: job.peak > 0 ? job.peak : nil, ranFor: ranFor, now: now)
         log("#\(job.id) \(job.project) \(job.key): \(outcome), peak \(Bytes.format(job.peak))")
 
         var done = Message(type: "done")
@@ -508,12 +536,16 @@ final class Daemon {
         let queued = jobs.values.filter { $0.state == .queued }
         guard !queued.isEmpty else { return }
         let running = jobs.values.filter { $0.state != .queued }
+        let clock = Daemon.clock()
         let decision = Scheduler.decide(
-            queue: queued.map { QueuedJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, agent: $0.agent, bumpedAt: $0.bumpedAt, queuedAt: $0.queuedTick, label: $0.label, held: $0.held) },
-            running: running.map { RunningJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, footprint: $0.footprint, label: $0.label) },
+            queue: queued.map { QueuedJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, agent: $0.agent, bumpedAt: $0.bumpedAt, queuedAt: $0.queuedTick, label: $0.label, held: $0.held, duration: $0.usualDuration) },
+            running: running.map {
+                RunningJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, footprint: $0.footprint, label: $0.label,
+                           usualDuration: $0.paused ? nil : $0.usualDuration, elapsed: $0.ranFor(now: clock) ?? 0)
+            },
             freeMemory: SystemMemory.free(level: memoryLevel),
             policy: policy,
-            now: Daemon.clock()
+            now: clock
         )
         let now = Daemon.now()
         let tick = Daemon.clock()

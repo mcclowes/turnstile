@@ -232,6 +232,91 @@ struct FingerprintInputTests {
         #expect(Workspace.inspect(cwd: root, argv: ["swift", "build"]).fingerprint != clean.fingerprint)
     }
 
+    @Test func fingerprintFollowsStagingCommitsAndUntrackedFiles() throws {
+        let root = try Self.makeRepo()
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        func fingerprint() -> String? { Workspace.inspect(cwd: root, argv: ["swift", "build"]).fingerprint }
+        var seen: Set<String?> = [fingerprint()]
+
+        try "two\n".write(toFile: root + "/a.txt", atomically: true, encoding: .utf8)
+        #expect(seen.insert(fingerprint()).inserted)
+        _ = Workspace.git(["add", "a.txt"], cwd: root, deadline: .distantFuture)
+        #expect(seen.insert(fingerprint()).inserted, "staging changes the index's object id")
+        try "new\n".write(toFile: root + "/b.txt", atomically: true, encoding: .utf8)
+        #expect(seen.insert(fingerprint()).inserted)
+        _ = Workspace.git(["add", "."], cwd: root, deadline: .distantFuture)
+        _ = Workspace.git(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "two"], cwd: root, deadline: .distantFuture)
+        #expect(seen.insert(fingerprint()).inserted, "a new HEAD is a new fingerprint")
+        #expect(fingerprint() == fingerprint())
+    }
+
+    @Test func sameSizeEditWithANewMtimeChangesTheFingerprint() throws {
+        let root = try Self.makeRepo()
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        try "two\n".write(toFile: root + "/a.txt", atomically: true, encoding: .utf8)
+        let before = Workspace.inspect(cwd: root, argv: []).fingerprint
+        try "six\n".write(toFile: root + "/a.txt", atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: 60)], ofItemAtPath: root + "/a.txt")
+        #expect(Workspace.inspect(cwd: root, argv: []).fingerprint != before)
+    }
+
+    @Test func findsTheRootFromASubdirectoryThroughSymlinks() throws {
+        let root = try Self.makeRepo()
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        try FileManager.default.createDirectory(atPath: root + "/src/deep", withIntermediateDirectories: true)
+        let link = FileManager.default.temporaryDirectory.appendingPathComponent("link-\(UUID().uuidString)").path
+        try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: root)
+        defer { try? FileManager.default.removeItem(atPath: link) }
+
+        let workspace = Workspace.inspect(cwd: link + "/src/deep", argv: [])
+        #expect(workspace.root == root)
+        #expect(workspace.fingerprint != nil)
+    }
+
+    @Test func linkedWorktreeIsItsOwnRoot() throws {
+        let root = try Self.makeRepo()
+        let other = root + "-wt"
+        defer { for path in [root, other] { try? FileManager.default.removeItem(atPath: path) } }
+        _ = Workspace.git(["worktree", "add", "-q", other], cwd: root, deadline: .distantFuture)
+        let workspace = Workspace.inspect(cwd: other, argv: [])
+        #expect(workspace.root == other)
+        #expect(workspace.fingerprint != nil)
+    }
+
+    @Test func outsideGitTheRootIsTheWorkingDirectory() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("plain-\(UUID().uuidString)").path
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        #expect(Workspace.inspect(cwd: dir, argv: []) == Workspace(root: dir, fingerprint: nil))
+    }
+
+    @Test func parsesPorcelainV2Records() {
+        let output = [
+            "# branch.oid 1111111111111111111111111111111111111111",
+            "# branch.head main",
+            "1 .M N... 100644 100644 100644 aaaa aaaa src/a b.txt",
+            "2 R. N... 100644 100644 100644 bbbb bbbb R100 new.txt", "old.txt",
+            "u UU N... 100644 100644 100644 100644 c1 c2 c3 conflict.txt",
+            "? untracked file.txt",
+        ].joined(separator: "\u{0}") + "\u{0}"
+        let status = Workspace.Status(porcelain: Data(output.utf8))
+        #expect(status.head == "1111111111111111111111111111111111111111")
+        #expect(status.entries.map(\.path) == ["src/a b.txt", "new.txt", "conflict.txt", "untracked file.txt"])
+        #expect(status.entries[1].record == "2 R. N... 100644 100644 100644 bbbb bbbb R100 new.txt\u{0}old.txt")
+    }
+
+    /// Run by scripts/fingerprint-timing.sh against a large repo it builds.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["TURNSTILE_FINGERPRINT_REPO"] != nil))
+    func timesTheFingerprintOnALargeRepo() {
+        let repo = ProcessInfo.processInfo.environment["TURNSTILE_FINGERPRINT_REPO"]!
+        let times = (0..<20).map { _ in
+            let start = Date()
+            #expect(Workspace.inspect(cwd: repo, argv: []).fingerprint != nil)
+            return Date().timeIntervalSince(start) * 1000
+        }.sorted()
+        print("fingerprint ms: median \(Int(times[10])), p95 \(Int(times[18])), max \(Int(times[19]))")
+    }
+
     @Test func slowGitGivesUpOnTheFingerprintButKeepsTheRoot() throws {
         let root = try Self.makeRepo()
         defer { try? FileManager.default.removeItem(atPath: root) }

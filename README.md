@@ -49,7 +49,7 @@ If you'd rather manage PATH yourself, use `turnstile init --no-rc` and put `eval
 - **The daemon** starts on the first gated command, listens on a Unix socket in `~/.turnstile`, and exits after 30 idle minutes. There's nothing to launch or keep running.
 - **Admission** is per class (compile, test, and browser each get their own slots) and by memory. A job starts when its class has a free slot and its expected peak fits in free memory, minus a reserve for everything else. Expected peaks are learned from each command's last few runs in that project, with release and debug builds kept apart. A command new to a project starts from its median peak in other projects. A job waiting for memory holds up the queue behind it, except for small jobs (up to 5% of RAM, at least 512 MB) that fit, and only for its first 2 minutes of waiting.
 - **Waiting is visible.** A queued job prints why it's waiting and repeats itself every 30 seconds, so an agent never mistakes a queue for a hang.
-- **People go first.** Commands from an agent run at background priority (`taskpolicy -b`) and queue behind commands you type. `turnstile bump <job>` moves anything to the front.
+- **People go first.** Commands from an agent run at lower priority and queue behind commands you type. Compiles run at background priority (`taskpolicy -b`); tests and browser runs get the gentler utility clamp (`taskpolicy -c utility`), since background priority can starve them into timeouts. `turnstile bump <job>` moves anything to the front.
 - **Duplicate runs merge.** The same command on identical working-tree contents joins the run in progress and gets its output and exit code. A newer request from the same worktree replaces its queued older one.
 - **Nested calls pass through.** `swift test` calling `swift build` doesn't wait on itself.
 - **Pressure relief.** When memory runs low, turnstile lowers each tool's parallelism (`--jobs`, `--maxWorkers`, `CARGO_BUILD_JOBS`, Node's heap cap). If it gets critical, the newest agent job is paused with SIGSTOP and resumed once memory recovers. A job that runs far past its usual peak is killed, with the reason printed.
@@ -63,7 +63,7 @@ Gated by default: `swift`, `xcodebuild`, `cargo`, `go`, `gradle`, `make`, `npm`,
 | --- | --- |
 | `turnstile status [--json] [--watch]` | Running and queued jobs, memory, and recent runs. `--watch` redraws every second |
 | `turnstile top` | Interactive view of the queue. Select a job with ↑↓ or `j`/`k`, then `b` bump, `p` pause/resume, `h` hold/release, `x` kill, `q` quit |
-| `turnstile bump <job>` | Move a job (by number, pid, or name) to the front, or raise a running one to normal priority |
+| `turnstile bump <job>` | Move a job (by number, pid, or name) to the front, or raise a running compile to normal priority |
 | `turnstile kill <job>` | Drop a queued job, or stop a running one (SIGTERM, then SIGKILL after 5s). Anyone who joined the run is stopped too |
 | `turnstile pause <job>` / `resume <job>` | Stop a running job's processes with SIGSTOP, and carry on. A job you paused stays paused until you resume it |
 | `turnstile hold <job>` / `release <job>` | Keep a queued job from starting, and let it go |

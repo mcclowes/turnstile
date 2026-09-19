@@ -2,6 +2,12 @@ import Testing
 @testable import TurnstileCore
 
 struct ThrottleTests {
+    @Test func agentTestsAvoidBackgroundPriority() {
+        #expect(ResourceClass.compile.agentPolicy == ["-b"])
+        #expect(ResourceClass.test.agentPolicy == ["-c", "utility"])
+        #expect(ResourceClass.browser.agentPolicy == ["-c", "utility"])
+    }
+
     @Test func injectsNothingWhenMemoryIsPlentiful() {
         #expect(Throttle.limits(memoryLevel: 40, cpuCount: 10, config: ThrottleConfig()) == JobLimits())
     }

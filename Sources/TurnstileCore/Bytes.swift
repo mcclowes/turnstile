@@ -45,6 +45,15 @@ public enum ResourceClass: String, Codable, CaseIterable, Sendable {
         case .browser: return 3 * Bytes.gb
         }
     }
+
+    /// `taskpolicy` flags for an agent's job. Background priority can starve a test run into timeouts,
+    /// which an agent reads as real failures, so tests get the gentler utility clamp.
+    public var agentPolicy: [String] {
+        switch self {
+        case .compile: return ["-b"]
+        case .test, .browser: return ["-c", "utility"]
+        }
+    }
 }
 
 public func formatDuration(_ seconds: TimeInterval) -> String {

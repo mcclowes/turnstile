@@ -159,7 +159,7 @@ enum Supervisor {
         var argv = [real] + injected.args
         var path = real
         if agent && FileManager.default.isExecutableFile(atPath: taskpolicy) {
-            argv = [taskpolicy, "-b"] + argv
+            argv = [taskpolicy] + (request.resourceClass ?? .compile).agentPolicy + argv
             path = taskpolicy
         }
 

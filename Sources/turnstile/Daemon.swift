@@ -769,6 +769,7 @@ final class Daemon {
             job.pausedByUser = false
             ProcessTree.signal(job.tree, SIGCONT)
         }
+        guard job.resourceClass == .compile else { return "#\(job.id) is already running, at utility priority, which can't be raised" }
         return "#\(job.id) is already running; raised it to normal priority"
     }
 

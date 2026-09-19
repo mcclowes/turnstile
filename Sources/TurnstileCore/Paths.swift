@@ -30,6 +30,7 @@ public struct Paths: Sendable {
     public var database: String { home + "/state.sqlite" }
     public var logs: String { home + "/logs" }
     public var daemonLog: String { home + "/daemon.log" }
+    public var ungatedLog: String { home + "/ungated.log" }
     public var lock: String { home + "/daemon.lock" }
     /// While this file exists every shim passes straight through (`turnstile disable`).
     public var disabledFlag: String { home + "/disabled" }

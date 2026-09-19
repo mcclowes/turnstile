@@ -82,6 +82,8 @@ struct ShimRun {
     let stdout: String
     let stderr: String
     let toolRuns: [String]
+    /// Runs the shim recorded as ungated.
+    let ungated: [UngatedLog.Entry]
 
     static func binary() -> String {
         Bundle(for: FakeDaemon.self).bundleURL.deletingLastPathComponent().appendingPathComponent("turnstile").path
@@ -131,7 +133,8 @@ struct ShimRun {
             signaled: process.terminationReason == .uncaughtSignal,
             stdout: String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self),
             stderr: String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self),
-            toolRuns: ((try? String(contentsOfFile: runs, encoding: .utf8)) ?? "").split(separator: "\n").map(String.init)
+            toolRuns: ((try? String(contentsOfFile: runs, encoding: .utf8)) ?? "").split(separator: "\n").map(String.init),
+            ungated: UngatedLog.parse((try? String(contentsOfFile: paths.ungatedLog, encoding: .utf8)) ?? "")
         )
         return (result, fake)
     }
@@ -184,6 +187,8 @@ struct SupervisorTests {
         #expect(run.stderr.contains("turnstile: something broke"))
         #expect(run.toolRuns.count == 1)
         #expect(!daemon.types.contains("started"))
+        #expect(run.ungated.map(\.command) == ["swift build"])
+        #expect(run.ungated.first?.cause == "something broke")
     }
 
     @Test func aReleaseRunsTheToolWithoutReportingBack() throws {
@@ -196,6 +201,7 @@ struct SupervisorTests {
         #expect(run.stderr.isEmpty)
         #expect(run.toolRuns == ["run build token=none"])
         #expect(daemon.types == ["request"])
+        #expect(run.ungated.isEmpty)
     }
 
     @Test func cancelledWhileWaitingExitsWithoutRunning() throws {
@@ -286,5 +292,6 @@ struct SupervisorTests {
         #expect(run.exitCode == 0)
         #expect(run.stderr.contains("the daemon stopped answering"))
         #expect(run.toolRuns.count == 1)
+        #expect(run.ungated.first?.cause == "the daemon stopped answering")
     }
 }

@@ -41,6 +41,7 @@ enum Doctor {
         findings += switches(paths: paths, environment: environment)
         findings += configuration()
         findings += daemon(paths: paths)
+        findings += ungated(paths: paths, environment: environment)
         findings += system(environment: environment, config: config)
         return findings
     }
@@ -148,6 +149,11 @@ enum Doctor {
             )]
         }
         return [Finding(level: .ok, topic: "daemon", text: "pid \(status.daemonPid), \(status.running.count) running, \(status.queued.count) queued")]
+    }
+
+    static func ungated(paths: Paths, environment: [String: String]) -> [Finding] {
+        guard let text = UngatedLog.describe(UngatedLog.read(paths.ungatedLog), now: Date().timeIntervalSince1970, home: homeDirectory(environment)) else { return [] }
+        return [Finding(level: .note, topic: "ungated", text: text, fix: "the full list is in \(paths.ungatedLog)")]
     }
 
     static func system(environment: [String: String], config: Config) -> [Finding] {

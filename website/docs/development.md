@@ -23,6 +23,6 @@ npm start
 
 ## Releasing
 
-Bump `Turnstile.version` in `Sources/TurnstileCore/Paths.swift`, commit, and run `./scripts/release.sh` on a Mac with the Developer ID certificate and the `kiln-notary` notarytool profile.
+Bump `Turnstile.version` in `Sources/TurnstileCore/Paths.swift`, rename "Unreleased" in `CHANGELOG.md` to the new version, commit, and run `./scripts/release.sh` on a Mac with the Developer ID certificate and the `kiln-notary` notarytool profile.
 
-It tests, builds the universal CLI tarball and the notarized `Turnstile.app`, tags this repo, publishes both to a release on [mcclowes/homebrew-turnstile](https://github.com/mcclowes/homebrew-turnstile), and updates the tap's formula and cask.
+It tests, builds the universal CLI tarball and the notarized `Turnstile.app`, tags this repo, publishes both to a release here and on [mcclowes/homebrew-turnstile](https://github.com/mcclowes/homebrew-turnstile), with notes from the changelog, and updates the tap's formula and cask.

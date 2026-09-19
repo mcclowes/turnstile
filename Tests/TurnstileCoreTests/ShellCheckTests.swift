@@ -49,3 +49,12 @@ struct ShellCheckTests {
         #expect(ShellCheck.verdict(output: output ?? "", shimsDir: shims).shimmed == ["swift"])
     }
 }
+
+struct AgentInstructionsTests {
+    @Test func tellsAgentsWhatGoesAroundTheShims() {
+        let snippet = AgentInstructions.snippet
+        #expect(snippet.contains("node_modules/.bin"))
+        #expect(snippet.contains("turnstile run"))
+        #expect(snippet.hasSuffix("\n") == false)
+    }
+}

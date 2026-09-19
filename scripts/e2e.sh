@@ -152,7 +152,7 @@ cat > "$T/ctrlc.py" <<'EOF'
 import os, pty, sys, time, select
 pid, fd = pty.fork()
 if pid == 0:
-    os.environ["FAKE_SLEEP"] = "20"
+    os.environ["FAKE_SLEEP"] = "20.25"
     os.execvp("sh", ["sh", "-c", 'test -t 1 && echo tty-ok; swift build; echo "status=$?"'])
 out = b""
 deadline = time.time() + 15
@@ -178,7 +178,7 @@ _, status = os.waitpid(pid, 0)
 print("shell=signaled" if os.WIFSIGNALED(status) and os.WTERMSIG(status) == 2 else "shell=exit%d" % os.WEXITSTATUS(status))
 EOF
 out="$(TURNSTILE_AGENT=0 /usr/bin/python3 "$T/ctrlc.py")"
-check "Ctrl-C in a terminal stops the job" 'echo "$out" | grep -q "tty-ok" && echo "$out" | grep -q "shell=signaled" && ! pgrep -f "sleep 20" > /dev/null'
+check "Ctrl-C in a terminal stops the job" 'echo "$out" | grep -q "tty-ok" && echo "$out" | grep -q "shell=signaled" && ! pgrep -f "sleep 20.25" > /dev/null'
 
 # Status is readable by people and tools.
 check "status --json" 'turnstile status --json | /usr/bin/python3 -c "import json,sys; d=json.load(sys.stdin); assert d[\"memoryLevel\"] == 60 and len(d[\"recent\"]) > 0"'
@@ -279,12 +279,12 @@ check "kill drops a queued job" '[ "$(cat "$T/k2.code")" = 125 ] && grep -q "can
 check "kill stops a running job" '[ "$(cat "$T/k1.code")" = 125 ] && grep -q "cancelled by you" "$T/k1.out" && echo "$running_out" | grep -q "^killed #"'
 
 # A held job stays queued after its slot frees, until it's released.
-(cd a && FAKE_SLEEP=1 swift test > /dev/null 2>&1) &
+(cd a && FAKE_SLEEP=2 swift test > /dev/null 2>&1) &
 sleep 0.7
 (cd b && swift test > "$T/h.out" 2>&1; echo $? > "$T/h.code") &
 sleep 0.5
 turnstile hold 'b swift test' > /dev/null
-sleep 2.5
+sleep 3
 held_json="$(turnstile status --json)"
 held_early="$(cat "$T/h.code" 2>/dev/null)"
 turnstile release 'b swift test' > /dev/null

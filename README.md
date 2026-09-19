@@ -18,12 +18,12 @@ turnstile: starting after 41s
 Requires macOS 13+.
 
 ```sh
-brew tap mcclowes/turnstile https://github.com/mcclowes/turnstile
-brew install turnstile
+brew install mcclowes/turnstile/turnstile             # CLI only
+brew install --cask mcclowes/turnstile/turnstile-app  # CLI + menu bar app
 turnstile init
 ```
 
-Or download the universal binary from [releases](https://github.com/mcclowes/turnstile/releases) and run `./turnstile init`. To build from source, you'll need a Swift 6 toolchain (Xcode 16 or later):
+Or download the universal binary from [releases](https://github.com/mcclowes/homebrew-turnstile/releases) and run `./turnstile init`. To build from source, you'll need a Swift 6 toolchain (Xcode 16 or later):
 
 ```sh
 git clone https://github.com/mcclowes/turnstile && cd turnstile
@@ -80,10 +80,12 @@ Gated by default: `swift`, `xcodebuild`, `cargo`, `go`, `gradle`, `make`, `npm`,
 turnstile works in the background, so there's also a menu bar app for when no terminal is open on it. The icon shows how many jobs are queued, and turns into a warning when memory is low or a job has been paused for it. Each job in the menu has bump, pause or hold, and kill. You get a notification when a job is paused for memory or killed as a runaway.
 
 ```sh
-./scripts/build-app.sh && open .build/Turnstile.app
+brew install --cask mcclowes/turnstile/turnstile-app
 ```
 
-It only watches the daemon, polling every 2 seconds, and never starts it or keeps it alive. When the daemon is idle the menu says so, and picks it up again when it starts. It isn't signed or notarised yet, so it's built from source for now. Turn on "Launch at login" from its menu.
+The cask depends on the `turnstile` formula rather than bundling its own CLI, so uninstalling the app leaves the CLI in place. To build it from source instead, run `./scripts/package.sh --dev && open .build/Turnstile.app`.
+
+It only watches the daemon, polling every 2 seconds, and never starts it or keeps it alive. When the daemon is idle the menu says so, and picks it up again when it starts. Open it once and turn on "Launch at login" from its menu.
 
 ## Configuration
 
@@ -194,4 +196,4 @@ swift test             # unit tests
 ./scripts/e2e.sh       # end-to-end, with fake tools in a throwaway turnstile home
 ```
 
-To release, bump `Turnstile.version` in `Sources/TurnstileCore/Paths.swift` and push a matching tag (`v0.3.0`). The release workflow tests, builds a universal binary, publishes it, and commits the updated Homebrew formula to `Formula/turnstile.rb` on main. This repo is its own tap.
+To release, bump `Turnstile.version` in `Sources/TurnstileCore/Paths.swift`, commit, and run `./scripts/release.sh` on a Mac with the Developer ID certificate and the `kiln-notary` notarytool profile. It tests, builds the universal CLI tarball and the notarized `Turnstile.app`, tags this repo, publishes both to a release on [mcclowes/homebrew-turnstile](https://github.com/mcclowes/homebrew-turnstile), and updates the tap's formula and cask. Releases are manual while CI is down.

@@ -17,7 +17,7 @@ let package = Package(
             name: "turnstile",
             dependencies: ["TurnstileCore"]
         ),
-        // The menu bar app. `scripts/build-app.sh` wraps it in Turnstile.app.
+        // The menu bar app. `scripts/package.sh` wraps it in Turnstile.app.
         .executableTarget(
             name: "TurnstileBar",
             dependencies: ["TurnstileCore"]

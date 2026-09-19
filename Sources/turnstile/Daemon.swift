@@ -483,7 +483,7 @@ final class Daemon {
         for cls in ResourceClass.allCases {
             limits[cls] = config.machine.concurrencyLimit(for: cls, cpuCount: cpuCount)
         }
-        return SchedulerPolicy(classLimits: limits, reserve: config.machine.reserveBytes)
+        return SchedulerPolicy(classLimits: limits, reserve: config.machine.reserveBytes, backfillMax: SchedulerPolicy.backfillMax(physicalMemory: physical))
     }
 
     func schedule() {
@@ -494,13 +494,14 @@ final class Daemon {
             queue: queued.map { QueuedJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, agent: $0.agent, bumpedAt: $0.bumpedAt, queuedAt: $0.queuedTick, label: $0.label, held: $0.held) },
             running: running.map { RunningJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, footprint: $0.footprint, label: $0.label) },
             freeMemory: SystemMemory.free(level: memoryLevel),
-            policy: policy
+            policy: policy,
+            now: Daemon.clock()
         )
         let now = Daemon.now()
         let tick = Daemon.clock()
         for id in decision.admit {
             guard let job = jobs[id] else { continue }
-            admit(job, now: now)
+            admit(job, now: now, ahead: decision.skipped[id])
         }
         for (id, reason) in decision.waiting {
             guard let job = jobs[id] else { continue }
@@ -516,7 +517,7 @@ final class Daemon {
         }
     }
 
-    func admit(_ job: Job, now: Double) {
+    func admit(_ job: Job, now: Double, ahead blocker: String? = nil) {
         job.state = .running
         job.startedAt = now
         job.admittedTick = Daemon.clock()
@@ -524,7 +525,8 @@ final class Daemon {
         var reply = Message(type: "admitted")
         reply.job = job.id
         reply.limits = Throttle.limits(memoryLevel: memoryLevel, cpuCount: cpuCount, config: job.throttle)
-        reply.text = "starting after \(formatDuration(now - job.queuedAt))"
+        let skipped = blocker.map { ", ahead of \($0), which is waiting for memory" } ?? ""
+        reply.text = "starting after \(formatDuration(now - job.queuedAt))\(skipped)"
         job.owner?.send(reply)
         for joiner in job.joiners { joiner.send(.notice("the run this joined is starting")) }
     }

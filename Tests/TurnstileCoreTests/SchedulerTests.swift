@@ -48,6 +48,41 @@ struct SchedulerTests {
         #expect(decision.waiting[2] == .queue(ahead: 1, next: "job1, ~6 GB"))
     }
 
+    @Test func smallJobsStartAheadOfAMemoryBlockedJob() {
+        var backfill = policy
+        backfill.backfillMax = gb
+        let running = [RunningJob(id: 9, resourceClass: .compile, estimate: 2 * gb, footprint: 2 * gb, label: "r")]
+        let queue = [queued(1, gb: 6, at: 100), queued(2, .test, gb: 1, at: 110), queued(3, .browser, gb: 2, at: 120)]
+        let decision = Scheduler.decide(queue: queue, running: running, freeMemory: 7 * gb, policy: backfill, now: 130)
+        #expect(decision.admit == [2])
+        #expect(decision.skipped == [2: "job1, ~6 GB"])
+        #expect(decision.waiting[3] == .queue(ahead: 1, next: "job1, ~6 GB"))
+    }
+
+    @Test func nothingSkipsAMemoryBlockedJobOnceItHasWaitedLongEnough() {
+        var backfill = policy
+        backfill.backfillMax = gb
+        let running = [RunningJob(id: 9, resourceClass: .compile, estimate: 2 * gb, footprint: 2 * gb, label: "r")]
+        let queue = [queued(1, gb: 6, at: 100), queued(2, .test, gb: 1, at: 110)]
+        let decision = Scheduler.decide(queue: queue, running: running, freeMemory: 7 * gb, policy: backfill, now: 100 + backfill.backfillAge)
+        #expect(decision.admit.isEmpty)
+        #expect(decision.waiting[2] == .queue(ahead: 1, next: "job1, ~6 GB"))
+    }
+
+    @Test func backfilledJobsMustStillFit() {
+        var backfill = policy
+        backfill.backfillMax = gb
+        let running = [RunningJob(id: 9, resourceClass: .compile, estimate: 2 * gb, footprint: 2 * gb, label: "r")]
+        let queue = [queued(1, gb: 6, at: 100), queued(2, .test, gb: 1, at: 110)]
+        let decision = Scheduler.decide(queue: queue, running: running, freeMemory: 2 * gb + gb / 2, policy: backfill, now: 110)
+        #expect(decision.admit.isEmpty)
+    }
+
+    @Test func backfillLimitScalesWithRAM() {
+        #expect(SchedulerPolicy.backfillMax(physicalMemory: 8 * gb) == 512 * Bytes.mb)
+        #expect(SchedulerPolicy.backfillMax(physicalMemory: 64 * gb) == 64 * gb / 20)
+    }
+
     @Test func runningJobsStillGrowingReserveTheirMemory() {
         let running = [RunningJob(id: 9, resourceClass: .compile, estimate: 6 * gb, footprint: 1 * gb)]
         let decision = Scheduler.decide(queue: [queued(1, gb: 2)], running: running, freeMemory: 8 * gb, policy: policy)

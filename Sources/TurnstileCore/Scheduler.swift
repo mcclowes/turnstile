@@ -46,10 +46,21 @@ public struct RunningJob: Equatable, Sendable {
 public struct SchedulerPolicy: Sendable {
     public var classLimits: [ResourceClass: Int]
     public var reserve: UInt64
+    /// Jobs up to this size may start ahead of a job waiting for memory, if they fit.
+    public var backfillMax: UInt64
+    /// Seconds a memory-blocked job can be skipped for; after that nothing starts ahead of it.
+    public var backfillAge: Double
 
-    public init(classLimits: [ResourceClass: Int], reserve: UInt64) {
+    public init(classLimits: [ResourceClass: Int], reserve: UInt64, backfillMax: UInt64 = 0, backfillAge: Double = 120) {
         self.classLimits = classLimits
         self.reserve = reserve
+        self.backfillMax = backfillMax
+        self.backfillAge = backfillAge
+    }
+
+    /// 5% of RAM, but at least 512 MB.
+    public static func backfillMax(physicalMemory: UInt64) -> UInt64 {
+        max(512 * Bytes.mb, physicalMemory / 20)
     }
 
     public func limit(_ cls: ResourceClass) -> Int { classLimits[cls] ?? 1 }
@@ -69,6 +80,8 @@ public enum WaitReason: Equatable, Sendable {
 public struct SchedulerDecision: Equatable, Sendable {
     public var admit: [Int64]
     public var waiting: [Int64: WaitReason]
+    /// Jobs admitted ahead of a memory-blocked job, with that job's label.
+    public var skipped: [Int64: String] = [:]
 }
 
 public enum Scheduler {
@@ -90,11 +103,13 @@ public enum Scheduler {
     /// Decides which queued jobs start now.
     ///
     /// A job blocked on a class slot doesn't hold up other classes. A job blocked on memory holds up
-    /// everything behind it, so small jobs can't starve a big one forever. With nothing running, the
-    /// head of the queue always starts, since waiting can't free memory. Held jobs are skipped entirely.
-    public static func decide(queue: [QueuedJob], running: [RunningJob], freeMemory: UInt64, policy: SchedulerPolicy) -> SchedulerDecision {
+    /// everything behind it, except small jobs that fit, and only until it has waited `backfillAge`,
+    /// so a big job can't starve. With nothing running, the head of the queue always starts, since
+    /// waiting can't free memory. Held jobs are skipped entirely.
+    public static func decide(queue: [QueuedJob], running: [RunningJob], freeMemory: UInt64, policy: SchedulerPolicy, now: Double = 0) -> SchedulerDecision {
         var admit: [Int64] = []
         var waiting: [Int64: WaitReason] = [:]
+        var skipped: [Int64: String] = [:]
         var counts: [ResourceClass: Int] = [:]
         for job in running { counts[job.resourceClass, default: 0] += 1 }
 
@@ -117,7 +132,9 @@ public enum Scheduler {
                     waitingCount += 1
                 }
             }
-            if let blocker = memoryBlocked {
+            let skipping = memoryBlocked
+            if let blocker = skipping,
+               job.estimate > policy.backfillMax || now - blocker.queuedAt >= policy.backfillAge {
                 waiting[job.id] = .queue(ahead: waitingCount, next: blocker.label)
                 continue
             }
@@ -131,16 +148,17 @@ public enum Scheduler {
                 continue
             }
             if anythingRunning && Int64(clamping: job.estimate) > headroom {
-                memoryBlocked = job
+                if memoryBlocked == nil { memoryBlocked = job }
                 waiting[job.id] = .memory(need: job.estimate, free: UInt64(max(0, headroom)), running: labels)
                 continue
             }
+            if let blocker = skipping { skipped[job.id] = blocker.label }
             admit.append(job.id)
             counts[job.resourceClass, default: 0] = used + 1
             headroom -= Int64(clamping: job.estimate)
             anythingRunning = true
         }
-        return SchedulerDecision(admit: admit, waiting: waiting)
+        return SchedulerDecision(admit: admit, waiting: waiting, skipped: skipped)
     }
 
     public static func message(for reason: WaitReason) -> String {

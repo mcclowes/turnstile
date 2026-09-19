@@ -12,6 +12,8 @@ Start with `turnstile doctor`. It checks each link from your shell to the daemon
 
 Usually something reordered PATH after turnstile's block, such as a version manager initialized late in `.zshrc`. `doctor` names the tools that resolve around the shims. Rerun `turnstile init`, which moves its block to the end of your startup files.
 
+In zsh and bash, the block also moves the shims back to the front before each prompt, so `nvm use` or `mise activate` can't leave them behind. If you installed turnstile before 0.3.2, rerun `turnstile init` to get this hook.
+
 Calls by absolute path, such as `/usr/bin/make`, always go around the shims. See [limits](./concepts/limits.md).
 
 ## Commands in a sandboxed agent run ungated

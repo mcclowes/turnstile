@@ -5,6 +5,8 @@ import Foundation
 /// The block moves the shims directory to the front of PATH rather than just prepending, so it's
 /// safe to source repeatedly. It goes in files that run late: macOS's `path_helper` (in
 /// `/etc/zprofile`) and tools like nvm or mise reorder PATH, and the shims must end up first.
+/// zsh and bash also repeat the move before each prompt, since `nvm use` and `mise activate`
+/// reorder PATH after startup. The hook goes last, so it runs after mise's.
 public enum ShellSetup {
     public static let begin = "# >>> turnstile >>>"
     public static let end = "# <<< turnstile <<<"
@@ -33,17 +35,28 @@ public enum ShellSetup {
         case .zsh:
             return """
                 \(begin)
-                path=("\(quoted)" ${path:#"\(quoted)"})
+                _turnstile_shims_first() { path=("\(quoted)" ${path:#"\(quoted)"}); }
+                _turnstile_shims_first
                 export PATH
+                typeset -ag precmd_functions chpwd_functions
+                precmd_functions=(${precmd_functions:#_turnstile_shims_first} _turnstile_shims_first)
+                chpwd_functions=(${chpwd_functions:#_turnstile_shims_first} _turnstile_shims_first)
                 \(end)
                 """
         case .bash:
             return """
                 \(begin)
-                _turnstile_shims="\(quoted)"
-                PATH=":$PATH:"; PATH="${PATH//":$_turnstile_shims:"/:}"; PATH="${PATH#:}"; PATH="${PATH%:}"
-                export PATH="$_turnstile_shims${PATH:+:$PATH}"
-                unset _turnstile_shims
+                _turnstile_shims_first() {
+                  local shims="\(quoted)"
+                  PATH=":$PATH:"; PATH="${PATH//":$shims:"/:}"; PATH="${PATH#:}"; PATH="${PATH%:}"
+                  PATH="$shims${PATH:+:$PATH}"
+                }
+                _turnstile_shims_first
+                export PATH
+                case "${PROMPT_COMMAND:-}" in
+                  *_turnstile_shims_first*) ;;
+                  *) PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND;}_turnstile_shims_first" ;;
+                esac
                 \(end)
                 """
         case .fish:

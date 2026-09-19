@@ -33,9 +33,13 @@ public final class Store {
               joined_to INTEGER,
               queued_at REAL NOT NULL,
               started_at REAL,
-              finished_at REAL
+              finished_at REAL,
+              ran_for REAL
             )
             """)
+        var columns: Set<String> = []
+        query("PRAGMA table_info(jobs)", []) { row in row.text(1).map { columns.insert($0) } }
+        if !columns.contains("ran_for") { try execute("ALTER TABLE jobs ADD COLUMN ran_for REAL") }
         try execute("CREATE INDEX IF NOT EXISTS jobs_cost ON jobs(key, root, finished_at)")
     }
 
@@ -71,11 +75,12 @@ public final class Store {
         run("UPDATE jobs SET state = 'running', child_pid = ?, started_at = ? WHERE id = ?", [childPid.map { Int64($0) }, now, id])
     }
 
-    public func markFinished(_ id: Int64, outcome: String, exitCode: Int32?, signal: Int32?, peak: UInt64?, now: Double) {
+    /// `ranFor` is seconds spent running, not counting time paused.
+    public func markFinished(_ id: Int64, outcome: String, exitCode: Int32?, signal: Int32?, peak: UInt64?, ranFor: Double? = nil, now: Double) {
         run("""
-            UPDATE jobs SET state = 'finished', outcome = ?, exit_code = ?, signal = ?, peak = ?, finished_at = ?
+            UPDATE jobs SET state = 'finished', outcome = ?, exit_code = ?, signal = ?, peak = ?, ran_for = ?, finished_at = ?
             WHERE id = ?
-            """, [outcome, exitCode.map { Int64($0) }, signal.map { Int64($0) }, peak.map { Int64(clamping: $0) }, now, id])
+            """, [outcome, exitCode.map { Int64($0) }, signal.map { Int64($0) }, peak.map { Int64(clamping: $0) }, ranFor, now, id])
     }
 
     public func markJoined(_ id: Int64, to primary: Int64, outcome: String, exitCode: Int32?, now: Double) {
@@ -108,6 +113,20 @@ public final class Store {
         peaks.sort()
         let middle = peaks.count / 2
         return peaks.count % 2 == 1 ? peaks[middle] : peaks[middle - 1] / 2 + peaks[middle] / 2
+    }
+
+    /// Usual run time for a command: the median of its last five successful runs in this project.
+    /// Failed runs often stop early, so they'd make it look quicker than it is.
+    public func usualDuration(key: String, root: String) -> Double? {
+        var times: [Double] = []
+        query("""
+            SELECT ran_for FROM jobs WHERE key = ? AND root = ? AND outcome = 'ok' AND ran_for > 0
+            ORDER BY finished_at DESC LIMIT 5
+            """, [key, root]) { row in row.double(0).map { times.append($0) } }
+        guard !times.isEmpty else { return nil }
+        times.sort()
+        let middle = times.count / 2
+        return times.count % 2 == 1 ? times[middle] : (times[middle - 1] + times[middle]) / 2
     }
 
     public func recent(limit: Int) -> [HistoryEntry] {

@@ -11,8 +11,10 @@ public struct QueuedJob: Equatable, Sendable {
     public var label: String
     /// Kept in the queue, but never admitted until released.
     public var held: Bool
+    /// Usual run time in seconds, if known.
+    public var duration: Double?
 
-    public init(id: Int64, resourceClass: ResourceClass, estimate: UInt64, agent: Bool = true, bumpedAt: Double? = nil, queuedAt: Double, label: String = "", held: Bool = false) {
+    public init(id: Int64, resourceClass: ResourceClass, estimate: UInt64, agent: Bool = true, bumpedAt: Double? = nil, queuedAt: Double, label: String = "", held: Bool = false, duration: Double? = nil) {
         self.id = id
         self.resourceClass = resourceClass
         self.estimate = estimate
@@ -21,6 +23,7 @@ public struct QueuedJob: Equatable, Sendable {
         self.queuedAt = queuedAt
         self.label = label
         self.held = held
+        self.duration = duration
     }
 }
 
@@ -30,17 +33,29 @@ public struct RunningJob: Equatable, Sendable {
     public var estimate: UInt64
     public var footprint: UInt64
     public var label: String
+    /// Usual run time in seconds, if known. Nil while paused, since a paused job isn't progressing.
+    public var usualDuration: Double?
+    /// Seconds it has spent running, not counting time paused.
+    public var elapsed: Double
 
-    public init(id: Int64, resourceClass: ResourceClass, estimate: UInt64, footprint: UInt64 = 0, label: String = "") {
+    public init(id: Int64, resourceClass: ResourceClass, estimate: UInt64, footprint: UInt64 = 0, label: String = "", usualDuration: Double? = nil, elapsed: Double = 0) {
         self.id = id
         self.resourceClass = resourceClass
         self.estimate = estimate
         self.footprint = footprint
         self.label = label
+        self.usualDuration = usualDuration
+        self.elapsed = elapsed
     }
 
     /// Memory the job is still expected to claim.
     public var pendingGrowth: UInt64 { estimate > footprint ? estimate - footprint : 0 }
+
+    /// Seconds it's expected to keep running. Nil if unknown, or once it has overrun its usual time.
+    public var remaining: Double? {
+        guard let usualDuration, usualDuration > elapsed else { return nil }
+        return usualDuration - elapsed
+    }
 }
 
 public struct SchedulerPolicy: Sendable {
@@ -69,10 +84,10 @@ public struct SchedulerPolicy: Sendable {
 public enum WaitReason: Equatable, Sendable {
     /// Jobs ahead in the queue go first.
     case queue(ahead: Int, next: String)
-    /// All slots for this class are taken.
-    case slots(ResourceClass, running: [String])
-    /// Not enough free memory.
-    case memory(need: UInt64, free: UInt64, running: [String])
+    /// All slots for this class are taken. `eta` is seconds until one should free up, if known.
+    case slots(ResourceClass, running: [String], eta: Double? = nil)
+    /// Not enough free memory. `eta` is seconds until enough should free up, if known.
+    case memory(need: UInt64, free: UInt64, running: [String], eta: Double? = nil)
     /// Someone held it; it waits until released.
     case held
 }
@@ -103,9 +118,10 @@ public enum Scheduler {
     /// Decides which queued jobs start now.
     ///
     /// A job blocked on a class slot doesn't hold up other classes. A job blocked on memory holds up
-    /// everything behind it, except small jobs that fit, and only until it has waited `backfillAge`,
-    /// so a big job can't starve. With nothing running, the head of the queue always starts, since
-    /// waiting can't free memory. Held jobs are skipped entirely.
+    /// everything behind it, except jobs that fit and won't delay it: ones expected to finish before it
+    /// could start anyway, or, when run times aren't known, small jobs while it has waited less than
+    /// `backfillAge`. With nothing running, the head of the queue always starts, since waiting can't
+    /// free memory. Held jobs are skipped entirely.
     public static func decide(queue: [QueuedJob], running: [RunningJob], freeMemory: UInt64, policy: SchedulerPolicy, now: Double = 0) -> SchedulerDecision {
         var admit: [Int64] = []
         var waiting: [Int64: WaitReason] = [:]
@@ -117,6 +133,8 @@ public enum Scheduler {
         var headroom = Int64(clamping: freeMemory) - Int64(clamping: policy.reserve) - Int64(clamping: committed)
         var anythingRunning = !running.isEmpty
         var memoryBlocked: QueuedJob?
+        var blockerStart: Double?
+        var active = running.map { Active(resourceClass: $0.resourceClass, remaining: $0.remaining, releases: max($0.estimate, $0.footprint)) }
         let labels = running.map(\.label)
         var waitingByClass: [ResourceClass: [QueuedJob]] = [:]
         var waitingCount = 0
@@ -133,8 +151,7 @@ public enum Scheduler {
                 }
             }
             let skipping = memoryBlocked
-            if let blocker = skipping,
-               job.estimate > policy.backfillMax || now - blocker.queuedAt >= policy.backfillAge {
+            if let blocker = skipping, !mayGoAhead(job, of: blocker, startingIn: blockerStart, policy: policy, now: now) {
                 waiting[job.id] = .queue(ahead: waitingCount, next: blocker.label)
                 continue
             }
@@ -143,35 +160,78 @@ public enum Scheduler {
                 if let ahead = waitingByClass[job.resourceClass], let first = ahead.first {
                     waiting[job.id] = .queue(ahead: ahead.count, next: first.label)
                 } else {
-                    waiting[job.id] = .slots(job.resourceClass, running: labels)
+                    let inClass = active.filter { $0.resourceClass == job.resourceClass }.map(\.remaining)
+                    let eta = inClass.contains(nil) ? nil : inClass.compactMap { $0 }.min()
+                    waiting[job.id] = .slots(job.resourceClass, running: labels, eta: eta)
                 }
                 continue
             }
             if anythingRunning && Int64(clamping: job.estimate) > headroom {
-                if memoryBlocked == nil { memoryBlocked = job }
-                waiting[job.id] = .memory(need: job.estimate, free: UInt64(max(0, headroom)), running: labels)
+                let eta = expectedStart(need: job.estimate, headroom: headroom, active: active)
+                if memoryBlocked == nil {
+                    memoryBlocked = job
+                    blockerStart = eta
+                }
+                waiting[job.id] = .memory(need: job.estimate, free: UInt64(max(0, headroom)), running: labels, eta: eta)
                 continue
             }
             if let blocker = skipping { skipped[job.id] = blocker.label }
             admit.append(job.id)
             counts[job.resourceClass, default: 0] = used + 1
             headroom -= Int64(clamping: job.estimate)
+            active.append(Active(resourceClass: job.resourceClass, remaining: job.duration, releases: job.estimate))
             anythingRunning = true
         }
         return SchedulerDecision(admit: admit, waiting: waiting, skipped: skipped)
+    }
+
+    private struct Active {
+        var resourceClass: ResourceClass
+        var remaining: Double?
+        var releases: UInt64
+    }
+
+    private static func mayGoAhead(_ job: QueuedJob, of blocker: QueuedJob, startingIn blockerStart: Double?, policy: SchedulerPolicy, now: Double) -> Bool {
+        if let blockerStart, let duration = job.duration { return duration <= blockerStart }
+        return job.estimate <= policy.backfillMax && now - blocker.queuedAt < policy.backfillAge
+    }
+
+    /// Seconds until `need` fits, as active jobs finish soonest first. Nil if that depends on a job
+    /// whose remaining time is unknown, since it might finish at any moment.
+    private static func expectedStart(need: UInt64, headroom: Int64, active: [Active]) -> Double? {
+        var finishing: [(at: Double, releases: UInt64)] = []
+        for job in active {
+            guard let remaining = job.remaining else { return nil }
+            finishing.append((remaining, job.releases))
+        }
+        var room = headroom
+        var start: Double = 0
+        for job in finishing.sorted(by: { $0.at < $1.at }) {
+            if Int64(clamping: need) <= room { break }
+            room += Int64(clamping: job.releases)
+            start = job.at
+        }
+        return start
     }
 
     public static func message(for reason: WaitReason) -> String {
         switch reason {
         case let .queue(ahead, next):
             return "waiting, \(ahead) ahead (\(next))"
-        case let .slots(cls, running):
-            return "waiting for a \(cls.rawValue) slot (running: \(summary(running)))"
-        case let .memory(need, free, running):
-            return "waiting for memory, needs ~\(Bytes.format(need)), ~\(Bytes.format(free)) spare (running: \(summary(running)))"
+        case let .slots(cls, running, eta):
+            return "waiting for a \(cls.rawValue) slot\(startsIn(eta)) (running: \(summary(running)))"
+        case let .memory(need, free, running, eta):
+            return "waiting for memory, needs ~\(Bytes.format(need)), ~\(Bytes.format(free)) spare\(startsIn(eta)) (running: \(summary(running)))"
         case .held:
             return "held; waiting until someone releases it"
         }
+    }
+
+    /// Coarse on purpose: the message is resent whenever its text changes.
+    static func startsIn(_ eta: Double?) -> String {
+        guard let eta else { return "" }
+        if eta < 60 { return ", starts in under a minute" }
+        return ", starts in ~\(Int((eta / 60).rounded(.up)))m"
     }
 
     static func summary(_ labels: [String]) -> String {

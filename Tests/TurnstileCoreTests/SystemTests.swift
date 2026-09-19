@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 import Testing
 @testable import TurnstileCore
 
@@ -93,6 +94,45 @@ struct StoreTests {
         #expect(store.typicalPeak(key: "swift build", excluding: "/a") == 600 * Bytes.mb)
         record(root: "/e", peak: 800 * Bytes.mb, at: 5)
         #expect(store.typicalPeak(key: "swift build", excluding: "/a") == 700 * Bytes.mb)
+    }
+
+    @Test func learnsUsualDurationFromSuccessfulRuns() throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("store-\(UUID().uuidString).sqlite").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let store = try Store(path: path)
+        func record(root: String = "/a", ranFor: Double?, outcome: String = "ok", at time: Double) {
+            let id = store.insertJob(state: "queued", resourceClass: .test, key: "swift test", root: root, cwd: root, argv: ["swift", "test"], agent: true, clientPid: 1, estimate: 0, now: time)
+            store.markFinished(id, outcome: outcome, exitCode: 0, signal: nil, peak: nil, ranFor: ranFor, now: time + 1)
+        }
+        #expect(store.usualDuration(key: "swift test", root: "/a") == nil)
+        record(root: "/b", ranFor: 500, at: 1)
+        record(ranFor: nil, at: 2)
+        #expect(store.usualDuration(key: "swift test", root: "/a") == nil)
+        record(ranFor: 90, at: 3)
+        record(ranFor: 30, at: 4)
+        record(ranFor: 5, outcome: "failed", at: 5)
+        record(ranFor: 60, at: 6)
+        #expect(store.usualDuration(key: "swift test", root: "/a") == 60)
+        record(ranFor: 40, at: 7)
+        #expect(store.usualDuration(key: "swift test", root: "/a") == 50)
+    }
+
+    @Test func addsTheDurationColumnToAnOlderDatabase() throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("store-\(UUID().uuidString).sqlite").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        var db: OpaquePointer?
+        sqlite3_open(path, &db)
+        sqlite3_exec(db, """
+            CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, state TEXT NOT NULL, class TEXT NOT NULL, key TEXT NOT NULL,
+            root TEXT NOT NULL, cwd TEXT NOT NULL, argv TEXT NOT NULL, agent INTEGER NOT NULL, client_pid INTEGER, child_pid INTEGER,
+            estimate INTEGER, peak INTEGER, exit_code INTEGER, signal INTEGER, outcome TEXT, joined_to INTEGER,
+            queued_at REAL NOT NULL, started_at REAL, finished_at REAL)
+            """, nil, nil, nil)
+        sqlite3_close(db)
+        let store = try Store(path: path)
+        let id = store.insertJob(state: "queued", resourceClass: .test, key: "k", root: "/a", cwd: "/a", argv: [], agent: true, clientPid: 1, estimate: 0, now: 1)
+        store.markFinished(id, outcome: "ok", exitCode: 0, signal: nil, peak: nil, ranFor: 12, now: 2)
+        #expect(store.usualDuration(key: "k", root: "/a") == 12)
     }
 }
 

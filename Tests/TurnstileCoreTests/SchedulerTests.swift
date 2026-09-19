@@ -78,6 +78,63 @@ struct SchedulerTests {
         #expect(decision.admit.isEmpty)
     }
 
+    func running(_ id: Int64, _ cls: ResourceClass = .compile, gb estimate: UInt64 = 2, usual: Double? = nil, elapsed: Double = 0) -> RunningJob {
+        RunningJob(id: id, resourceClass: cls, estimate: estimate * gb, footprint: estimate * gb, label: "r\(id)", usualDuration: usual, elapsed: elapsed)
+    }
+
+    @Test func aJobGoesAheadIfItShouldFinishBeforeTheBlockerCouldStart() {
+        var backfill = policy
+        backfill.backfillMax = gb
+        var quick = queued(2, .test, gb: 2, at: 110)
+        quick.duration = 60
+        // The blocker fits once r9 finishes, in ~300s. Too big and too late for the size-and-age rule.
+        let decision = Scheduler.decide(queue: [queued(1, gb: 6, at: 100), quick], running: [running(9, usual: 400, elapsed: 100)],
+                                        freeMemory: 7 * gb, policy: backfill, now: 100 + backfill.backfillAge)
+        #expect(decision.admit == [2])
+        #expect(decision.skipped == [2: "job1, ~6 GB"])
+    }
+
+    @Test func aSmallJobThatWouldOutlastTheBlockerWaits() {
+        var backfill = policy
+        backfill.backfillMax = gb
+        var slow = queued(2, .test, gb: 1, at: 110)
+        slow.duration = 600
+        let decision = Scheduler.decide(queue: [queued(1, gb: 6, at: 100), slow], running: [running(9, usual: 400, elapsed: 100)],
+                                        freeMemory: 7 * gb, policy: backfill, now: 110)
+        #expect(decision.admit.isEmpty)
+        #expect(decision.waiting[2] == .queue(ahead: 1, next: "job1, ~6 GB"))
+    }
+
+    @Test func unknownRunningTimesFallBackToSizeAndAge() {
+        var backfill = policy
+        backfill.backfillMax = gb
+        var slow = queued(2, .test, gb: 1, at: 110)
+        slow.duration = 600
+        let running = [running(9, usual: 400, elapsed: 100), running(8, .browser, gb: 0)]
+        let decision = Scheduler.decide(queue: [queued(1, gb: 6, at: 100), slow], running: running, freeMemory: 7 * gb, policy: backfill, now: 110)
+        #expect(decision.admit == [2])
+    }
+
+    @Test func aJobPastItsUsualTimeHasNoKnownRemainder() {
+        #expect(running(9, usual: 400, elapsed: 100).remaining == 300)
+        #expect(running(9, usual: 400, elapsed: 450).remaining == nil)
+        #expect(running(9).remaining == nil)
+    }
+
+    @Test func waitsCarryAnExpectedStart() {
+        let memory = Scheduler.decide(queue: [queued(1, gb: 6)], running: [running(9, usual: 400, elapsed: 100)], freeMemory: 7 * gb, policy: policy)
+        #expect(memory.waiting[1] == .memory(need: 6 * gb, free: 5 * gb, running: ["r9"], eta: 300))
+        let slots = Scheduler.decide(queue: [queued(1, .test, gb: 1)], running: [running(9, .test, gb: 1, usual: 90, elapsed: 60)], freeMemory: 12 * gb, policy: policy)
+        #expect(slots.waiting[1] == .slots(.test, running: ["r9"], eta: 30))
+    }
+
+    @Test func expectedStartsReadCoarsely() {
+        #expect(Scheduler.message(for: .memory(need: 4 * gb, free: gb / 2, running: ["a"], eta: 45))
+            == "waiting for memory, needs ~4 GB, ~512 MB spare, starts in under a minute (running: a)")
+        #expect(Scheduler.message(for: .slots(.test, running: ["a"], eta: 61))
+            == "waiting for a test slot, starts in ~2m (running: a)")
+    }
+
     @Test func backfillLimitScalesWithRAM() {
         #expect(SchedulerPolicy.backfillMax(physicalMemory: 8 * gb) == 512 * Bytes.mb)
         #expect(SchedulerPolicy.backfillMax(physicalMemory: 64 * gb) == 64 * gb / 20)

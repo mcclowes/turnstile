@@ -6,7 +6,7 @@ slug: /install
 
 # Install
 
-Requires macOS 13 or later.
+Requires macOS 26 or later.
 
 ## Homebrew
 
@@ -28,7 +28,7 @@ Download the universal binary from [releases](https://github.com/mcclowes/homebr
 
 ## From source
 
-You'll need a Swift 6 toolchain (Xcode 16 or later):
+You'll need Xcode 26 or later:
 
 ```sh
 git clone https://github.com/mcclowes/turnstile && cd turnstile

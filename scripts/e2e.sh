@@ -124,8 +124,7 @@ check "late output from a background child isn't cut off" 'grep -q "late output"
 # A build server that escapes to launchd still counts against its job, and is killed with it.
 out="$(cd hungry && FAKE_SERVER_MB=400 swift build 2>&1)"; code=$?
 sleep 0.5
-# Older kernels forget a reparented process's creator, so this only works on macOS 26 and later.
-[ "$(sw_vers -productVersion | cut -d. -f1)" -ge 26 ] && check "escaped build servers are tracked and killed" 'echo "$out" | grep -q "killed swift build, exceeded 150 MB" && [ $code != 0 ] && ! pgrep -f turnstile-e2e-server > /dev/null'
+check "escaped build servers are tracked and killed" 'echo "$out" | grep -q "killed swift build, exceeded 150 MB" && [ $code != 0 ] && ! pgrep -f turnstile-e2e-server > /dev/null'
 pkill -f turnstile-e2e-server
 
 # SIGTERM reaches the job, and the caller sees the signal.

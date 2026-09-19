@@ -30,8 +30,7 @@ struct SystemTests {
         ProcessTree.signal(tree, SIGKILL)
     }
 
-    /// macOS 15 resets the creator to launchd's on reparenting; macOS 26 keeps it.
-    @Test(.enabled(if: ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26))
+    @Test
     func lineageSurvivesReparentingAndSetsid() throws {
         let pidFile = FileManager.default.temporaryDirectory.appendingPathComponent("lineage-\(UUID().uuidString)").path
         defer { try? FileManager.default.removeItem(atPath: pidFile) }

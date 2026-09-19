@@ -96,7 +96,7 @@ public enum ProcessTree {
     public struct Lineage: Equatable, Sendable {
         /// Never reused, unlike a pid.
         public var id: UInt64
-        /// The process that created this one. Unlike the ppid, it survives setsid, and on macOS 26+ reparenting to launchd too.
+        /// The process that created this one. Unlike the ppid, it survives setsid and reparenting to launchd.
         public var creator: UInt64
     }
 

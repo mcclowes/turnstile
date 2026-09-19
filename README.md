@@ -15,7 +15,7 @@ turnstile: starting after 41s
 
 ## Install
 
-Requires macOS 13+.
+Requires macOS 26 or later.
 
 ```sh
 brew install mcclowes/turnstile/turnstile                                # CLI only
@@ -25,7 +25,7 @@ turnstile init
 
 Name the formula alongside the app: Homebrew only trusts third-party formulae you name, so `brew install --cask mcclowes/turnstile/turnstile-app` on its own refuses to load the CLI it depends on, unless you've run `brew trust mcclowes/turnstile`.
 
-Or download the universal binary from [releases](https://github.com/mcclowes/homebrew-turnstile/releases) and run `./turnstile init`. To build from source, you'll need a Swift 6 toolchain (Xcode 16 or later):
+Or download the universal binary from [releases](https://github.com/mcclowes/homebrew-turnstile/releases) and run `./turnstile init`. To build from source, you'll need Xcode 26 or later:
 
 ```sh
 git clone https://github.com/mcclowes/turnstile && cd turnstile
@@ -189,7 +189,7 @@ Exit codes are the tool's own. turnstile adds `125` when someone ran `turnstile 
 - macOS only. Memory readings come from `kern.memorystatus_level` and per-process footprints.
 - Calls by absolute path, such as `/usr/bin/make`, go around the shims.
 - npm puts `node_modules/.bin` first on PATH inside scripts, so turnstile gates the `npm run` itself rather than the `vitest` it calls.
-- On macOS 26 and later, build servers (Gradle, Kotlin) that detach to launchd still count against the job that started them, while it runs, as long as whatever started them lived for at least a second. Older macOS forgets who started a process once launchd adopts it, so there they go uncounted. A server reused by a later job counts against neither.
+- Build servers (Gradle, Kotlin) that detach to launchd still count against the job that started them, while it runs, as long as whatever started them lived for at least a second. A server reused by a later job counts against neither.
 
 ## Development
 

@@ -18,7 +18,8 @@ turnstile: starting after 41s
 Requires macOS 13+.
 
 ```sh
-brew install mcclowes/tap/turnstile
+brew tap mcclowes/turnstile https://github.com/mcclowes/turnstile
+brew install turnstile
 turnstile init
 ```
 
@@ -193,4 +194,4 @@ swift test             # unit tests
 ./scripts/e2e.sh       # end-to-end, with fake tools in a throwaway turnstile home
 ```
 
-To release, bump `Turnstile.version` in `Sources/TurnstileCore/Paths.swift` and push a matching tag (`v0.3.0`). The release workflow tests, builds a universal binary, publishes it with a Homebrew formula, and updates `mcclowes/homebrew-tap` when the `HOMEBREW_TAP_TOKEN` secret is set.
+To release, bump `Turnstile.version` in `Sources/TurnstileCore/Paths.swift` and push a matching tag (`v0.3.0`). The release workflow tests, builds a universal binary, publishes it, and commits the updated Homebrew formula to `Formula/turnstile.rb` on main. This repo is its own tap.

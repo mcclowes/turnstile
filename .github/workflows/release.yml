@@ -11,8 +11,6 @@ jobs:
   release:
     runs-on: macos-15
     timeout-minutes: 30
-    env:
-      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -42,16 +40,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" dist/* --title "turnstile $VERSION" --generate-notes
 
-      # Needs a HOMEBREW_TAP_TOKEN secret with write access to mcclowes/homebrew-tap; skipped without one.
-      - name: Update the Homebrew tap
-        if: env.TAP_TOKEN != ''
+      # This repo is its own tap: `brew tap mcclowes/turnstile https://github.com/mcclowes/turnstile`.
+      - name: Update the Homebrew formula on main
         run: |
-          git clone "https://x-access-token:$TAP_TOKEN@github.com/mcclowes/homebrew-tap.git" tap
-          mkdir -p tap/Formula
-          cp dist/turnstile.rb tap/Formula/turnstile.rb
-          cd tap
+          git fetch origin main
+          git checkout -B main origin/main
+          mkdir -p Formula
+          cp dist/turnstile.rb Formula/turnstile.rb
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Formula/turnstile.rb
-          git commit -m "turnstile $VERSION"
-          git push
+          git commit -m "Chore: Homebrew formula for turnstile $VERSION"
+          git push origin main

@@ -28,7 +28,8 @@ swift test
 arch=(--arch arm64 --arch x86_64)
 swift build -c release --product turnstile "${arch[@]}"
 bin="$(swift build -c release --product turnstile "${arch[@]}" --show-bin-path)"
-lipo "$bin/turnstile" -verify_arch arm64 x86_64
+archs="$(lipo -archs "$bin/turnstile")"
+[[ "$archs" == *arm64* && "$archs" == *x86_64* ]] || fail "the CLI isn't universal: $archs"
 [ "$("$bin/turnstile" --version)" = "$VERSION" ] || fail "the built CLI doesn't report $VERSION"
 rm -rf "$DIST"
 mkdir -p "$DIST"

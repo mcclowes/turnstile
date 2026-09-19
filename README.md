@@ -55,7 +55,7 @@ If you'd rather manage PATH yourself, use `turnstile init --no-rc` and put `eval
 - **Pressure relief.** When memory runs low, turnstile lowers each tool's parallelism (`--jobs`, `--maxWorkers`, `CARGO_BUILD_JOBS`, Node's heap cap). If it gets critical, the newest agent job is paused with SIGSTOP and resumed once memory recovers. A job that runs far past its usual peak is killed, with the reason printed.
 - **It fails open.** If the daemon is missing or broken, commands run ungated rather than failing. If it crashes, running jobs re-register with a fresh one and waiting jobs requeue, so limits still hold, and anything it had paused carries on.
 
-Gated by default: `swift`, `xcodebuild`, `cargo`, `go`, `gradle`, `make`, `npm`, `pnpm`, `yarn`, `bun`, `npx`, `vitest`, `jest`, `playwright`, and `tsc`. Package scripts are classified by name: `test`, `test:unit`, and `ci` are tests; `e2e` and `playwright` are browser runs; `build`, `lint`, and `typecheck` are compiles; `dev`, `start`, and `watch` pass through. Run `turnstile classify <command>` to see what any command would do.
+Gated by default: `swift`, `xcodebuild`, `cargo`, `go`, `gradle`, `make`, `npm`, `pnpm`, `yarn`, `bun`, `npx`, `vitest`, `jest`, `playwright`, `tsc`, and `xcrun` (which is gated by the tool it runs, so `xcrun swift build` counts as `swift build`). Package scripts are classified by name: `test`, `test:unit`, and `ci` are tests; `e2e` and `playwright` are browser runs; `build`, `lint`, and `typecheck` are compiles; `dev`, `start`, and `watch` pass through. Run `turnstile classify <command>` to see what any command would do.
 
 ## Commands
 

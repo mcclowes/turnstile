@@ -28,8 +28,8 @@ jobs:
 
       - name: Build a universal binary
         run: |
-          swift build -c release --arch arm64 --arch x86_64
-          bin="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)"
+          swift build -c release --product turnstile --arch arm64 --arch x86_64
+          bin="$(swift build -c release --product turnstile --arch arm64 --arch x86_64 --show-bin-path)"
           lipo -info "$bin/turnstile"
           [ "$("$bin/turnstile" --version)" = "$VERSION" ]
           mkdir dist

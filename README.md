@@ -74,6 +74,16 @@ Gated by default: `swift`, `xcodebuild`, `cargo`, `go`, `gradle`, `make`, `npm`,
 | `turnstile stop` | Stop the daemon; waiting jobs run ungated |
 | `turnstile uninstall` | Remove the shims and PATH setup. History is kept |
 
+## Menu bar app
+
+turnstile works in the background, so there's also a menu bar app for when no terminal is open on it. The icon shows how many jobs are queued, and turns into a warning when memory is low or a job has been paused for it. Each job in the menu has bump, pause or hold, and kill. You get a notification when a job is paused for memory or killed as a runaway.
+
+```sh
+./scripts/build-app.sh && open .build/Turnstile.app
+```
+
+It only watches the daemon, polling every 2 seconds, and never starts it or keeps it alive. When the daemon is idle the menu says so, and picks it up again when it starts. It isn't signed or notarised yet, so it's built from source for now. Turn on "Launch at login" from its menu.
+
 ## Configuration
 
 Everything is optional and the defaults are meant to be left alone. There are two files, both JSON:

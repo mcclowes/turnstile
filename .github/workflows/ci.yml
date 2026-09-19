@@ -19,3 +19,5 @@ jobs:
         run: ./scripts/e2e.sh
       - name: Release build
         run: swift build -c release
+      - name: Menu bar app
+        run: ./scripts/build-app.sh

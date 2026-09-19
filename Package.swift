@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v13)],
     products: [
         .executable(name: "turnstile", targets: ["turnstile"]),
+        .executable(name: "TurnstileBar", targets: ["TurnstileBar"]),
     ],
     targets: [
         .target(
@@ -14,6 +15,11 @@ let package = Package(
         ),
         .executableTarget(
             name: "turnstile",
+            dependencies: ["TurnstileCore"]
+        ),
+        // The menu bar app. `scripts/build-app.sh` wraps it in Turnstile.app.
+        .executableTarget(
+            name: "TurnstileBar",
             dependencies: ["TurnstileCore"]
         ),
         .testTarget(

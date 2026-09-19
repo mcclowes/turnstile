@@ -82,6 +82,10 @@ final class Daemon {
         }
         var pausedTick: Double?
         var pausedFor: Double = 0
+        var minLevel: Int?
+        var maxPressure: MemoryPressure?
+        /// The kernel's pressure verdict would have paused it; see `Pressure.shadowPause`.
+        var wouldPause = false
         var usualDuration: Double?
         /// Started under an earlier daemon, so its run time here is unknown.
         var adopted = false
@@ -146,6 +150,8 @@ final class Daemon {
     var listener: DispatchSourceRead?
     var timer: DispatchSourceTimer?
     var memoryLevel = 100
+    var pressure = MemoryPressure.normal
+    var lastLoggedMemory: MemoryReading?
     /// launchd's children, and who created them. Nil when unreadable (another user's).
     var orphanLineage: [pid_t: ProcessTree.Lineage?] = [:]
     var ticks = 0
@@ -477,8 +483,11 @@ final class Daemon {
         else if signal != nil { outcome = "signaled" }
         else { outcome = "failed" }
         if job.paused { ProcessTree.signal(job.tree, SIGCONT) }
-        let ranFor = job.adopted ? nil : job.ranFor(now: Daemon.clock())
-        store.markFinished(job.id, outcome: outcome, exitCode: exitCode, signal: signal, peak: job.peak > 0 ? job.peak : nil, ranFor: ranFor, now: now)
+        let clock = Daemon.clock()
+        let ranFor = job.adopted ? nil : job.ranFor(now: clock)
+        let pausedFor = job.pausedFor + (job.pausedTick.map { clock - $0 } ?? 0)
+        let memory = JobMemory(minLevel: job.minLevel, maxPressure: job.maxPressure, pausedFor: pausedFor > 0 ? pausedFor : nil, wouldPause: job.wouldPause)
+        store.markFinished(job.id, outcome: outcome, exitCode: exitCode, signal: signal, peak: job.peak > 0 ? job.peak : nil, ranFor: ranFor, memory: memory, now: now)
         log("#\(job.id) \(job.project) \(job.key): \(outcome), peak \(Bytes.format(job.peak))")
 
         var done = Message(type: "done")
@@ -585,7 +594,7 @@ final class Daemon {
 
     func tick() {
         let now = Daemon.clock()
-        memoryLevel = SystemMemory.level()
+        observe(.now())
         ticks += 1
         if ticks % 5 == 0 { reloadConfig() }
 
@@ -606,6 +615,20 @@ final class Daemon {
             idleSince = now
         }
         if ticks % 3600 == 0 { cleanLogs() }
+    }
+
+    /// Takes a memory reading, noting each running job's closest brush with pausing, and logs large moves while jobs run.
+    func observe(_ reading: MemoryReading) {
+        memoryLevel = reading.level
+        pressure = reading.pressure
+        let active = jobs.values.filter { $0.state != .queued }
+        for job in active {
+            job.minLevel = min(job.minLevel ?? .max, reading.level)
+            job.maxPressure = max(job.maxPressure ?? .normal, reading.pressure)
+        }
+        guard !active.isEmpty, reading.isWorthLogging(since: lastLoggedMemory) else { return }
+        lastLoggedMemory = reading
+        log("memory \(reading.level)% free, pressure \(reading.pressure.name), swap \(Bytes.format(reading.swapUsed)) used, \(active.count) running")
     }
 
     func connectionsAreIdle() -> Bool {
@@ -715,7 +738,11 @@ final class Daemon {
             log("#\(id) resumed at \(memoryLevel)% free")
             for connection in job.connections { connection.send(.notice("resumed")) }
         case nil:
-            break
+            let pauseBelow = config.machine.pauseBelowPercent
+            guard let id = Pressure.shadowPause(pressure: pressure, memoryLevel: memoryLevel, jobs: candidates, pauseBelow: pauseBelow, resumeAbove: config.machine.resumeAbovePercent),
+                  let job = jobs[id], !job.wouldPause else { return }
+            job.wouldPause = true
+            log("#\(id) would pause under \(pressure.name) pressure (\(memoryLevel)% free; pausing starts below \(pauseBelow)%)")
         }
     }
 

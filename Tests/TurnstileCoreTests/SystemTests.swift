@@ -57,6 +57,33 @@ struct SystemTests {
 }
 
 struct StoreTests {
+    @Test func recordsHowCloseAJobCameToPausing() throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("store-\(UUID().uuidString).sqlite").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let store = try Store(path: path)
+        let id = store.insertJob(state: "queued", resourceClass: .test, key: "swift test", root: "/a", cwd: "/a", argv: ["swift", "test"], agent: true, clientPid: 1, estimate: 0, now: 1)
+        let memory = JobMemory(minLevel: 12, maxPressure: .warn, pausedFor: 30, wouldPause: true)
+        store.markFinished(id, outcome: "ok", exitCode: 0, signal: nil, peak: nil, memory: memory, now: 2)
+        #expect(store.memory(of: id) == memory)
+
+        let bare = store.insertJob(state: "queued", resourceClass: .test, key: "swift test", root: "/a", cwd: "/a", argv: ["swift", "test"], agent: true, clientPid: 1, estimate: 0, now: 3)
+        store.markFinished(bare, outcome: "ok", exitCode: 0, signal: nil, peak: nil, now: 4)
+        #expect(store.memory(of: bare) == JobMemory())
+    }
+
+    @Test func addsMemoryColumnsToAnOlderDatabase() throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("store-\(UUID().uuidString).sqlite").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        var db: OpaquePointer?
+        sqlite3_open(path, &db)
+        sqlite3_exec(db, "CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, state TEXT NOT NULL, class TEXT NOT NULL, key TEXT NOT NULL, root TEXT NOT NULL, cwd TEXT NOT NULL, argv TEXT NOT NULL, agent INTEGER NOT NULL, client_pid INTEGER, child_pid INTEGER, estimate INTEGER, peak INTEGER, exit_code INTEGER, signal INTEGER, outcome TEXT, joined_to INTEGER, queued_at REAL NOT NULL, started_at REAL, finished_at REAL)", nil, nil, nil)
+        sqlite3_close(db)
+        let store = try Store(path: path)
+        let id = store.insertJob(state: "queued", resourceClass: .test, key: "k", root: "/a", cwd: "/a", argv: [], agent: true, clientPid: 1, estimate: 0, now: 1)
+        store.markFinished(id, outcome: "ok", exitCode: 0, signal: nil, peak: nil, ranFor: 5, memory: JobMemory(minLevel: 40), now: 2)
+        #expect(store.memory(of: id)?.minLevel == 40)
+    }
+
     @Test func learnsUsualPeakPerProject() throws {
         let path = FileManager.default.temporaryDirectory.appendingPathComponent("store-\(UUID().uuidString).sqlite").path
         defer { try? FileManager.default.removeItem(atPath: path) }

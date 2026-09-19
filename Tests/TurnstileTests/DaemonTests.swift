@@ -352,6 +352,31 @@ struct DaemonPressureTests {
         #expect(!DaemonHarness.state(newerTool.processIdentifier).hasPrefix("T"))
     }
 
+    @Test func recordsHowCloseEachJobCameToPausing() throws {
+        let harness = try DaemonHarness()
+        let older = FakeClient(), newer = FakeClient()
+        let olderTool = try harness.sleeper(), newerTool = try harness.sleeper()
+        let olderID = harness.request(older, root: "/older")
+        harness.started(older, childPid: olderTool.processIdentifier)
+        let newerID = harness.request(newer, root: "/newer")
+        harness.started(newer, childPid: newerTool.processIdentifier)
+        harness.job(olderID)?.admittedTick = Daemon.clock() - 60
+
+        harness.daemon.observe(MemoryReading(level: 30, pressure: .warn, swapUsed: 0))
+        harness.daemon.relievePressure(now: Daemon.clock() + 10)
+        #expect(harness.job(newerID)?.paused == false)
+        harness.daemon.observe(MemoryReading(level: 60, pressure: .normal, swapUsed: 0))
+        harness.finished(newer)
+        #expect(harness.daemon.store.memory(of: newerID!) == JobMemory(minLevel: 30, maxPressure: .warn, wouldPause: true))
+
+        _ = harness.control("pause", "\(olderID!)")
+        usleep(50_000)
+        harness.finished(older)
+        let recorded = harness.daemon.store.memory(of: olderID!)
+        #expect(recorded?.wouldPause == false)
+        #expect((recorded?.pausedFor ?? 0) > 0)
+    }
+
     @Test func jobsAPersonPausedArentResumedAutomatically() throws {
         let harness = try DaemonHarness()
         let owner = FakeClient()

@@ -146,8 +146,8 @@ enum Doctor {
 
     static func system(environment: [String: String], config: Config) -> [Finding] {
         var findings: [Finding] = []
-        let level = SystemMemory.level()
-        findings.append(Finding(level: .ok, topic: "memory", text: "\(level)% free of \(Bytes.format(SystemMemory.physical))"))
+        let reading = MemoryReading.now(environment: environment)
+        findings.append(Finding(level: .ok, topic: "memory", text: "\(reading.level)% free of \(Bytes.format(SystemMemory.physical)), pressure \(reading.pressure.name), swap \(Bytes.format(reading.swapUsed)) used"))
         if !FileManager.default.isExecutableFile(atPath: Supervisor.taskpolicy) {
             findings.append(Finding(level: .note, topic: "priority", text: "\(Supervisor.taskpolicy) is missing; agent jobs run at normal priority"))
         }

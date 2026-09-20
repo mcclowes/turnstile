@@ -365,6 +365,49 @@ struct DaemonPressureTests {
         #expect(harness.job(id)?.paused == true)
     }
 
+    /// #17: the level stays healthy while the machine swaps, because swapping is what holds it up.
+    @Test func swappingPausesEvenWhileTheLevelLooksHealthy() throws {
+        let harness = try DaemonHarness()
+        let older = FakeClient(), newer = FakeClient()
+        let olderTool = try harness.sleeper(), newerTool = try harness.sleeper()
+        let olderID = harness.request(older, root: "/older")
+        harness.started(older, childPid: olderTool.processIdentifier)
+        let newerID = harness.request(newer, root: "/newer")
+        harness.started(newer, childPid: newerTool.processIdentifier)
+        harness.job(olderID)?.admittedTick = Daemon.clock() - 60
+
+        harness.daemon.memoryLevel = 35
+        harness.daemon.relievePressure(now: Daemon.clock())
+        #expect(harness.job(newerID)?.paused == false)
+
+        harness.daemon.memoryPressure = .swapping
+        harness.daemon.relievePressure(now: Daemon.clock() + 10)
+        #expect(harness.job(newerID)?.paused == true)
+        #expect(DaemonHarness.state(newerTool.processIdentifier).hasPrefix("T"))
+        #expect(newer.received().contains { $0.text == "paused, the machine is swapping; resumes when it recovers" })
+
+        harness.daemon.memoryPressure = .normal
+        harness.daemon.relievePressure(now: Daemon.clock() + 20)
+        #expect(harness.job(newerID)?.paused == false)
+    }
+
+    @Test func nothingIsAdmittedWhileTheMachineSwaps() throws {
+        let harness = try DaemonHarness()
+        let running = FakeClient(), waiting = FakeClient()
+        let tool = try harness.sleeper()
+        harness.request(running)
+        harness.started(running, childPid: tool.processIdentifier)
+
+        harness.daemon.memoryPressure = .swapping
+        let queued = harness.request(waiting, root: "/other")
+        #expect(harness.job(queued)?.state == .queued)
+        #expect(waiting.received().contains { $0.text?.hasPrefix("waiting, the machine is swapping") == true })
+
+        harness.daemon.memoryPressure = .normal
+        harness.daemon.schedule()
+        #expect(harness.job(queued)?.state == .running)
+    }
+
     @Test func peoplesJobsArentPausedForMemory() throws {
         let harness = try DaemonHarness()
         let owner = FakeClient()

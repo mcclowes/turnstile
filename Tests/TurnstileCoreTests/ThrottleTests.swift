@@ -107,4 +107,33 @@ struct PressureTests {
     @Test func resumesWhenNothingElseIsRunning() {
         #expect(Pressure.action(memoryLevel: 5, jobs: [job(2, started: 2, paused: true)], pauseBelow: 8, resumeAbove: 20) == .resume(2))
     }
+
+    /// The bug in #17: the level never fell under `pauseBelow` because swapping held it up,
+    /// so nothing paused while the machine swapped 5 GB.
+    @Test func pausesWhileSwappingWhateverTheLevelSays() {
+        let jobs = [job(1, started: 1), job(2, started: 2)]
+        #expect(Pressure.action(memoryLevel: 35, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == nil)
+        #expect(Pressure.action(memoryLevel: 35, pressure: .swapping, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == .pause(2))
+    }
+
+    @Test func swappingKeepsOneJobRunningToo() {
+        #expect(Pressure.action(memoryLevel: 35, pressure: .critical, jobs: [job(1, started: 1)], pauseBelow: 8, resumeAbove: 20) == nil)
+    }
+
+    @Test func doesntResumeBackIntoSwap() {
+        let jobs = [job(1, started: 1), job(2, started: 2, paused: true)]
+        #expect(Pressure.action(memoryLevel: 60, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == .resume(2))
+        #expect(Pressure.action(memoryLevel: 60, pressure: .swapping, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == nil)
+    }
+
+    /// Nothing else is running, so keeping it paused can't help anyone.
+    @Test func resumesWhileSwappingWhenNothingElseRuns() {
+        #expect(Pressure.action(memoryLevel: 35, pressure: .critical, jobs: [job(2, started: 2, paused: true)], pauseBelow: 8, resumeAbove: 20) == .resume(2))
+    }
+
+    @Test func swappingSizesLimitsAsIfMemoryWereShort() {
+        let config = ThrottleConfig()
+        #expect(Throttle.limits(memoryLevel: 40, cpuCount: 8, config: config) == JobLimits())
+        #expect(Throttle.limits(memoryLevel: 40, pressure: .swapping, cpuCount: 8, config: config) == JobLimits(jobs: 2, nodeHeapMB: 2048))
+    }
 }

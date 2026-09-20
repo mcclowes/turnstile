@@ -13,15 +13,17 @@ public struct JobLimits: Codable, Equatable, Sendable {
 
 public enum Throttle {
     /// Parallelism and heap sized from memory pressure. Nothing is injected at normal levels; macOS idles around 30–50% free.
-    public static func limits(memoryLevel: Int, cpuCount: Int, config: ThrottleConfig) -> JobLimits {
+    /// A swapping machine gets the tightest limits whatever the level reads, since the level is what swapping distorts.
+    public static func limits(memoryLevel: Int, pressure: MemoryPressure = .normal, cpuCount: Int, config: ThrottleConfig) -> JobLimits {
         guard config.inject ?? true else { return JobLimits() }
+        let level = pressure > .normal ? Swift.min(memoryLevel, 14) : memoryLevel
         var jobs = config.jobs
         if jobs == nil {
-            if memoryLevel < 15 { jobs = max(1, cpuCount / 4) }
-            else if memoryLevel < 25 { jobs = max(1, cpuCount / 2) }
+            if level < 15 { jobs = max(1, cpuCount / 4) }
+            else if level < 25 { jobs = max(1, cpuCount / 2) }
         }
         var heap = config.nodeHeap.map { Int($0 / Bytes.mb) }
-        if heap == nil && memoryLevel < 15 { heap = 2048 }
+        if heap == nil && level < 15 { heap = 2048 }
         return JobLimits(jobs: jobs, nodeHeapMB: heap)
     }
 
@@ -122,14 +124,18 @@ public enum Pressure {
 
     /// Pauses the newest job when memory runs low, keeping at least one running so work progresses.
     /// Resumes the oldest paused job once pressure clears, leaving jobs a person paused alone.
-    public static func action(memoryLevel: Int, jobs: [Candidate], pauseBelow: Int, resumeAbove: Int) -> Action? {
+    ///
+    /// Swapping counts as low whatever the level reads: the kernel pages out to hold that level up,
+    /// so on a machine that is already swapping it never falls to `pauseBelow`. Resuming needs both
+    /// a recovered level and quiet swap, unless nothing else is running and waiting can't help.
+    public static func action(memoryLevel: Int, pressure: MemoryPressure = .normal, jobs: [Candidate], pauseBelow: Int, resumeAbove: Int) -> Action? {
         let running = jobs.filter { !$0.paused }
-        if memoryLevel < pauseBelow, running.count > 1,
+        if memoryLevel < pauseBelow || pressure > .normal, running.count > 1,
            let newest = running.filter(\.pausable).max(by: { $0.startedAt < $1.startedAt }),
            newest.id != running.min(by: { $0.startedAt < $1.startedAt })?.id {
             return .pause(newest.id)
         }
-        if memoryLevel >= resumeAbove || running.isEmpty,
+        if (memoryLevel >= resumeAbove && pressure == .normal) || running.isEmpty,
            let oldest = jobs.filter({ $0.paused && !$0.manual }).min(by: { $0.startedAt < $1.startedAt }) {
             return .resume(oldest.id)
         }

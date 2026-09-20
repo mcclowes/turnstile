@@ -170,5 +170,46 @@ struct SchedulerTests {
             == "waiting for memory, needs ~4 GB, ~512 MB spare (running: a; b; +1 more)")
         #expect(Scheduler.message(for: .slots(.test, running: ["other-repo swift test, ~4 GB"]))
             == "waiting for a test slot (running: other-repo swift test, ~4 GB)")
+        #expect(Scheduler.message(for: .swapping(running: ["a", "b"]))
+            == "waiting, the machine is swapping (running: a; b)")
+    }
+
+    /// The bug in #17: free memory looks ample because the kernel is swapping to keep the level up,
+    /// so the scheduler admits job after job into room that isn't there.
+    @Test func nothingIsAdmittedWhileTheMachineSwaps() {
+        let running = [RunningJob(id: 9, resourceClass: .compile, estimate: 2 * gb, footprint: 2 * gb, label: "r")]
+        let queue = [queued(1, gb: 2), queued(2, .test, gb: 1), queued(3, .browser, gb: 1)]
+        let admitted = Scheduler.decide(queue: queue, running: running, freeMemory: 12 * gb, policy: policy)
+        #expect(admitted.admit == [1, 2, 3])
+
+        let decision = Scheduler.decide(queue: queue, running: running, freeMemory: 12 * gb, policy: policy, pressure: .swapping)
+        #expect(decision.admit.isEmpty)
+        #expect(decision.waiting[1] == .swapping(running: ["r"]))
+        #expect(decision.waiting[3] == .swapping(running: ["r"]))
+    }
+
+    /// Small jobs slip past a memory-blocked job, but not past a swapping machine.
+    @Test func swappingStopsBackfillToo() {
+        var backfill = policy
+        backfill.backfillMax = gb
+        let running = [RunningJob(id: 9, resourceClass: .compile, estimate: 2 * gb, footprint: 2 * gb, label: "r")]
+        let queue = [queued(1, gb: 6, at: 100), queued(2, .test, gb: 1, at: 110)]
+        let decision = Scheduler.decide(queue: queue, running: running, freeMemory: 7 * gb, policy: backfill, now: 130, pressure: .swapping)
+        #expect(decision.admit.isEmpty)
+        #expect(decision.skipped.isEmpty)
+    }
+
+    /// Waiting can't free memory when nothing is running, and a held job stays held either way.
+    @Test func swappingStillLetsAnIdleMachineStart() {
+        let queue = [queued(1, gb: 12), queued(2, held: true)]
+        let decision = Scheduler.decide(queue: queue, running: [], freeMemory: 3 * gb, policy: policy, pressure: .critical)
+        #expect(decision.admit == [1])
+        #expect(decision.waiting[2] == .held)
+    }
+
+    @Test func aHeldJobReadsAsHeldWhileSwapping() {
+        let running = [RunningJob(id: 9, resourceClass: .compile, estimate: 2 * gb, footprint: 2 * gb, label: "r")]
+        let decision = Scheduler.decide(queue: [queued(1, held: true)], running: running, freeMemory: 12 * gb, policy: policy, pressure: .swapping)
+        #expect(decision.waiting[1] == .held)
     }
 }

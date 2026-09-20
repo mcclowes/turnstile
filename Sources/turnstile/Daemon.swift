@@ -146,6 +146,8 @@ final class Daemon {
     var listener: DispatchSourceRead?
     var timer: DispatchSourceTimer?
     var memoryLevel = 100
+    var memory = MemoryPressureTracker()
+    var memoryPressure = MemoryPressure.normal
     /// launchd's children, and who created them. Nil when unreadable (another user's).
     var orphanLineage: [pid_t: ProcessTree.Lineage?] = [:]
     var ticks = 0
@@ -193,7 +195,7 @@ final class Daemon {
         store.prune(olderThan: Daemon.now() - 30 * 86400)
         cleanLogs()
         reloadConfig()
-        memoryLevel = SystemMemory.level()
+        readMemory()
         listen()
 
         let timer = DispatchSource.makeTimerSource(queue: .main)
@@ -545,7 +547,8 @@ final class Daemon {
             },
             freeMemory: SystemMemory.free(level: memoryLevel),
             policy: policy,
-            now: clock
+            now: clock,
+            pressure: memoryPressure
         )
         let now = Daemon.now()
         let tick = Daemon.clock()
@@ -574,7 +577,7 @@ final class Daemon {
         job.ceiling = Pressure.ceiling(usualPeak: job.usualPeak, physicalMemory: physical, config: job.throttle)
         var reply = Message(type: "admitted")
         reply.job = job.id
-        reply.limits = Throttle.limits(memoryLevel: memoryLevel, cpuCount: cpuCount, config: job.throttle)
+        reply.limits = Throttle.limits(memoryLevel: memoryLevel, pressure: memoryPressure, cpuCount: cpuCount, config: job.throttle)
         let skipped = blocker.map { ", ahead of \($0), which is waiting for memory" } ?? ""
         reply.text = "starting after \(formatDuration(now - job.queuedAt))\(skipped)"
         job.owner?.send(reply)
@@ -583,9 +586,21 @@ final class Daemon {
 
     // MARK: Monitoring
 
+    /// The free-memory level plus what swap is doing, which is what tells us whether that level means anything.
+    func readMemory() {
+        memoryLevel = SystemMemory.level()
+        memory.record(SystemMemory.sample(at: Daemon.clock()))
+        let pressure = memory.pressure
+        if pressure != memoryPressure {
+            let swap = memory.latest.map { Bytes.format($0.swapUsed) } ?? "?"
+            log("memory is \(pressure), \(memoryLevel)% free, \(swap) swapped")
+            memoryPressure = pressure
+        }
+    }
+
     func tick() {
         let now = Daemon.clock()
-        memoryLevel = SystemMemory.level()
+        readMemory()
         ticks += 1
         if ticks % 5 == 0 { reloadConfig() }
 
@@ -694,18 +709,20 @@ final class Daemon {
             Pressure.Candidate(id: $0.id, startedAt: $0.admittedTick ?? 0, paused: $0.paused, pausable: $0.pausable, manual: $0.pausedByUser)
         }
         let action = Pressure.action(
-            memoryLevel: memoryLevel, jobs: candidates,
+            memoryLevel: memoryLevel, pressure: memoryPressure, jobs: candidates,
             pauseBelow: config.machine.pauseBelowPercent, resumeAbove: config.machine.resumeAbovePercent
         )
+        let swapping = memoryPressure > .normal
         switch action {
         case let .pause(id)?:
             guard let job = jobs[id] else { return }
             job.paused = true
             ProcessTree.signal(job.tree, SIGSTOP)
             lastPressureAction = now
-            log("#\(id) paused at \(memoryLevel)% free")
+            log("#\(id) paused at \(memoryLevel)% free\(swapping ? ", machine swapping" : "")")
+            let why = swapping ? "the machine is swapping" : "memory is low (\(memoryLevel)% free)"
             for connection in job.connections {
-                connection.send(.notice("paused, memory is low (\(memoryLevel)% free); resumes when it recovers"))
+                connection.send(.notice("paused, \(why); resumes when it recovers"))
             }
         case let .resume(id)?:
             guard let job = jobs[id] else { return }

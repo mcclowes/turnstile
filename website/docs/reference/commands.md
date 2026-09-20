@@ -15,6 +15,8 @@ Jobs can be named by queue number, pid, or name.
 | `turnstile status [--json] [--watch]` | Running and queued jobs, memory, and recent runs. `--watch` redraws every second |
 | `turnstile top` | Interactive view of the queue. Select a job with ↑↓ or `j`/`k`, then `b` bump, `p` pause/resume, `h` hold/release, `x` kill, `q` quit |
 
+![turnstile status with two running jobs and recent runs](/img/screenshots/status.webp)
+
 ## Controlling jobs
 
 | Command | What it does |

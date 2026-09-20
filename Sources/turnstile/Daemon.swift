@@ -923,7 +923,9 @@ final class Daemon {
                 paused: job.paused, clientPid: job.clientPid, childPid: job.childPid, queuedAt: job.queuedAt,
                 startedAt: job.startedAt, waiting: job.lastWait, joiners: job.joiners.count,
                 held: job.held, pausedBy: job.paused ? (job.pausedByUser ? "you" : "memory") : nil,
-                estimateSource: job.estimateSource
+                estimateSource: job.estimateSource,
+                tree: job.state == .queued ? nil : job.tree,
+                escapees: job.escapees.isEmpty ? nil : job.escapees.sorted()
             )
         }
         var limits: [String: Int] = [:]

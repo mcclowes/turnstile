@@ -26,6 +26,61 @@ struct MenuBarStateTests {
         #expect(MenuBarState.indicator(snapshot(running: [job(1, pausedBy: "memory")])).symbol == MenuBarState.pressureSymbol)
     }
 
+    @Test func iconOnlyTakesColourWhenSomethingWantsAttention() {
+        #expect(MenuBarState.indicator(nil).tone == .neutral)
+        #expect(MenuBarState.indicator(snapshot(running: [job(1)])).tone == .neutral)
+        #expect(MenuBarState.indicator(snapshot(running: [job(1, pausedBy: "you")])).tone == .warning)
+        #expect(MenuBarState.indicator(snapshot(level: 10)).tone == .danger)
+    }
+
+    @Test func memoryTurnsAmberBeforeItTurnsRed() {
+        #expect(MenuBarState.memoryTone(60) == .good)
+        #expect(MenuBarState.memoryTone(MenuBarState.tightMemoryPercent) == .good)
+        #expect(MenuBarState.memoryTone(MenuBarState.tightMemoryPercent - 1) == .warning)
+        #expect(MenuBarState.memoryTone(MenuBarState.lowMemoryPercent - 1) == .danger)
+    }
+
+    @Test func jobsReadTheirState() {
+        #expect(MenuBarState.badge(for: job(1)) == .init("play.fill", .good))
+        #expect(MenuBarState.badge(for: job(1, pausedBy: "you")).tone == .neutral)
+        #expect(MenuBarState.badge(for: job(1, pausedBy: "memory")).tone == .warning)
+        #expect(MenuBarState.badge(for: job(2, state: "queued", held: true)) == .init("hand.raised.fill", .warning))
+        #expect(MenuBarState.stateText(for: job(1)) == "Running")
+        #expect(MenuBarState.stateText(for: job(1, pausedBy: "memory")) == "Paused for memory")
+        #expect(MenuBarState.stateText(for: job(2, state: "queued")) == "Queued")
+        #expect(MenuBarState.stateText(for: job(2, state: "queued", held: true)) == "Held")
+    }
+
+    @Test func memoryBarOnlyAppliesToWhatIsRunning() {
+        var running = job(1)
+        running.estimate = 4 * Bytes.gb
+        running.footprint = Bytes.gb
+        #expect(MenuBarState.memoryFraction(for: running) == 0.25)
+        #expect(MenuBarState.footprintTone(for: running) == .good)
+        #expect(MenuBarState.memoryText(for: running) == "1 GB of ~4 GB")
+
+        running.footprint = 6 * Bytes.gb
+        #expect(MenuBarState.memoryFraction(for: running) == 1)
+        #expect(MenuBarState.footprintTone(for: running) == .warning)
+
+        var queued = job(2, state: "queued")
+        queued.estimate = 2 * Bytes.gb
+        #expect(MenuBarState.memoryFraction(for: queued) == nil)
+        #expect(MenuBarState.memoryText(for: queued) == "~2 GB expected")
+    }
+
+    @Test func historyReadsItsOutcome() {
+        #expect(MenuBarState.badge(for: entry(1, "ok")).tone == .good)
+        #expect(MenuBarState.badge(for: entry(1, "killed")).tone == .danger)
+        #expect(MenuBarState.badge(for: entry(1, "signaled")).tone == .danger)
+        #expect(MenuBarState.badge(for: entry(1, "lost")).tone == .warning)
+        #expect(MenuBarState.badge(for: entry(1, "cancelled")).tone == .neutral)
+        #expect(MenuBarState.detail(for: entry(1, "ok")) == "ok · 3s · peak 7 GB")
+        var failed = entry(1, "failed")
+        failed.exitCode = 2
+        #expect(MenuBarState.detail(for: failed).hasPrefix("failed (2) · "))
+    }
+
     @Test func actionsFitTheJobsState() {
         #expect(MenuBarState.actions(for: job(1)).map(\.message) == ["bump", "pause", "kill"])
         #expect(MenuBarState.actions(for: job(1, pausedBy: "memory")).map(\.message) == ["bump", "resume", "kill"])

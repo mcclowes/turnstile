@@ -1,14 +1,15 @@
 #!/bin/bash
 # Releases the version in Sources/TurnstileCore/Paths.swift, by hand, from this Mac: tests, builds the universal CLI
-# tarball and the notarized Turnstile.app, tags this repo, publishes both to a release on mcclowes/homebrew-turnstile,
-# and points the tap's formula and cask at them.
+# tarball and the notarized Turnstile.app, tags this repo, publishes both to a release here and on
+# mcclowes/homebrew-turnstile, with notes from CHANGELOG.md, and points the tap's formula and cask at them.
 #
-# Usage: scripts/release.sh    after committing the version bump
+# Usage: scripts/release.sh    after committing the version bump, with CHANGELOG.md's "Unreleased" renamed to it
 #
 # Env: as for scripts/package.sh (CODESIGN_IDENTITY, NOTARY_PROFILE).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+REPO=mcclowes/turnstile
 TAP=mcclowes/homebrew-turnstile
 VERSION="$(sed -n 's/.*public static let version = "\(.*\)"/\1/p' Sources/TurnstileCore/Paths.swift)"
 TAG="v$VERSION"
@@ -20,7 +21,11 @@ fail() { echo "release.sh: $*" >&2; exit 1; }
 
 [ -z "$(git status --porcelain)" ] || fail "the tree isn't clean; commit or remove changes first"
 git rev-parse -q --verify "refs/tags/$TAG" >/dev/null && fail "$TAG is already tagged; bump Turnstile.version first"
-gh release view "$TAG" --repo "$TAP" >/dev/null 2>&1 && fail "$TAP already has a $TAG release"
+for repo in "$TAP" "$REPO"; do
+  gh release view "$TAG" --repo "$repo" >/dev/null 2>&1 && fail "$repo already has a $TAG release"
+done
+CHANGES="$(awk -v v="## $VERSION" '$0 == v {on=1; next} /^## / {on=0} on' CHANGELOG.md | sed '/./,$!d')"
+[ -n "$CHANGES" ] || fail "CHANGELOG.md has no \"## $VERSION\" section"
 
 swift test
 ./scripts/e2e.sh
@@ -44,15 +49,18 @@ app_sha="$(shasum -a 256 "$ZIP" | cut -d' ' -f1)"
 git tag -a "$TAG" -m "turnstile $VERSION"
 git push origin "$TAG"
 
-gh release create "$TAG" "$TARBALL" "$DIST/Turnstile-$VERSION.zip" "$DIST/SHA256SUMS" \
-  --repo "$TAP" \
-  --title "turnstile $VERSION" \
-  --notes "Universal CLI and the signed, notarized menu bar app. Changes: https://github.com/mcclowes/turnstile/compare/$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || echo main)...$TAG
+NOTES="$CHANGES
+
+Changes: https://github.com/$REPO/compare/$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || echo main)...$TAG
 
 \`\`\`sh
 brew install mcclowes/turnstile/turnstile                                # CLI only
 brew install mcclowes/turnstile/turnstile mcclowes/turnstile/turnstile-app  # CLI + menu bar app
 \`\`\`"
+for repo in "$TAP" "$REPO"; do
+  gh release create "$TAG" "$TARBALL" "$DIST/Turnstile-$VERSION.zip" "$DIST/SHA256SUMS" \
+    --repo "$repo" --title "turnstile $VERSION" --notes "$NOTES"
+done
 
 tap="$(mktemp -d)/homebrew-turnstile"
 gh repo clone "$TAP" "$tap" -- --quiet

@@ -17,6 +17,19 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Alternatives',
+      collapsed: false,
+      items: [
+        'compare/overview',
+        'compare/orchestrators',
+        'compare/containers',
+        'compare/cloud',
+        'compare/shell-tools',
+        'compare/build-tools',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Reference',
       collapsed: false,
       items: [

@@ -26,5 +26,6 @@ There's no project setup. Once it's installed, every repo, agent, and terminal o
 
 - [Install](./start/install.md) turnstile and check it's wired up.
 - Read [how it works](./concepts/how-it-works.md) to see what gets gated and why.
+- Already using worktrees, containers, or cloud agents? See [alternatives](./compare/overview.md).
 - Look up a [command](./reference/commands.md) or a [config key](./reference/configuration.md).
 - Something off? Start with [troubleshooting](./troubleshooting.md).

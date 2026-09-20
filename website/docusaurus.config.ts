@@ -49,6 +49,7 @@ const config: Config = {
           items: [
             {label: 'Install', to: '/install'},
             {label: 'How it works', to: '/how-it-works'},
+            {label: 'Alternatives', to: '/alternatives'},
           ],
         },
         {

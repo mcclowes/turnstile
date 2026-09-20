@@ -45,6 +45,19 @@ pass() { echo "ok   $1"; }
 fail() { echo "FAIL $1"; failures=$((failures + 1)); }
 check() { if eval "$2"; then pass "$1"; else fail "$1"; fi; }
 runs() { grep -cE "^run [0-9]+ $1" "$FAKE_RUNS"; }
+wait_for_job() {
+  local section="$1" project="$2" key="$3" state="${4:-}" i
+  for i in {1..100}; do
+    turnstile status --json | /usr/bin/python3 -c '
+import json, sys
+section, project, key, state = sys.argv[1:]
+jobs = json.load(sys.stdin).get(section, [])
+raise SystemExit(0 if any(j["project"] == project and j["key"] == key and (not state or j["state"] == state) for j in jobs) else 1)
+' "$section" "$project" "$key" "$state" && return 0
+    sleep 0.05
+  done
+  return 1
+}
 cleanup() { turnstile stop > /dev/null 2>&1; rm -rf "$T"; }
 trap cleanup EXIT
 
@@ -272,11 +285,10 @@ check "a suspended client's slot is reclaimed" '[ $elapsed -ge 5 ] && [ $elapsed
 
 # `kill` drops a queued job and stops a running one; both callers are told not to retry.
 (cd a && FAKE_SLEEP=6 swift test > "$T/k1.out" 2>&1; echo $? > "$T/k1.code") &
-sleep 0.7
+wait_for_job running a "swift test"
 (cd b && swift test > "$T/k2.out" 2>&1; echo $? > "$T/k2.code") &
-sleep 0.7
+wait_for_job queued b "swift test"
 queued_out="$(turnstile kill 'b swift test')"
-sleep 0.3
 running_out="$(turnstile kill 'a swift test')"
 wait
 check "kill drops a queued job" '[ "$(cat "$T/k2.code")" = 125 ] && grep -q "cancelled by you, don.t retry" "$T/k2.out" && echo "$queued_out" | grep -q "cancelled queued"'
@@ -308,7 +320,7 @@ check "manual pause holds until resumed" '[ -z "$early" ] && echo "$paused_json"
 
 # `turnstile top` drives the same controls from a terminal, and quits cleanly.
 cat > "$T/top.py" <<'EOF'
-import os, pty, sys, time, select, subprocess
+import json, os, pty, sys, time, select, subprocess
 pid, fd = pty.fork()
 if pid == 0:
     os.execvp("turnstile", ["turnstile", "top"])
@@ -321,23 +333,41 @@ def pump(seconds):
         if r:
             try: out += os.read(fd, 65536)
             except OSError: return
+def pump_until(needle, timeout=5):
+    end = time.time() + timeout
+    while needle not in out and time.time() < end:
+        pump(0.1)
 def status():
-    return subprocess.run(["turnstile", "status", "--json"], capture_output=True, text=True).stdout
-pump(1.5)
-os.write(fd, b"p"); pump(1.5)
-paused = '"pausedBy" : "you"' in status()
-os.write(fd, b"x"); pump(0.5)
+    return json.loads(subprocess.run(["turnstile", "status", "--json"], capture_output=True, text=True).stdout)
+def wait_for_job(predicate, timeout=5):
+    end = time.time() + timeout
+    while time.time() < end:
+        if any(predicate(job) for job in status().get("running", [])): return True
+        time.sleep(0.05)
+    return False
+def wait_for_no_job(project, key, timeout=5):
+    end = time.time() + timeout
+    while time.time() < end:
+        jobs = status().get("running", [])
+        if not any(job["project"] == project and job["key"] == key for job in jobs): return True
+        time.sleep(0.05)
+    return False
+pump_until(b"a swift build")
+os.write(fd, b"p")
+paused = wait_for_job(lambda job: job["project"] == "a" and job["key"] == "swift build" and job.get("pausedBy") == "you")
+os.write(fd, b"x"); pump_until(b"? y/n")
 prompted = b"? y/n" in out
-os.write(fd, b"y"); pump(2)
+os.write(fd, b"y")
+killed = wait_for_no_job("a", "swift build")
 os.write(fd, b"q"); pump(0.5)
 _, code = os.waitpid(pid, 0)
-print("paused=%s prompted=%s exit=%d restored=%s" % (paused, prompted, os.WEXITSTATUS(code), out.rstrip().endswith(b"\x1b[?1049l")))
+print("paused=%s prompted=%s killed=%s exit=%d restored=%s" % (paused, prompted, killed, os.WEXITSTATUS(code), out.rstrip().endswith(b"\x1b[?1049l")))
 EOF
 (cd a && FAKE_SLEEP=8 swift build > "$T/top.out" 2>&1; echo $? > "$T/top.code") &
-sleep 0.7
+wait_for_job running a "swift build"
 out="$(/usr/bin/python3 "$T/top.py")"
 wait
-check "top pauses and kills the selected job, then restores the terminal" '[ "$out" = "paused=True prompted=True exit=0 restored=True" ] && [ "$(cat "$T/top.code")" = 125 ]'
+check "top pauses and kills the selected job, then restores the terminal" '[ "$out" = "paused=True prompted=True killed=True exit=0 restored=True" ] && [ "$(cat "$T/top.code")" = 125 ]'
 
 # A deliberate stop releases waiting jobs to run ungated.
 (cd a && FAKE_SLEEP=3 swift test > /dev/null 2>&1) &

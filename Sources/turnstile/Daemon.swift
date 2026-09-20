@@ -733,7 +733,7 @@ final class Daemon {
         }
     }
 
-    /// Children of launchd that a running job created, found by their creator's unique id, which survives reparenting and setsid.
+    /// Children of launchd previously sampled inside a running job, matched by their stable process identity.
     func escapedRoots(parents: [pid_t: pid_t], active: [Job]) -> [Int64: [pid_t]] {
         var owners: [UInt64: Int64] = [:]
         for job in active { for id in job.lineage { owners[id] = job.id } }
@@ -747,10 +747,12 @@ final class Daemon {
             if let cached = orphanLineage[pid] {
                 lineage = cached
             } else {
-                lineage = ProcessTree.lineage(pid)
+                lineage = probe.lineage(pid)
                 orphanLineage[pid] = lineage
             }
-            if let creator = lineage?.creator, let owner = owners[creator] { result[owner, default: []].append(pid) }
+            if let lineage, let owner = owners[lineage.id] ?? owners[lineage.creator] {
+                result[owner, default: []].append(pid)
+            }
         }
         return result
     }

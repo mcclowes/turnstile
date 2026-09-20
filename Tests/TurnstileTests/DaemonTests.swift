@@ -528,6 +528,20 @@ struct DaemonPressureTests {
         #expect(harness.daemon.store.escapes(since: 0).isEmpty)
     }
 
+    @Test("A sampled child stays attached to its job after launchd adopts it", .bug(id: 49))
+    func findsAReparentedProcessByItsOwnIdentity() throws {
+        let harness = try DaemonHarness()
+        let client = FakeClient()
+        let id = try #require(harness.request(client))
+        let job = try #require(harness.job(id))
+        job.lineage = [9_001]
+        harness.daemon.probe.lineage = { pid in
+            pid == 500 ? ProcessTree.Lineage(id: 9_001, creator: 1) : nil
+        }
+
+        #expect(harness.daemon.escapedRoots(parents: [500: 1], active: [job]) == [id: [500]])
+    }
+
     struct Fake {
         var pid: pid_t
         var parent: pid_t

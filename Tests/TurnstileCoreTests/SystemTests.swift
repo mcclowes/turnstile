@@ -53,25 +53,57 @@ struct SystemTests {
         ProcessTree.signal(tree, SIGKILL)
     }
 
-    @Test
-    func lineageSurvivesReparentingAndSetsid() throws {
-        let pidFile = FileManager.default.temporaryDirectory.appendingPathComponent("lineage-\(UUID().uuidString)").path
-        defer { try? FileManager.default.removeItem(atPath: pidFile) }
+    @Test("A process keeps its identity after setsid and reparenting", .bug(id: 49))
+    func lineageIdentitySurvivesReparentingAndSetsid() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("lineage-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pidsFile = directory.appendingPathComponent("pids").path
+        let readyFile = directory.appendingPathComponent("ready").path
+        let releaseFile = directory.appendingPathComponent("release").path
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        // The inner shell starts a setsid'd sleeper and exits, so the sleeper is reparented to launchd.
-        process.arguments = ["-c", "sh -c '/usr/bin/python3 -c \"import os, time; os.setsid(); time.sleep(5)\" & echo $$ $! > \(pidFile); sleep 0.5'; sleep 5"]
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        process.arguments = ["-c", """
+            import os, time
+            inner = os.fork()
+            if inner == 0:
+                sleeper = os.fork()
+                if sleeper == 0:
+                    os.setsid()
+                    open('\(readyFile)', 'w').write('ready')
+                    time.sleep(5)
+                    os._exit(0)
+                open('\(pidsFile)', 'w').write(f'{os.getpid()} {sleeper}')
+                while not os.path.exists('\(releaseFile)'):
+                    time.sleep(0.01)
+                os._exit(0)
+            time.sleep(5)
+            """]
         try process.run()
         defer { process.terminate() }
-        usleep(300_000)
-        let pids = try String(contentsOfFile: pidFile, encoding: .utf8).split(separator: " ").compactMap { pid_t($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+
+        func waitUntil(_ condition: () -> Bool) -> Bool {
+            let deadline = Date(timeIntervalSinceNow: 2)
+            while Date() < deadline {
+                if condition() { return true }
+                usleep(10_000)
+            }
+            return false
+        }
+
+        try #require(waitUntil { FileManager.default.fileExists(atPath: readyFile) })
+        let pids = try String(contentsOfFile: pidsFile, encoding: .utf8).split(separator: " ").compactMap { pid_t($0) }
+        try #require(pids.count == 2)
         let (inner, sleeper) = (pids[0], pids[1])
         defer { kill(sleeper, SIGKILL) }
         let innerLineage = try #require(ProcessTree.lineage(inner))
+        let sleeperLineage = try #require(ProcessTree.lineage(sleeper))
         #expect(ProcessTree.lineage(process.processIdentifier)?.id == innerLineage.creator)
-        usleep(900_000)
-        #expect(ProcessTree.parents()[sleeper] == 1)
-        #expect(ProcessTree.lineage(sleeper)?.creator == innerLineage.id)
+        #expect(sleeperLineage.creator == innerLineage.id)
+
+        try "release".write(toFile: releaseFile, atomically: true, encoding: .utf8)
+        #expect(waitUntil { ProcessTree.parents()[sleeper] == 1 })
+        #expect(ProcessTree.lineage(sleeper)?.id == sleeperLineage.id)
     }
 
     @Test func descendantsOfAMissingProcessIsEmpty() {

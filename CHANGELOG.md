@@ -2,7 +2,7 @@
 
 Notable changes to turnstile. Versions follow [semantic versioning](https://semver.org/).
 
-## Unreleased
+## 0.4.0
 
 ### Added
 
@@ -12,6 +12,7 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 - The daemon learns each command's run time (the median of its last five successful runs, not counting time paused), and waits say roughly when a job should start.
 - `scripts/bench.sh` and `scripts/history-report.sh`, for measuring turnstile's effect on a machine.
 - A docs site at [turnstile.marginalutility.dev](https://turnstile.marginalutility.dev).
+- Menu bar settings for choosing which command shims Turnstile installs.
 
 ### Changed
 
@@ -20,6 +21,13 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 - Automatic memory pauses apply to compile jobs by default. Test and browser runners keep running because their wall-clock deadlines continue while stopped; projects can still opt in.
 - A command's first run in a project starts from its median peak in other projects, and release and debug builds keep separate histories.
 - Installing the menu bar app means naming the formula alongside the cask, so Homebrew trusts the tap.
+- Swap growth now stops admissions and pauses eligible work even when macOS's free-memory level looks healthy.
+- Runaways are left alone while memory is plentiful, then paused before Turnstile kills them under sustained pressure.
+
+### Fixed
+
+- Escaped child processes stay attached to their job after launchd adopts them, so pause and kill still cover the whole process tree.
+- Shell setup, sandbox detection, and diagnostics catch more paths that could bypass the shims.
 
 ## 0.3.1
 

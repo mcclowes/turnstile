@@ -151,6 +151,32 @@ public final class Store {
         return result
     }
 
+    /// Every finished job since `cutoff`, for the history summary, optionally narrowed to one project.
+    /// `ran_for` excludes time paused, and is missing from jobs a restarted daemon adopted, so those
+    /// fall back to wall-clock time.
+    public func history(since cutoff: Double, root: String?) -> [HistoryRow] {
+        var rows: [HistoryRow] = []
+        var bindings: [Any?] = [cutoff]
+        if let root { bindings.append(root) }
+        query("""
+            SELECT root, key, agent, outcome, peak, COALESCE(ran_for, finished_at - started_at),
+                   started_at - queued_at, finished_at
+            FROM jobs WHERE state = 'finished' AND finished_at >= ?\(root == nil ? "" : " AND root = ?")
+            """, bindings) { row in
+            rows.append(HistoryRow(
+                root: row.text(0) ?? "",
+                key: row.text(1) ?? "",
+                agent: (row.int(2) ?? 0) != 0,
+                outcome: row.text(3) ?? "",
+                peak: row.int(4).map { UInt64(max(0, $0)) },
+                duration: row.double(5),
+                wait: row.double(6),
+                finishedAt: row.double(7) ?? 0
+            ))
+        }
+        return rows
+    }
+
     public func prune(olderThan cutoff: Double) {
         run("DELETE FROM jobs WHERE state = 'finished' AND finished_at < ?", [cutoff])
     }

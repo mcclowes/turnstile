@@ -9,8 +9,9 @@ public struct HistoryRow: Equatable, Sendable {
     public var peak: UInt64?
     public var duration: Double?
     public var wait: Double?
+    public var finishedAt: Double
 
-    public init(root: String, key: String, agent: Bool, outcome: String, peak: UInt64?, duration: Double?, wait: Double?) {
+    public init(root: String, key: String, agent: Bool, outcome: String, peak: UInt64?, duration: Double?, wait: Double?, finishedAt: Double) {
         self.root = root
         self.key = key
         self.agent = agent
@@ -18,6 +19,7 @@ public struct HistoryRow: Equatable, Sendable {
         self.peak = peak
         self.duration = duration
         self.wait = wait
+        self.finishedAt = finishedAt
     }
 }
 
@@ -26,17 +28,21 @@ public struct CommandSummary: Codable, Equatable, Sendable {
     public var project: String
     public var key: String
     public var runs: Int
-    public var medianPeak: UInt64?
-    public var maxPeak: UInt64?
-    public var medianDuration: Double?
+    /// What the next run of this command will be admitted against: the worst peak of its last five runs,
+    /// which is the figure the scheduler itself uses. Nil until one of them recorded a peak.
+    public var estimate: UInt64?
+    /// The worst peak anywhere in the window, which is what a run can still surprise the machine with.
+    public var worstPeak: UInt64?
+    /// The median of the last five successful runs, as the scheduler reads it.
+    public var usualDuration: Double?
 
-    public init(project: String, key: String, runs: Int, medianPeak: UInt64?, maxPeak: UInt64?, medianDuration: Double?) {
+    public init(project: String, key: String, runs: Int, estimate: UInt64?, worstPeak: UInt64?, usualDuration: Double?) {
         self.project = project
         self.key = key
         self.runs = runs
-        self.medianPeak = medianPeak
-        self.maxPeak = maxPeak
-        self.medianDuration = medianDuration
+        self.estimate = estimate
+        self.worstPeak = worstPeak
+        self.usualDuration = usualDuration
     }
 }
 
@@ -80,8 +86,9 @@ public struct HistorySummary: Codable, Equatable, Sendable {
         self.more = more
     }
 
-    /// Groups by project and command, the same pair the scheduler estimates from, so the numbers here
-    /// are the ones it works off. Ordered by the memory a command needs, since that's what holds a queue up.
+    /// Groups by project and command, the same pair the scheduler estimates from, and works each group out
+    /// the way `Store.usualPeak` and `Store.usualDuration` do, so the table is what admission will actually use.
+    /// Ordered by the memory a command needs, since that's what holds a queue up.
     public static func summarize(_ rows: [HistoryRow], days: Int, limit: Int) -> HistorySummary {
         var outcomes: [String: Int] = [:]
         var grouped: [String: [HistoryRow]] = [:]
@@ -97,19 +104,23 @@ public struct HistorySummary: Codable, Equatable, Sendable {
         }
 
         var commands = grouped.values.map { group -> CommandSummary in
-            let peaks = group.compactMap(\.peak).filter { $0 > 0 }
-            let durations = group.compactMap(\.duration).filter { $0 > 0 }
+            let newestFirst = group.sorted { $0.finishedAt > $1.finishedAt }
+            let peaks = newestFirst.filter { ($0.peak ?? 0) > 0 }
+            let times = newestFirst.filter { $0.outcome == "ok" && ($0.duration ?? 0) > 0 }
             return CommandSummary(
                 project: projectName(group[0].root),
                 key: group[0].key,
                 runs: group.count,
-                medianPeak: median(peaks.map(Double.init)).map { UInt64($0) },
-                maxPeak: peaks.max(),
-                medianDuration: median(durations)
+                estimate: peaks.filter { $0.outcome == "ok" || $0.outcome == "failed" }.prefix(5).compactMap(\.peak).max(),
+                worstPeak: peaks.compactMap(\.peak).max(),
+                usualDuration: median(times.prefix(5).compactMap(\.duration))
             )
         }
-        commands.sort {
-            ($0.maxPeak ?? 0, $0.runs, $1.project) > ($1.maxPeak ?? 0, $1.runs, $0.project)
+        commands.sort { left, right in
+            if left.worstPeak != right.worstPeak { return (left.worstPeak ?? 0) > (right.worstPeak ?? 0) }
+            if left.runs != right.runs { return left.runs > right.runs }
+            if left.project != right.project { return left.project < right.project }
+            return left.key < right.key
         }
 
         return HistorySummary(
@@ -151,9 +162,10 @@ public enum HistoryFormatter {
     public static func render(_ summary: HistorySummary, here: String?) -> String {
         let scope = here.map { "in \(projectName($0))" } ?? "in \(summary.projects) project\(summary.projects == 1 ? "" : "s")"
         guard summary.jobs > 0 else {
-            return "history: nothing \(scope) in the last \(summary.days) days"
+            return "history: nothing ran\(here.map { " in \(projectName($0))" } ?? "") in the last \(summary.days) days"
         }
-        var lines = ["history: \(summary.jobs) jobs \(scope) over \(summary.days) days, \(summary.agentJobs) from agents"]
+        var lines = ["history: \(summary.jobs) job\(summary.jobs == 1 ? "" : "s") \(scope) over \(summary.days) days, "
+            + "\(summary.agentJobs) from agents"]
 
         lines.append("")
         lines.append("commands:")
@@ -180,15 +192,15 @@ public enum HistoryFormatter {
 
     private static func table(_ commands: [CommandSummary], showProject: Bool) -> [String] {
         guard !commands.isEmpty else { return ["  nothing has run long enough to measure"] }
-        var rows = [["project", "command", "runs", "median peak", "max peak", "median time"]]
+        var rows = [["project", "command", "runs", "estimate", "worst peak", "usual time"]]
         for command in commands {
             rows.append([
                 command.project,
                 command.key,
                 "\(command.runs)",
-                command.medianPeak.map(Bytes.format) ?? "-",
-                command.maxPeak.map(Bytes.format) ?? "-",
-                command.medianDuration.map(formatDuration) ?? "-",
+                command.estimate.map(Bytes.format) ?? "-",
+                command.worstPeak.map(Bytes.format) ?? "-",
+                command.usualDuration.map(formatDuration) ?? "-",
             ])
         }
         if !showProject { rows = rows.map { Array($0.dropFirst()) } }

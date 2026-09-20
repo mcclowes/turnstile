@@ -6,6 +6,7 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ### Added
 
+- `turnstile history` shows what the scheduler has learned: per project and command, the estimate the next run will be admitted against, the worst peak seen, and the usual run time, plus queue waits, merged runs, and outcomes. Takes `--here`, `--days`, `--limit`, and `--json`, and works with the daemon asleep.
 - Small jobs can start ahead of a job that's waiting for memory, for its first 2 minutes of waiting.
 - Jobs that should finish before a memory-blocked job could start go ahead of it, using learned run times.
 - The daemon learns each command's run time (the median of its last five successful runs, not counting time paused), and waits say roughly when a job should start.

@@ -12,6 +12,7 @@ enum CLI {
           turnstile init [--shell zsh|bash|fish] [--no-rc]   install shims and add them to PATH
           turnstile doctor                                   check the install, PATH, config, and daemon
           turnstile status [--json] [--watch]                running and queued jobs, memory, recent runs
+          turnstile history [--days 30] [--here] [--json]    what each command has cost, and how long jobs waited
           turnstile top                                      interactive view: select a job to bump, pause, hold, or kill
           turnstile bump <job>                               move a job (number, pid, or name) to the front
           turnstile kill <job>                               drop a queued job, or stop a running one
@@ -40,6 +41,7 @@ enum CLI {
         switch command {
         case "init": initialize(rest)
         case "status": status(rest)
+        case "history": history(rest)
         case "top": Top.main(rest)
         case "bump", "kill", "pause", "resume", "hold", "release": control(command, rest)
         case "run": run(rest)
@@ -263,6 +265,40 @@ enum CLI {
             return String(decoding: (try? encoder.encode(snapshot)) ?? Data(), as: UTF8.self)
         }
         return StatusFormatter.render(snapshot, now: Date().timeIntervalSince1970)
+    }
+
+    /// What the scheduler has learned: each command's memory and run time, and the queue waits behind them.
+    /// Read straight from the history, so it answers with the daemon asleep.
+    static func history(_ args: [String]) -> Never {
+        guard let days = number("--days", in: args, default: 30), let limit = number("--limit", in: args, default: 20) else {
+            warn("usage: turnstile history [--days 30] [--limit 20] [--here] [--json]")
+            exit(64)
+        }
+        let here = args.contains("--here") ? Workspace.root(of: FileManager.default.currentDirectoryPath) : nil
+        let json = args.contains("--json")
+        // No database at all means nothing has ever been gated, which is usually a PATH problem rather than
+        // an empty history. Tools still get the same shape, so a first run doesn't need a special case.
+        let store = FileManager.default.fileExists(atPath: paths.database) ? try? Store(path: paths.database) : nil
+        if store == nil && !json {
+            warn(StatusFormatter.nothingYet)
+            exit(1)
+        }
+        let rows = store?.history(since: Date().timeIntervalSince1970 - Double(days) * 86400, root: here) ?? []
+        let summary = HistorySummary.summarize(rows, days: days, limit: limit)
+        if json {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            print(String(decoding: (try? encoder.encode(summary)) ?? Data(), as: UTF8.self))
+        } else {
+            print(HistoryFormatter.render(summary, here: here))
+        }
+        exit(0)
+    }
+
+    static func number(_ name: String, in args: [String], default fallback: Int) -> Int? {
+        guard let text = option(name, in: args) else { return args.contains(name) ? nil : fallback }
+        guard let value = Int(text), value > 0 else { return nil }
+        return value
     }
 
     /// `release` on the command line is `unhold` on the wire, since the daemon already sends clients `release`.

@@ -52,6 +52,13 @@ public struct Workspace: Equatable, Sendable {
         return Workspace(root: root, fingerprint: digest)
     }
 
+    /// The worktree root that jobs from `cwd` are recorded under, without hashing the tree's contents.
+    public static func root(of cwd: String) -> String {
+        guard let top = git(["rev-parse", "--show-toplevel"], cwd: cwd),
+              let line = String(decoding: top, as: UTF8.self).split(separator: "\n").first else { return cwd }
+        return String(line)
+    }
+
     static func git(_ args: [String], cwd: String) -> Data? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")

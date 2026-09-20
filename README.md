@@ -55,6 +55,7 @@ More in [how it works](https://turnstile.marginalutility.dev/how-it-works), [sch
 | --- | --- |
 | `turnstile status [--watch]` | Running and queued jobs, memory, and recent runs |
 | `turnstile top` | Interactive queue: bump, pause, hold, or kill a job |
+| `turnstile history [--here]` | What each command is estimated to cost, what it really peaked at, and how long jobs waited |
 | `turnstile bump <job>` | Move a job to the front |
 | `turnstile doctor` | Check the install and daemon, with a fix for anything wrong |
 | `turnstile disable` / `enable` | Turn gating off and on for every shell |

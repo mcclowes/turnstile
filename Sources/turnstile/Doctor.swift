@@ -14,7 +14,7 @@ enum Doctor {
     }
 
     static func main(_ args: [String]) -> Never {
-        let findings = run()
+        let findings = run() + (args.contains("--shells") ? shells() : [])
         for finding in findings {
             let mark: String
             switch finding.level {
@@ -41,6 +41,7 @@ enum Doctor {
         findings += switches(paths: paths, environment: environment)
         findings += configuration()
         findings += daemon(paths: paths)
+        findings += ungated(paths: paths, environment: environment)
         findings += system(environment: environment, config: config)
         return findings
     }
@@ -129,6 +130,12 @@ enum Doctor {
     /// Starts the daemon if needed, so a broken daemon shows up here rather than on the next build.
     static func daemon(paths: Paths) -> [Finding] {
         guard let client = Client.connectOrStart(paths: paths) else {
+            if Sandbox.isActive {
+                return [Finding(
+                    level: .problem, topic: "daemon", text: "this shell is sandboxed and can't reach the daemon on \(paths.socket), so commands here run ungated",
+                    fix: "let the agent's sandbox connect to that unix socket (for Codex, that may mean network access), and run `turnstile doctor` once outside the sandbox to start the daemon"
+                )]
+            }
             return [Finding(level: .problem, topic: "daemon", text: "can't start or reach the daemon on \(paths.socket)", fix: "check \(paths.daemonLog); gated commands run ungated until this is fixed")]
         }
         guard let reply = client.roundTrip(Message(type: "status")), let status = reply.status else {
@@ -144,10 +151,79 @@ enum Doctor {
         return [Finding(level: .ok, topic: "daemon", text: "pid \(status.daemonPid), \(status.running.count) running, \(status.queued.count) queued")]
     }
 
+    /// `--shells`: the same PATH check in the other shells an agent harness might start, and in the
+    /// shell snapshot Claude Code replays, which keeps whatever PATH the session started with.
+    static func shells() -> [Finding] {
+        let environment = ProcessInfo.processInfo.environment
+        let paths = Paths(environment: environment)
+        let tools = CLI.shimNames(config: Supervisor.loadConfig(environment: environment).machine)
+        // A bare environment, as a harness that starts its own shell has.
+        var bare = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": homeDirectory(environment)]
+        for key in ["USER", "LOGNAME", "TMPDIR", "LANG", "TERM", "SHELL", "TURNSTILE_HOME"] {
+            if let value = environment[key] { bare[key] = value }
+        }
+        var findings: [Finding] = []
+        for probe in ShellCheck.probes {
+            guard let output = ShellCheck.ask(probe, tools: tools, environment: bare) else {
+                findings.append(Finding(level: .note, topic: probe.name, text: "couldn't run \(probe.binary)"))
+                continue
+            }
+            let verdict = ShellCheck.verdict(output: output, shimsDir: paths.shims)
+            if verdict.shimmed.isEmpty && verdict.shadowed.isEmpty {
+                findings.append(Finding(level: .note, topic: probe.name, text: "this shell finds none of the shimmed tools, so nothing runs here anyway"))
+            } else if verdict.shadowed.isEmpty {
+                findings.append(Finding(level: .ok, topic: probe.name, text: "shims come first for all \(verdict.shimmed.count) tools"))
+            } else {
+                findings.append(Finding(
+                    level: .problem, topic: probe.name, text: "not gated in this shell: \(verdict.shadowed.joined(separator: ", "))",
+                    fix: "add turnstile's block to that shell's startup files: eval \"$(turnstile env)\", or run `turnstile init` from it"
+                ))
+            }
+        }
+        findings += snapshot(paths: paths, environment: environment)
+        return findings
+    }
+
+    /// Claude Code replays the shell snapshot it took when the session started, so a session older than
+    /// `turnstile init` runs everything with the old PATH until it's restarted.
+    static func snapshot(paths: Paths, environment: [String: String]) -> [Finding] {
+        let directory = homeDirectory(environment) + "/.claude/shell-snapshots"
+        guard let newest = ShellCheck.newestSnapshot(in: directory), let path = ShellCheck.snapshotPath(
+            (try? String(contentsOfFile: newest, encoding: .utf8)) ?? ""
+        ) else { return [] }
+        let dirs = path.split(separator: ":").map { Resolver.canonical(String($0)) }
+        let name = (newest as NSString).lastPathComponent
+        guard dirs.first == Resolver.canonical(paths.shims) else {
+            return [Finding(
+                level: .problem, topic: "harness", text: "the newest Claude Code shell snapshot (\(name)) doesn't start with \(paths.shims)",
+                fix: "start a new session; the one that took this snapshot runs everything ungated"
+            )]
+        }
+        return [Finding(level: .ok, topic: "harness", text: "the newest Claude Code shell snapshot has the shims first")]
+    }
+
+    /// What ran without gating: shims that failed open, and builds the daemon saw outside every job.
+    static func ungated(paths: Paths, environment: [String: String]) -> [Finding] {
+        let now = Date().timeIntervalSince1970
+        let home = homeDirectory(environment)
+        var findings: [Finding] = []
+        if let store = try? Store(path: paths.database),
+           let report = Escapes.report(store.escapes(since: now - 86400), home: home) {
+            findings.append(Finding(
+                level: .note, topic: "ungated", text: "ran outside turnstile in the last day: \(report)",
+                fix: "start these through a shimmed tool, or add one with `shims.add`; Xcode's own builds can't be gated"
+            ))
+        }
+        if let text = UngatedLog.describe(UngatedLog.read(paths.ungatedLog), now: now, home: home) {
+            findings.append(Finding(level: .note, topic: "ungated", text: text, fix: "the full list is in \(paths.ungatedLog)"))
+        }
+        return findings
+    }
+
     static func system(environment: [String: String], config: Config) -> [Finding] {
         var findings: [Finding] = []
-        let level = SystemMemory.level()
-        findings.append(Finding(level: .ok, topic: "memory", text: "\(level)% free of \(Bytes.format(SystemMemory.physical))"))
+        let reading = MemoryReading.now(environment: environment)
+        findings.append(Finding(level: .ok, topic: "memory", text: "\(reading.level)% free of \(Bytes.format(SystemMemory.physical)), pressure \(reading.pressure.name), swap \(Bytes.format(reading.swapUsed)) used"))
         if !FileManager.default.isExecutableFile(atPath: Supervisor.taskpolicy) {
             findings.append(Finding(level: .note, topic: "priority", text: "\(Supervisor.taskpolicy) is missing; agent jobs run at normal priority"))
         }

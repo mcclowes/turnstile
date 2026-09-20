@@ -109,6 +109,34 @@ struct ShellSetupTests {
         let result = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         #expect(result == "\(shims):/usr/bin:/bin")
     }
+
+    /// `nvm use` and `mise activate` put their bin dirs first after startup; the next prompt moves the shims back.
+    @Test(arguments: [ShellSetup.Shell.zsh, .bash])
+    func promptHookPutsShimsBackInFront(shell: ShellSetup.Shell) throws {
+        let shims = "/tmp/turnstile test/shims"
+        let snippet = ShellSetup.snippet(shell: shell, shimsDir: shims)
+        let prompt = shell == .zsh ? "for hook in $precmd_functions; do $hook; done" : "eval \"$PROMPT_COMMAND\""
+        let hooks = shell == .zsh ? "print -r -- ${(j: :)precmd_functions}" : "printf %s \"$PROMPT_COMMAND\""
+        let script = """
+            PATH='/usr/bin:/bin'
+            \(snippet)
+            \(snippet)
+            PATH="/nvm/v22/bin:$PATH"
+            \(prompt)
+            printf '%s\\n' "$PATH"
+            \(hooks)
+            """
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: shell == .zsh ? "/bin/zsh" : "/bin/bash")
+        process.arguments = shell == .zsh ? ["-f", "-c", script] : ["--norc", "--noprofile", "-c", script]
+        let output = Pipe()
+        process.standardOutput = output
+        try process.run()
+        process.waitUntilExit()
+        let lines = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).split(separator: "\n")
+        #expect(lines.first == "\(shims):/nvm/v22/bin:/usr/bin:/bin")
+        #expect(lines.last == "_turnstile_shims_first")
+    }
 }
 
 struct AgentTests {

@@ -104,6 +104,34 @@ struct PressureTests {
         #expect(Pressure.action(memoryLevel: 25, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == .resume(2))
     }
 
+    @Test func kernelPressureWouldPauseTheJobTheLevelThresholdMisses() {
+        let jobs = [job(1, started: 1), job(2, started: 2)]
+        #expect(Pressure.shadowPause(pressure: .warn, memoryLevel: 30, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == 2)
+        #expect(Pressure.shadowPause(pressure: .critical, memoryLevel: 30, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == 2)
+        #expect(Pressure.shadowPause(pressure: .normal, memoryLevel: 30, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == nil)
+        // The level threshold already pauses here, so there's nothing to learn.
+        #expect(Pressure.shadowPause(pressure: .warn, memoryLevel: 5, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == nil)
+        #expect(Pressure.shadowPause(pressure: .warn, memoryLevel: 30, jobs: [job(1, started: 1)], pauseBelow: 8, resumeAbove: 20) == nil)
+    }
+
+    @Test func readsKernelPressureLevels() {
+        #expect(MemoryPressure(level: 1) == .normal)
+        #expect(MemoryPressure(level: 2) == .warn)
+        #expect(MemoryPressure(level: 4) == .critical)
+        #expect(MemoryPressure(level: nil) == .normal)
+        #expect(MemoryPressure(level: 3) == .normal)
+        #expect(MemoryPressure.warn < .critical)
+    }
+
+    @Test func logsMemoryOnlyWhenItMovesEnough() {
+        let reading = MemoryReading(level: 23, pressure: .normal, swapUsed: 0)
+        #expect(reading.isWorthLogging(since: nil))
+        #expect(!MemoryReading(level: 20, pressure: .normal, swapUsed: Bytes.gb).isWorthLogging(since: reading))
+        #expect(MemoryReading(level: 18, pressure: .normal, swapUsed: 0).isWorthLogging(since: reading))
+        #expect(MemoryReading(level: 28, pressure: .normal, swapUsed: 0).isWorthLogging(since: reading))
+        #expect(MemoryReading(level: 23, pressure: .warn, swapUsed: 0).isWorthLogging(since: reading))
+    }
+
     @Test func resumesWhenNothingElseIsRunning() {
         #expect(Pressure.action(memoryLevel: 5, jobs: [job(2, started: 2, paused: true)], pauseBelow: 8, resumeAbove: 20) == .resume(2))
     }

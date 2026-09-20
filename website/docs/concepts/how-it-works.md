@@ -20,7 +20,7 @@ It fails open. If the daemon is missing or broken, commands run ungated rather t
 
 ## What gets gated
 
-Gated by default: `swift`, `xcodebuild`, `cargo`, `go`, `gradle`, `make`, `npm`, `pnpm`, `yarn`, `bun`, `npx`, `vitest`, `jest`, `playwright`, and `tsc`.
+Gated by default: `swift`, `xcodebuild`, `cargo`, `go`, `gradle`, `make`, `npm`, `pnpm`, `yarn`, `bun`, `npx`, `vitest`, `jest`, `playwright`, `tsc`, `xcrun`, and `corepack`. The last two are gated by the tool they run, so `xcrun swift build` counts as `swift build` and `corepack pnpm test` as `pnpm test`.
 
 Each gated command falls into a class, and each class has its own slots:
 

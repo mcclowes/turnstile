@@ -352,6 +352,31 @@ struct DaemonPressureTests {
         #expect(!DaemonHarness.state(newerTool.processIdentifier).hasPrefix("T"))
     }
 
+    @Test func recordsHowCloseEachJobCameToPausing() throws {
+        let harness = try DaemonHarness()
+        let older = FakeClient(), newer = FakeClient()
+        let olderTool = try harness.sleeper(), newerTool = try harness.sleeper()
+        let olderID = harness.request(older, root: "/older")
+        harness.started(older, childPid: olderTool.processIdentifier)
+        let newerID = harness.request(newer, root: "/newer")
+        harness.started(newer, childPid: newerTool.processIdentifier)
+        harness.job(olderID)?.admittedTick = Daemon.clock() - 60
+
+        harness.daemon.observe(MemoryReading(level: 30, pressure: .warn, swapUsed: 0))
+        harness.daemon.relievePressure(now: Daemon.clock() + 10)
+        #expect(harness.job(newerID)?.paused == false)
+        harness.daemon.observe(MemoryReading(level: 60, pressure: .normal, swapUsed: 0))
+        harness.finished(newer)
+        #expect(harness.daemon.store.memory(of: newerID!) == JobMemory(minLevel: 30, maxPressure: .warn, wouldPause: true))
+
+        _ = harness.control("pause", "\(olderID!)")
+        usleep(50_000)
+        harness.finished(older)
+        let recorded = harness.daemon.store.memory(of: olderID!)
+        #expect(recorded?.wouldPause == false)
+        #expect((recorded?.pausedFor ?? 0) > 0)
+    }
+
     @Test func jobsAPersonPausedArentResumedAutomatically() throws {
         let harness = try DaemonHarness()
         let owner = FakeClient()
@@ -416,5 +441,67 @@ struct DaemonPressureTests {
         harness.daemon.enforceCeiling(job, now: now + 6)
         tool.waitUntilExit()
         #expect(tool.terminationReason == .uncaughtSignal)
+    }
+
+    /// A build that never went through a shim is recorded, while a job's own processes aren't.
+    @Test func noticesHeavyProcessesRunningOutsideEveryJob() throws {
+        let harness = try DaemonHarness()
+        let client = FakeClient()
+        let id = harness.request(client)
+        harness.started(client, childPid: 300)
+        harness.job(id)?.tree = [300, 301]
+
+        harness.daemon.probe = probe([
+            // Xcode's build service compiles without a shell, so nothing can gate it.
+            Fake(pid: 500, parent: 400, name: "swift-frontend", executable: "/usr/bin/swift-frontend", args: ["swift-frontend", "-c"], cwd: "/Users/me/app"),
+            Fake(pid: 400, parent: 1, name: "SWBBuildService", executable: "/Applications/Xcode.app/SWBBuildService", args: ["SWBBuildService"], cwd: "/"),
+            // A compiler inside a gated job, which is already accounted for.
+            Fake(pid: 301, parent: 300, name: "swift-frontend", executable: "/usr/bin/swift-frontend", args: ["swift-frontend", "-c"], cwd: "/repo"),
+            Fake(pid: 300, parent: 200, name: "swift", executable: "/usr/bin/swift", args: ["swift", "build"], cwd: "/repo"),
+            // Not a build at all.
+            Fake(pid: 600, parent: 400, name: "node", executable: "/usr/local/bin/node", args: ["node", "/app/server.js"], cwd: "/app"),
+        ])
+
+        harness.daemon.watchForEscapes(now: 1000)
+        #expect(harness.daemon.store.escapes(since: 0) == [EscapeRow(label: "swift-frontend", via: "Xcode", cwd: "/Users/me/app", count: 1, lastSeen: 1000)])
+
+        // Counted once, not once per scan.
+        harness.daemon.watchForEscapes(now: 1001)
+        #expect(harness.daemon.store.escapes(since: 0).first?.count == 1)
+    }
+
+    @Test func leavesProcessesAJobStartedAlone() throws {
+        let harness = try DaemonHarness()
+        let client = FakeClient()
+        harness.request(client)
+        harness.started(client, childPid: 300)
+        // The job's tree hasn't been sampled yet, so the ancestry check is what keeps this one out.
+        harness.daemon.probe = probe([
+            Fake(pid: 301, parent: 300, name: "rustc", executable: "/usr/bin/rustc", args: ["rustc", "src/main.rs"], cwd: "/repo"),
+            Fake(pid: 300, parent: 200, name: "cargo", executable: "/usr/bin/cargo", args: ["cargo", "build"], cwd: "/repo"),
+        ])
+        harness.daemon.watchForEscapes(now: 1000)
+        #expect(harness.daemon.store.escapes(since: 0).isEmpty)
+    }
+
+    struct Fake {
+        var pid: pid_t
+        var parent: pid_t
+        var name: String
+        var executable: String
+        var args: [String]
+        var cwd: String
+    }
+
+    /// A process table of this user's processes, with each one's unique id derived from its pid.
+    func probe(_ processes: [Fake]) -> ProcessProbe {
+        let byPid = Dictionary(uniqueKeysWithValues: processes.map { ($0.pid, $0) })
+        return ProcessProbe(
+            table: { byPid.mapValues { ProcessTree.Entry(parent: $0.parent, name: $0.name, uid: getuid()) } },
+            executable: { byPid[$0]?.executable },
+            arguments: { byPid[$0]?.args },
+            workingDirectory: { byPid[$0]?.cwd },
+            lineage: { pid in byPid[pid].map { ProcessTree.Lineage(id: UInt64($0.pid), creator: UInt64($0.parent)) } }
+        )
     }
 }

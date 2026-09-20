@@ -122,6 +122,10 @@ public enum TopScreen {
                 lines.append("  #\(entry.id)  \(entry.project) \(entry.key)  \(detail)")
             }
         }
+        if let report = Escapes.report(snapshot.ungated, home: homeDirectory(ProcessInfo.processInfo.environment)) {
+            lines.append("")
+            lines.append("outside turnstile (last hour): \(report)")
+        }
         return fit(lines, footer: footer, width: width, height: height)
     }
 

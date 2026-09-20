@@ -23,7 +23,7 @@ echo "fake swift $*"
 echo "run $$ $*" >> "$FAKE_RUNS"
 [ -n "${FAKE_NESTED:-}" ] && [ "$1" = test ] && FAKE_NESTED= swift build nested
 [ -n "${FAKE_SCRUBBED:-}" ] && [ "$1" = test ] && env -u TURNSTILE_TOKEN FAKE_SCRUBBED= swift test scrubbed
-[ -n "${FAKE_ALLOC_MB:-}" ] && exec /usr/bin/python3 -c "import time; b = bytearray(${FAKE_ALLOC_MB} * 1024 * 1024); [b.__setitem__(i, 1) for i in range(0, len(b), 4096)]; time.sleep(30)"
+[ -n "${FAKE_ALLOC_MB:-}" ] && exec /usr/bin/python3 -c "import time; b = bytearray(${FAKE_ALLOC_MB} * 1024 * 1024); [b.__setitem__(i, 1) for i in range(0, len(b), 4096)]; time.sleep(${FAKE_ALLOC_SECONDS:-30})"
 [ -n "${FAKE_EXEC_SLEEP:-}" ] && exec sleep "$FAKE_EXEC_SLEEP"
 [ -n "${FAKE_LATE_OUTPUT:-}" ] && { (sleep 3; echo "late output") & exit 0; }
 # A build server: a short-lived client starts it in its own session, then exits, leaving it to launchd.
@@ -100,10 +100,11 @@ check "newer request supersedes the queued one" 'grep -q "superseded by a newer 
 check "superseded run never runs" '[ $(( $(runs test) - before )) = 2 ]'
 cd ..
 
-# Runaways are killed at the project's ceiling.
+# An explicit maxMemory kills on the spot, and says retrying won't help.
 mkdir -p hungry && echo '{"throttle": {"maxMemory": "150MB"}}' > hungry/.turnstilerc
 out="$(cd hungry && FAKE_ALLOC_MB=400 swift build 2>&1)"; code=$?
-check "runaway is killed with a reason" 'echo "$out" | grep -q "turnstile: killed swift build, exceeded 150 MB" && [ $code != 0 ]'
+check "maxMemory is killed with a reason" 'echo "$out" | grep -q "turnstile: killed swift build, exceeded 150 MB" && [ $code != 0 ]'
+check "the kill says it is the memory guard, and not to retry" 'echo "$out" | grep -q "memory guard" && echo "$out" | grep -q "retrying won.t help"'
 
 # Memory pressure pauses the newest job and resumes it afterwards.
 (cd a && FAKE_SLEEP=4 swift build > "$T/p1.out" 2>&1) &
@@ -361,6 +362,25 @@ elapsed=$(( $(date +%s) - start ))
 wait
 turnstile enable > /dev/null
 check "disable passes everything through" '[ $elapsed -lt 2 ] && [ ! -e "$TURNSTILE_HOME/disabled" ]'
+
+# A job far past its ceiling is left running while memory is plentiful, and paused rather than killed
+# when it isn't. killFloor drops the floor under the ceiling so a small fake tool can cross it.
+turnstile stop > /dev/null
+echo '{"concurrency": {"test": 1, "compile": 2}, "killFloor": 0}' > "$T/config/config.json"
+mkdir -p soft && echo '{"throttle": {"killMultiplier": 0.05}}' > soft/.turnstilerc
+cd soft
+FAKE_ALLOC_MB=100 FAKE_ALLOC_SECONDS=3 swift build > /dev/null 2>&1   # gives the command a high-water peak
+out="$(FAKE_ALLOC_MB=100 FAKE_ALLOC_SECONDS=3 swift build 2>&1)"; code=$?
+check "a runaway with memory to spare keeps running" '[ $code = 0 ] && echo "$out" | grep -q "more memory than usual" && ! echo "$out" | grep -q killed'
+
+(FAKE_ALLOC_MB=100 FAKE_ALLOC_SECONDS=8 swift build > "$T/soft.out" 2>&1; echo $? > "$T/soft.code") &
+sleep 2
+echo 5 > "$T/level"
+sleep 3
+echo 60 > "$T/level"
+wait
+check "a runaway under pressure is paused, not killed" '[ "$(cat "$T/soft.code")" = 0 ] && grep -q "turnstile: paused, using" "$T/soft.out" && grep -q "turnstile: resumed" "$T/soft.out"'
+cd ..
 
 # Config mistakes are caught with a suggestion, and a clean install passes the doctor.
 mkdir -p "$T/badconfig" && echo '{"concurency": {"test": 1}}' > "$T/badconfig/config.json"

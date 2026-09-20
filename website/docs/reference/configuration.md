@@ -44,6 +44,7 @@ Global file only.
 | `reserve` | `"2GB"` | Memory to keep free for everything else |
 | `pauseBelow` | `8` | Pause the newest agent job when free memory drops below this percent |
 | `resumeAbove` | `20` | Resume paused jobs once free memory is back above this percent |
+| `killFloor` | `25` | Floor under the runaway ceiling, as a percent of RAM. Nothing below it is ever a runaway |
 | `shims.add` / `shims.remove` | | Extra tools to gate, or built-in ones to drop. Run `turnstile shims` after changing |
 | `agentEnv` | | Extra environment variables that mark a shell as an agent's |
 
@@ -79,8 +80,8 @@ Either file.
 | `inject` | `true` | Add parallelism and heap limits to commands. Anything you pass yourself wins |
 | `jobs` | auto | Parallelism to inject. Auto leaves it alone until memory is tight (under 25% free), then halves it, and quarters it under 15% |
 | `nodeHeap` | auto | Node's `--max-old-space-size`. Auto caps it at 2 GB under 15% free |
-| `maxMemory` | none | Hard ceiling; a job tree above it is killed |
-| `killMultiplier` | `3` | Kill a job that passes this multiple of its usual peak (at least 2 GB). With no history, the ceiling is 75% of RAM |
+| `maxMemory` | none | Hard ceiling. A job tree above it is killed on the spot, whatever the machine is doing |
+| `killMultiplier` | `3` | Treat a job as a runaway past this multiple of its high-water peak, never below `killFloor` (25% of RAM). With no history, 75% of RAM. A runaway is left alone while memory is plentiful, paused when it isn't, and killed only if the pause doesn't help |
 | `pause` | `true` | Allow this project's agent jobs to be paused under pressure |
 
 ## Sizes

@@ -420,20 +420,21 @@ struct DaemonPressureTests {
         #expect(running.escapees == [escapee])
     }
 
-    @Test func aRunawayIsTerminatedThenKilled() throws {
-        let harness = try DaemonHarness()
+    /// An explicit `maxMemory` is the one place a person asked for a kill, so it doesn't wait for pressure.
+    @Test func aHardMemoryLimitIsTerminatedThenKilled() throws {
+        let harness = try DaemonHarness(memoryLevel: 90)
         let owner = FakeClient()
         // Ignores SIGTERM, so only the SIGKILL after the grace period ends it.
         let tool = try harness.sleeper("trap '' TERM; while true; do sleep 1; done")
-        let id = harness.request(owner)
+        let id = harness.request(owner, maxMemory: 1)
         harness.started(owner, childPid: tool.processIdentifier)
         let job = try #require(harness.job(id))
-        job.ceiling = 1
         job.footprint = 2
 
         let now = Daemon.clock()
         harness.daemon.enforceCeiling(job, now: now)
         #expect(job.killReason?.hasPrefix("killed swift build, exceeded") == true)
+        #expect(job.killReason?.contains("retrying won't help") == true)
         #expect(owner.received().contains { $0.type == "notice" && $0.text == job.killReason })
         usleep(200_000)
         #expect(tool.isRunning)
@@ -503,5 +504,61 @@ struct DaemonPressureTests {
             workingDirectory: { byPid[$0]?.cwd },
             lineage: { pid in byPid[pid].map { ProcessTree.Lineage(id: UInt64($0.pid), creator: UInt64($0.parent)) } }
         )
+    }
+
+    /// The bug from issue #16: a cold rebuild passing the ceiling while most of the machine is free
+    /// was killed, and the retry was killed too.
+    @Test func aRunawayKeepsRunningWhileMemoryIsPlentiful() throws {
+        let harness = try DaemonHarness(memoryLevel: 90)
+        let owner = FakeClient()
+        let tool = try harness.sleeper()
+        let id = harness.request(owner)
+        harness.started(owner, childPid: tool.processIdentifier)
+        let job = try #require(harness.job(id))
+        job.ceiling = 1
+        job.footprint = 2
+
+        let now = Daemon.clock()
+        harness.daemon.enforceCeiling(job, now: now)
+        harness.daemon.enforceCeiling(job, now: now + 60)
+        #expect(job.killReason == nil)
+        #expect(job.paused == false)
+        #expect(tool.isRunning)
+        // Said once, so a long run doesn't repeat it every second.
+        #expect(owner.received().filter { $0.text?.contains("more memory than usual") == true }.count == 1)
+    }
+
+    @Test func aRunawayUnderPressureIsPausedBeforeItIsKilled() throws {
+        let harness = try DaemonHarness(memoryLevel: 3)
+        let owner = FakeClient()
+        let tool = try harness.sleeper()
+        let id = harness.request(owner)
+        harness.started(owner, childPid: tool.processIdentifier)
+        let job = try #require(harness.job(id))
+        job.ceiling = 1
+        job.footprint = 2
+
+        let now = Daemon.clock()
+        harness.daemon.enforceCeiling(job, now: now)
+        #expect(job.paused == true)
+        #expect(job.killReason == nil)
+        #expect(DaemonHarness.state(tool.processIdentifier).hasPrefix("T"))
+
+        // Pressure lifts before the grace period ends, so it's resumed rather than killed.
+        harness.daemon.memoryLevel = 50
+        harness.daemon.enforceCeiling(job, now: now + 5)
+        harness.daemon.relievePressure(now: now + 5)
+        #expect(job.paused == false)
+        #expect(job.killReason == nil)
+
+        // Back under pressure, and this time it doesn't lift.
+        harness.daemon.memoryLevel = 3
+        harness.daemon.enforceCeiling(job, now: now + 10)
+        #expect(job.paused == true)
+        harness.daemon.enforceCeiling(job, now: now + 25)
+        #expect(job.killReason?.hasPrefix("killed swift build, exceeded") == true)
+        harness.daemon.enforceCeiling(job, now: now + 31)
+        tool.waitUntilExit()
+        #expect(tool.isRunning == false)
     }
 }

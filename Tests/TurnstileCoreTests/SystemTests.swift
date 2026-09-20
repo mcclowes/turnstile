@@ -104,6 +104,30 @@ struct StoreTests {
         #expect(store.recent(limit: 10).first?.outcome == "killed")
     }
 
+    /// Peaks are bimodal: incremental runs are tiny and cold ones are huge. A five-run window forgets
+    /// the cold runs, so the ceiling watches a much longer one.
+    @Test func theHighWaterPeakOutlivesTheUsualOne() throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("store-\(UUID().uuidString).sqlite").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let store = try Store(path: path)
+        let now: Double = 2_000_000_000
+        func record(peak: UInt64, at time: Double) {
+            let id = store.insertJob(state: "queued", resourceClass: .test, key: "swift test", root: "/a", cwd: "/a", argv: ["swift", "test"], agent: true, clientPid: 1, estimate: 0, now: time)
+            store.markFinished(id, outcome: "ok", exitCode: 0, signal: nil, peak: peak, now: time)
+        }
+        #expect(store.highWaterPeak(key: "swift test", root: "/a", now: now) == nil)
+
+        record(peak: 2 * Bytes.gb, at: now - 3 * 86400)
+        for hour in 1...10 { record(peak: 80 * Bytes.mb, at: now - Double(hour) * 3600) }
+        #expect(store.usualPeak(key: "swift test", root: "/a") == 80 * Bytes.mb)
+        #expect(store.highWaterPeak(key: "swift test", root: "/a", now: now) == 2 * Bytes.gb)
+
+        // Old enough to be irrelevant, and far enough back to be off the end of the window.
+        record(peak: 9 * Bytes.gb, at: now - 40 * 86400)
+        for hour in 11...30 { record(peak: 80 * Bytes.mb, at: now - Double(hour) * 3600) }
+        #expect(store.highWaterPeak(key: "swift test", root: "/a", now: now) == 80 * Bytes.mb)
+    }
+
     @Test func firstRunsInAProjectTakeTheMedianFromOthers() throws {
         let path = FileManager.default.temporaryDirectory.appendingPathComponent("store-\(UUID().uuidString).sqlite").path
         defer { try? FileManager.default.removeItem(atPath: path) }

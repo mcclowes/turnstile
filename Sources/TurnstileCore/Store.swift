@@ -151,6 +151,16 @@ public final class Store {
             """, [key, root]).map(UInt64.init)
     }
 
+    /// What the runaway ceiling is built from: the highest peak among this command's last twenty runs in
+    /// this project, ignoring anything older than a month. Peaks are bimodal — a cold compile dwarfs an
+    /// incremental one — so the short window `usualPeak` uses would forget every cold run.
+    public func highWaterPeak(key: String, root: String, now: Double) -> UInt64? {
+        scalar("""
+            SELECT MAX(peak) FROM (SELECT peak FROM jobs WHERE key = ? AND root = ? AND outcome IN ('ok', 'failed')
+            AND peak > 0 AND finished_at >= ? ORDER BY finished_at DESC LIMIT 20)
+            """, [key, root, now - 30 * 86400]).map(UInt64.init)
+    }
+
     /// A first guess for a command new to a project: the median of its last ten runs in other projects.
     /// Not the max, since one big project would otherwise hold that much memory for every first run.
     public func typicalPeak(key: String, excluding root: String) -> UInt64? {

@@ -120,13 +120,14 @@ check "maxMemory is killed with a reason" 'echo "$out" | grep -q "turnstile: kil
 check "the kill says it is the memory guard, and not to retry" 'echo "$out" | grep -q "memory guard" && echo "$out" | grep -q "retrying won.t help"'
 
 # Memory pressure pauses the newest job and resumes it afterwards.
-(cd a && FAKE_SLEEP=4 swift build > "$T/p1.out" 2>&1) &
-sleep 0.5
-(cd b && FAKE_SLEEP=4 swift build > "$T/p2.out" 2>&1) &
-sleep 1
+(cd a && FAKE_SLEEP=8 swift build > "$T/p1.out" 2>&1) &
+wait_for_job running a "swift build"
+(cd b && FAKE_SLEEP=8 swift build > "$T/p2.out" 2>&1) &
+wait_for_job running b "swift build"
 echo 5 > "$T/level"
-sleep 2.5
+wait_for_job running b "swift build" paused
 echo 60 > "$T/level"
+wait_for_job running b "swift build" running
 wait
 check "pressure pauses the newest job" 'grep -q "turnstile: paused, memory is low" "$T/p2.out" && ! grep -q paused "$T/p1.out"'
 check "paused job resumes and finishes" 'grep -q "turnstile: resumed" "$T/p2.out" && grep -q "fake swift done" "$T/p2.out"'
@@ -154,9 +155,10 @@ cd a
 FAKE_SLEEP=3 swift test > /dev/null 2>&1 &
 sup=$!
 cd ..
-sleep 0.7
+wait_for_job running a "swift test"
 kill -KILL $sup
-sleep 0.5
+wait $sup 2> /dev/null
+wait_for_job running a "swift test"
 out="$(cd b && FAKE_SLEEP=0 swift test 2>&1)"
 check "slot survives a SIGKILLed client, then frees" 'echo "$out" | grep -q "waiting for a test slot" && echo "$out" | grep -q "fake swift done"'
 wait

@@ -144,8 +144,10 @@ public struct StatusSnapshot: Codable, Equatable, Sendable {
     public var daemonPid: Int32
     /// Nil from daemons older than 0.2.
     public var version: String?
+    /// Heavy processes seen running outside every job in the last hour.
+    public var ungated: [EscapeRow] = []
 
-    public init(memoryLevel: Int, physicalMemory: UInt64, reserve: UInt64, limits: [String: Int], running: [JobSnapshot], queued: [JobSnapshot], recent: [HistoryEntry], daemonPid: Int32, version: String? = Turnstile.version) {
+    public init(memoryLevel: Int, physicalMemory: UInt64, reserve: UInt64, limits: [String: Int], running: [JobSnapshot], queued: [JobSnapshot], recent: [HistoryEntry], daemonPid: Int32, version: String? = Turnstile.version, ungated: [EscapeRow] = []) {
         self.memoryLevel = memoryLevel
         self.physicalMemory = physicalMemory
         self.reserve = reserve
@@ -155,6 +157,7 @@ public struct StatusSnapshot: Codable, Equatable, Sendable {
         self.recent = recent
         self.daemonPid = daemonPid
         self.version = version
+        self.ungated = ungated
     }
 }
 

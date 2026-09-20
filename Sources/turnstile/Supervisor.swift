@@ -52,10 +52,11 @@ enum Supervisor {
         let environment = ProcessInfo.processInfo.environment
         let paths = Paths(environment: environment)
         guard var client = Client.connectOrStart(paths: paths) else {
-            warn(Sandbox.isActive
-                ? "can't reach the daemon from inside this sandbox, running \(tool) ungated (`turnstile doctor` says how to allow it)"
-                : "daemon unavailable, running \(tool) ungated (see \(paths.daemonLog))")
-            execReal(real, args)
+            if Sandbox.isActive {
+                runUngated("can't reach the daemon from inside this sandbox, running \(tool) ungated (`turnstile doctor` says how to allow it)",
+                           cause: "a sandbox blocked the daemon's socket", tool: tool, real: real, args: args, paths: paths)
+            }
+            runUngated("daemon unavailable, running \(tool) ungated (see \(paths.daemonLog))", cause: "the daemon was unavailable", tool: tool, real: real, args: args, paths: paths)
         }
         let cwd = FileManager.default.currentDirectoryPath
         let workspace = Workspace.inspect(cwd: cwd, argv: [tool] + args, environment: environment)
@@ -82,8 +83,7 @@ enum Supervisor {
         request.captures = isatty(1) == 0 && isatty(2) == 0
         request.interactive = interactive
         guard client.send(request) else {
-            warn("daemon unavailable, running \(tool) ungated")
-            execReal(real, args)
+            runUngated("daemon unavailable, running \(tool) ungated", cause: "the daemon was unavailable", tool: tool, real: real, args: args, paths: paths)
         }
 
         var lastText: String?
@@ -94,8 +94,7 @@ enum Supervisor {
             // A daemon answers at once, and repeats itself every 30s while a job waits; silence means it's wedged.
             switch client.read(timeout: heard ? 90 : 10) {
             case .timeout:
-                warn("the daemon stopped answering, running \(tool) ungated (see \(paths.daemonLog))")
-                execReal(real, args)
+                runUngated("the daemon stopped answering, running \(tool) ungated (see \(paths.daemonLog))", cause: "the daemon stopped answering", tool: tool, real: real, args: args, paths: paths)
             case .closed:
                 // A crashed daemon: requeue with a fresh one rather than letting every waiting job start at once.
                 reconnects += 1
@@ -104,14 +103,13 @@ enum Supervisor {
                     heard = false
                     continue
                 }
-                warn("lost the daemon while waiting, running \(tool) ungated (see \(paths.daemonLog))")
-                execReal(real, args)
+                runUngated("lost the daemon while waiting, running \(tool) ungated (see \(paths.daemonLog))", cause: "lost the daemon while waiting", tool: tool, real: real, args: args, paths: paths)
             case let .message(message):
                 heard = true
                 switch message.type {
                 case "release":
                     // No text: a nested call inside a running job, which passes straight through.
-                    if let text = message.text { warn(text) }
+                    if let text = message.text { runUngated(text, cause: text, tool: tool, real: real, args: args, paths: paths) }
                     execReal(real, args)
                 case "queued":
                     if let text = message.text {
@@ -127,8 +125,7 @@ enum Supervisor {
                     // The run it joined ended without a result, so run it here instead.
                     reruns += 1
                     guard reruns <= 3, let fresh = Client.connectOrStart(paths: paths), fresh.send(request) else {
-                        warn("running \(tool) ungated")
-                        execReal(real, args)
+                        runUngated("running \(tool) ungated", cause: "the runs it joined kept ending without a result", tool: tool, real: real, args: args, paths: paths)
                     }
                     client = fresh
                     heard = false
@@ -140,13 +137,21 @@ enum Supervisor {
                         announce: lastText != nil ? message.text : nil
                     )
                 case "error":
-                    warn(message.text ?? "daemon error, running \(tool) ungated")
-                    execReal(real, args)
+                    let text = message.text ?? "daemon error, running \(tool) ungated"
+                    runUngated(text, cause: text, tool: tool, real: real, args: args, paths: paths)
                 default:
                     break
                 }
             }
         }
+    }
+
+    /// Fails open, and leaves a record so `turnstile doctor` can say it happened.
+    static func runUngated(_ text: String, cause: String, tool: String, real: String, args: [String], paths: Paths) -> Never {
+        warn(text)
+        let entry = UngatedLog.Entry(time: Date().timeIntervalSince1970, cause: cause, cwd: FileManager.default.currentDirectoryPath, command: ([tool] + args).joined(separator: " "))
+        UngatedLog.append(entry, to: paths.ungatedLog)
+        execReal(real, args)
     }
 
     // MARK: Running an admitted job

@@ -10,7 +10,7 @@ enum CLI {
 
         Usage:
           turnstile init [--shell zsh|bash|fish] [--no-rc]   install shims and add them to PATH
-          turnstile doctor                                   check the install, PATH, config, and daemon
+          turnstile doctor [--shells]                        check the install, PATH, config, and daemon
           turnstile status [--json] [--watch]                running and queued jobs, memory, recent runs
           turnstile top                                      interactive view: select a job to bump, pause, hold, or kill
           turnstile bump <job>                               move a job (number, pid, or name) to the front
@@ -21,6 +21,7 @@ enum CLI {
           turnstile classify <command>                       show how a command would be gated
           turnstile config [show|check|path|init|edit]       see, validate, and edit settings
           turnstile env [--shell zsh|bash|fish]              print the PATH setup, for terminal managers
+          turnstile agents                                   print a snippet for a project's AGENTS.md or CLAUDE.md
           turnstile shims                                    rebuild the shims directory
           turnstile disable | enable                         turn gating off and on for every shell
           turnstile stop                                     stop the daemon
@@ -49,6 +50,7 @@ enum CLI {
         case "disable": setEnabled(false)
         case "enable": setEnabled(true)
         case "env": env(rest)
+        case "agents": print(AgentInstructions.snippet); exit(0)
         case "shims", "rehash": rebuildShims(announce: true); exit(0)
         case "stop": stop()
         case "uninstall": uninstall()
@@ -104,6 +106,7 @@ enum CLI {
             }
         }
         print("Open a new shell (or run: eval \"$(turnstile env)\"), then check it with: turnstile doctor")
+        print("Agents can still go around the shims. `turnstile agents >> AGENTS.md` tells them not to.")
         exit(0)
     }
 

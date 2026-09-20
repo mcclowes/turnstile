@@ -45,7 +45,7 @@ You can also download the universal binary from [releases](https://github.com/mc
 - **Pressure relief.** When memory runs low, turnstile lowers each tool's parallelism, then pauses the newest agent job if it gets critical.
 - **It fails open.** If the daemon is missing or broken, commands run ungated rather than failing.
 
-Gated by default: `swift`, `xcodebuild`, `cargo`, `go`, `gradle`, `make`, `npm`, `pnpm`, `yarn`, `bun`, `npx`, `vitest`, `jest`, `playwright`, `tsc`, and `xcrun` (which is gated by the tool it runs, so `xcrun swift build` counts as `swift build`). Package scripts are classified by name: `test`, `test:unit`, and `ci` are tests; `e2e` and `playwright` are browser runs; `build`, `lint`, and `typecheck` are compiles; `dev`, `start`, and `watch` pass through. Run `turnstile classify <command>` to see what any command would do.
+Gated by default: `swift`, `xcodebuild`, `cargo`, `go`, `gradle`, `make`, `npm`, `pnpm`, `yarn`, `bun`, `npx`, `vitest`, `jest`, `playwright`, `tsc`, `xcrun`, and `corepack`. The last two are gated by the tool they run, so `xcrun swift build` counts as `swift build` and `corepack pnpm test` as `pnpm test`. Package scripts are classified by name: `test`, `test:unit`, and `ci` are tests; `e2e` and `playwright` are browser runs; `build`, `lint`, and `typecheck` are compiles; `dev`, `start`, and `watch` pass through. Run `turnstile classify <command>` to see what any command would do.
 
 More in [how it works](https://turnstile.marginalutility.dev/how-it-works), [scheduling](https://turnstile.marginalutility.dev/scheduling), and [memory pressure](https://turnstile.marginalutility.dev/pressure).
 

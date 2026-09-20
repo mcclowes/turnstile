@@ -30,7 +30,7 @@ public enum Classifier {
     public static let defaultShims = [
         "swift", "xcodebuild", "cargo", "go", "gradle", "make",
         "npm", "pnpm", "yarn", "bun", "npx",
-        "vitest", "jest", "playwright", "tsc", "xcrun",
+        "vitest", "jest", "playwright", "tsc", "xcrun", "corepack",
     ]
 
     static let nodeRunners: Set<String> = ["npm", "pnpm", "yarn", "bun"]
@@ -65,6 +65,7 @@ public enum Classifier {
         case "cypress": return firstPositional(args) == "run" ? Classification(.browser, key: "cypress run") : nil
         case "tsc": return args.contains(where: { ["-w", "--watch", "--init"].contains($0) }) ? nil : Classification(.compile, key: "tsc")
         case "xcrun": return xcrun(args, context: context)
+        case "corepack": return corepack(args, context: context)
         default: return nil
         }
     }
@@ -129,6 +130,14 @@ public enum Classifier {
             return classify(tool: (arg as NSString).lastPathComponent, args: Array(args[(index + 1)...]), context: context)
         }
         return nil
+    }
+
+    /// `corepack pnpm test` runs a package manager that corepack fetched, bypassing the shims for it.
+    static func corepack(_ args: [String], context: ClassifierContext) -> Classification? {
+        guard let first = args.first, !first.hasPrefix("-") else { return nil }
+        let manager = first.split(separator: "@").first.map(String.init) ?? first
+        guard manager == "npm" || nodeRunners.contains(manager) || manager == "npx" else { return nil }
+        return classify(tool: manager, args: Array(args.dropFirst()), context: context)
     }
 
     static func xcodebuild(_ args: [String]) -> Classification? {

@@ -27,3 +27,13 @@ To teach turnstile about another harness, add its variable to [`agentEnv`](../re
 - **Clear cancellation.** A job killed with `turnstile kill` exits `125` and prints `cancelled by you, don't retry`, so an agent doesn't treat it as a flaky failure.
 
 `turnstile bump <job>` moves any job to the front, or raises a running compile to normal priority.
+
+## Telling agents how to start builds
+
+Shims only gate what PATH resolves, so an agent that runs `./node_modules/.bin/vitest` or `/usr/bin/swift build` goes around turnstile. `turnstile agents` prints a few lines for a project's `AGENTS.md` or `CLAUDE.md` that say to use the tool's usual name, or `turnstile run` for anything else heavy:
+
+```sh
+turnstile agents >> AGENTS.md
+```
+
+`turnstile doctor` reports what ran outside turnstile anyway.

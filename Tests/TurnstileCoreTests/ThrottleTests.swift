@@ -66,15 +66,59 @@ struct ThrottleTests {
 struct PressureTests {
     let gb = Bytes.gb
 
-    @Test func ceilingFollowsTheUsualPeak() {
-        #expect(Pressure.ceiling(usualPeak: 2 * gb, physicalMemory: 16 * gb, config: ThrottleConfig()) == 6 * gb)
-        #expect(Pressure.ceiling(usualPeak: 100 * Bytes.mb, physicalMemory: 16 * gb, config: ThrottleConfig()) == 2 * gb)
-        #expect(Pressure.ceiling(usualPeak: nil, physicalMemory: 16 * gb, config: ThrottleConfig()) == 12 * gb)
-        #expect(Pressure.ceiling(usualPeak: 2 * gb, physicalMemory: 16 * gb, config: ThrottleConfig(maxMemory: 3 * gb)) == 3 * gb)
+    @Test func ceilingFollowsTheHighWaterPeak() {
+        #expect(Pressure.ceiling(highWaterPeak: 2 * gb, physicalMemory: 16 * gb, floorPercent: 25, config: ThrottleConfig()) == 6 * gb)
+        #expect(Pressure.ceiling(highWaterPeak: nil, physicalMemory: 16 * gb, floorPercent: 25, config: ThrottleConfig()) == 12 * gb)
+        #expect(Pressure.ceiling(highWaterPeak: 2 * gb, physicalMemory: 16 * gb, floorPercent: 25, config: ThrottleConfig(maxMemory: 3 * gb)) == 3 * gb)
     }
 
-    func job(_ id: Int64, started: Double, paused: Bool = false, pausable: Bool = true, manual: Bool = false) -> Pressure.Candidate {
-        Pressure.Candidate(id: id, startedAt: started, paused: paused, pausable: pausable, manual: manual)
+    /// A compile that usually fits in a few hundred MB still needs gigabytes after a cold rebuild,
+    /// so the floor is a share of the machine rather than a fixed 2 GB.
+    @Test func theFloorIsAShareOfTheMachine() {
+        #expect(Pressure.ceiling(highWaterPeak: 100 * Bytes.mb, physicalMemory: 16 * gb, floorPercent: 25, config: ThrottleConfig()) == 4 * gb)
+        #expect(Pressure.ceiling(highWaterPeak: 100 * Bytes.mb, physicalMemory: 64 * gb, floorPercent: 25, config: ThrottleConfig()) == 16 * gb)
+        #expect(Pressure.ceiling(highWaterPeak: 100 * Bytes.mb, physicalMemory: 16 * gb, floorPercent: 0, config: ThrottleConfig()) == 300 * Bytes.mb)
+    }
+
+    func runaway(
+        footprint: UInt64, ceiling: UInt64 = Bytes.gb, hard: Bool = false, memoryLevel: Int = 60,
+        pressuredFor: Double? = nil
+    ) -> Pressure.Runaway? {
+        Pressure.runaway(footprint: footprint, ceiling: ceiling, hard: hard, memoryLevel: memoryLevel,
+                         pauseBelow: 8, pressuredFor: pressuredFor)
+    }
+
+    @Test func aJobUnderItsCeilingIsLeftAlone() {
+        #expect(runaway(footprint: 500 * Bytes.mb) == nil)
+        #expect(runaway(footprint: 500 * Bytes.mb, memoryLevel: 3) == nil)
+    }
+
+    /// The bug this guards: a cold rebuild passing its ceiling with most of the machine free
+    /// harms nobody, and killing it costs a whole run.
+    @Test func aRunawayIsOnlyWatchedWhileMemoryIsPlentiful() {
+        #expect(runaway(footprint: 2 * gb) == .watch)
+        #expect(runaway(footprint: 2 * gb, memoryLevel: 9) == .watch)
+    }
+
+    @Test func aRunawayUnderPressureIsPausedBeforeItIsKilled() {
+        #expect(runaway(footprint: 2 * gb, memoryLevel: 3) == .pause)
+        #expect(runaway(footprint: 2 * gb, memoryLevel: 3, pressuredFor: 2) == .pause)
+        #expect(runaway(footprint: 2 * gb, memoryLevel: 3, pressuredFor: 30) == .kill)
+    }
+
+    /// Pressure lifting resets the escalation: the job is watched again, not killed.
+    @Test func aPausedRunawayIsntKilledOncePressureLifts() {
+        #expect(runaway(footprint: 2 * gb, memoryLevel: 60, pressuredFor: 30) == .watch)
+    }
+
+    @Test func anExplicitMaxMemoryKillsWhateverTheMachineIsDoing() {
+        #expect(runaway(footprint: 2 * gb, hard: true) == .kill)
+        #expect(runaway(footprint: 2 * gb, hard: true, memoryLevel: 100) == .kill)
+        #expect(runaway(footprint: 500 * Bytes.mb, hard: true) == nil)
+    }
+
+    func job(_ id: Int64, started: Double, paused: Bool = false, pausable: Bool = true, manual: Bool = false, runaway: Bool = false) -> Pressure.Candidate {
+        Pressure.Candidate(id: id, startedAt: started, paused: paused, pausable: pausable, manual: manual, runaway: runaway)
     }
 
     @Test func neverResumesAJobSomeonePaused() {
@@ -106,5 +150,13 @@ struct PressureTests {
 
     @Test func resumesWhenNothingElseIsRunning() {
         #expect(Pressure.action(memoryLevel: 5, jobs: [job(2, started: 2, paused: true)], pauseBelow: 8, resumeAbove: 20) == .resume(2))
+    }
+
+    /// Resuming a job that was paused for being past its ceiling, while the pressure that paused it is
+    /// still on, just puts it straight back. It waits for memory to actually recover.
+    @Test func aPausedRunawayWaitsForMemoryToRecover() {
+        let jobs = [job(1, started: 1, paused: true, runaway: true)]
+        #expect(Pressure.action(memoryLevel: 5, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == nil)
+        #expect(Pressure.action(memoryLevel: 25, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == .resume(1))
     }
 }

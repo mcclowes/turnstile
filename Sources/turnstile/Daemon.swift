@@ -54,7 +54,7 @@ final class Daemon {
         let fingerprint: String?
         let estimate: UInt64
         let estimateSource: String?
-        let usualPeak: UInt64?
+        let highWaterPeak: UInt64?
         let throttle: ThrottleConfig
         let pausable: Bool
         let queuedAt: Double
@@ -93,6 +93,10 @@ final class Daemon {
         var cancelled = false
         var killReason: String?
         var killDeadline: Double?
+        /// When the job became a runaway under pressure, so escalation to a kill can be timed.
+        var runawaySince: Double?
+        /// Whether the job has already been told it's using more memory than usual.
+        var warnedAboveCeiling = false
         var lastWait: String?
         var lastWaitSentAt: Double = 0
         var tree: [pid_t] = []
@@ -112,7 +116,7 @@ final class Daemon {
             fingerprint = request.fingerprint
             estimate = cost.estimate
             estimateSource = cost.source
-            usualPeak = cost.usualPeak
+            highWaterPeak = cost.highWaterPeak
             usualDuration = cost.usualDuration
             throttle = ThrottleConfig(
                 inject: request.inject, jobs: request.throttleJobs, nodeHeap: request.nodeHeap,
@@ -366,7 +370,7 @@ final class Daemon {
         var estimate: UInt64
         var source: String?
         /// This project's history only; runaway limits shouldn't come from another project.
-        var usualPeak: UInt64?
+        var highWaterPeak: UInt64?
         var usualDuration: Double?
     }
 
@@ -378,13 +382,16 @@ final class Daemon {
     }
 
     private func memoryCost(of request: Message, key: String, root: String) -> Cost {
+        // The estimate follows recent runs, so a slot is sized for what the command usually needs;
+        // the ceiling follows the high-water mark, so an occasional cold run isn't mistaken for a runaway.
         let usual = store.usualPeak(key: key, root: root)
-        if let memory = request.memory { return Cost(estimate: memory, source: "config", usualPeak: usual) }
-        if let usual { return Cost(estimate: usual, usualPeak: usual) }
+        let highWater = store.highWaterPeak(key: key, root: root, now: Daemon.now())
+        if let memory = request.memory { return Cost(estimate: memory, source: "config", highWaterPeak: highWater) }
+        if let usual { return Cost(estimate: usual, highWaterPeak: highWater) }
         if let typical = store.typicalPeak(key: key, excluding: root) {
-            return Cost(estimate: typical, source: "other projects", usualPeak: nil)
+            return Cost(estimate: typical, source: "other projects", highWaterPeak: highWater)
         }
-        return Cost(estimate: (request.resourceClass ?? .compile).defaultEstimate, source: "the class default", usualPeak: nil)
+        return Cost(estimate: (request.resourceClass ?? .compile).defaultEstimate, source: "the class default", highWaterPeak: highWater)
     }
 
     /// Only merge with a run whose output can be followed, that behaves the same way, and that still has an owner.
@@ -428,7 +435,7 @@ final class Daemon {
         job.childPid = child
         job.log = request.log
         job.owner = connection
-        job.ceiling = Pressure.ceiling(usualPeak: cost.usualPeak, physicalMemory: physical, config: job.throttle)
+        job.ceiling = Pressure.ceiling(highWaterPeak: cost.highWaterPeak, physicalMemory: physical, floorPercent: config.machine.killFloorPercent, config: job.throttle)
         jobs[id] = job
         connection.job = id
         log("#\(id) adopted \(job.project) \(job.key), pid \(child), after a daemon restart")
@@ -571,7 +578,7 @@ final class Daemon {
         job.state = .running
         job.startedAt = now
         job.admittedTick = Daemon.clock()
-        job.ceiling = Pressure.ceiling(usualPeak: job.usualPeak, physicalMemory: physical, config: job.throttle)
+        job.ceiling = Pressure.ceiling(highWaterPeak: job.highWaterPeak, physicalMemory: physical, floorPercent: config.machine.killFloorPercent, config: job.throttle)
         var reply = Message(type: "admitted")
         reply.job = job.id
         reply.limits = Throttle.limits(memoryLevel: memoryLevel, cpuCount: cpuCount, config: job.throttle)
@@ -670,28 +677,65 @@ final class Daemon {
         }
     }
 
-    /// Kills a runaway: a job far past its usual peak, or past a hard ceiling.
+    /// Handles a job past its ceiling. Being past it makes the job a candidate, not a corpse: with memory
+    /// to spare it's left alone and told once, and under real pressure it's paused first, because a pause
+    /// is recoverable and a kill costs the whole run. Only an explicit `maxMemory` kills on the spot.
     func enforceCeiling(_ job: Job, now: Double) {
         if let deadline = job.killDeadline {
             if now >= deadline, !job.tree.isEmpty { ProcessTree.signal(job.tree, SIGKILL) }
             return
         }
-        guard job.footprint > job.ceiling else { return }
-        let usual = job.usualPeak.map { " (usual ~\(Bytes.format($0)))" } ?? ""
-        let reason = "killed \(job.key), exceeded \(Bytes.format(job.ceiling))\(usual)"
-        job.killReason = reason
-        job.killDeadline = now + 5
-        log("#\(job.id) \(job.project): \(reason), at \(Bytes.format(job.footprint))")
-        if job.paused { ProcessTree.signal(job.tree, SIGCONT) }
-        ProcessTree.signal(job.tree, SIGTERM)
-        for connection in job.connections { connection.send(.notice(reason)) }
+        switch Pressure.runaway(
+            footprint: job.footprint, ceiling: job.ceiling, hard: job.throttle.maxMemory != nil,
+            memoryLevel: memoryLevel, pauseBelow: config.machine.pauseBelowPercent,
+            pressuredFor: job.runawaySince.map { now - $0 }
+        ) {
+        case nil:
+            // Back under the ceiling. Anything the pressure left paused is resumed as usual.
+            job.runawaySince = nil
+        case .watch?:
+            // Over the ceiling, but the memory isn't wanted elsewhere. Clearing the clock means the
+            // grace period starts again if the pressure comes back.
+            job.runawaySince = nil
+            guard !job.warnedAboveCeiling else { return }
+            job.warnedAboveCeiling = true
+            let text = "using \(Bytes.format(job.footprint)), more memory than usual (over \(Bytes.format(job.ceiling)));"
+                + " left running because the machine has \(memoryLevel)% free"
+            log("#\(job.id) \(job.project) \(job.key): \(text)")
+            for connection in job.connections { connection.send(.notice(text)) }
+        case .pause?:
+            if job.runawaySince == nil { job.runawaySince = now }
+            // A job that may not be paused still gets the grace period before it's killed.
+            guard job.pausable, !job.paused else { return }
+            job.paused = true
+            ProcessTree.signal(job.tree, SIGSTOP)
+            lastPressureAction = now
+            log("#\(job.id) \(job.project) \(job.key): paused at \(Bytes.format(job.footprint)), over its \(Bytes.format(job.ceiling)) ceiling, at \(memoryLevel)% free")
+            let text = "paused, using \(Bytes.format(job.footprint)) with memory low (\(memoryLevel)% free);"
+                + " resumes when it recovers"
+            for connection in job.connections { connection.send(.notice(text)) }
+        case .kill?:
+            let history = job.highWaterPeak.map { " (high-water ~\(Bytes.format($0)))" } ?? ""
+            let reason = "killed \(job.key), exceeded \(Bytes.format(job.ceiling))\(history)"
+                + ": turnstile's memory guard, not the command failing; retrying won't help unless the run needs less memory"
+            job.killReason = reason
+            job.killDeadline = now + 5
+            log("#\(job.id) \(job.project): \(reason), at \(Bytes.format(job.footprint)), \(memoryLevel)% free")
+            if job.paused {
+                job.paused = false
+                ProcessTree.signal(job.tree, SIGCONT)
+            }
+            ProcessTree.signal(job.tree, SIGTERM)
+            for connection in job.connections { connection.send(.notice(reason)) }
+        }
     }
 
     /// Pauses the newest job when memory runs out, and resumes jobs once it recovers.
     func relievePressure(now: Double) {
         guard now - lastPressureAction >= 3 else { return }
         let candidates = jobs.values.filter { $0.state != .queued && !$0.tree.isEmpty && $0.killReason == nil }.map {
-            Pressure.Candidate(id: $0.id, startedAt: $0.admittedTick ?? 0, paused: $0.paused, pausable: $0.pausable, manual: $0.pausedByUser)
+            Pressure.Candidate(id: $0.id, startedAt: $0.admittedTick ?? 0, paused: $0.paused, pausable: $0.pausable,
+                               manual: $0.pausedByUser, runaway: $0.runawaySince != nil)
         }
         let action = Pressure.action(
             memoryLevel: memoryLevel, jobs: candidates,

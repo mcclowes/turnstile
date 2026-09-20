@@ -98,9 +98,13 @@ enum ConfigCommand {
         lines.append("  inject        \(throttle.inject ?? true ? "on" : "off")")
         lines.append("  jobs          \(throttle.jobs.map(String.init) ?? "auto, lowered under memory pressure")")
         lines.append("  nodeHeap      \(throttle.nodeHeap.map(Bytes.format) ?? "auto, capped under memory pressure")")
-        let ceiling = throttle.maxMemory.map(Bytes.format)
-            ?? "\(formatMultiplier(throttle.killMultiplier ?? 3))× a command's usual peak (75% of RAM before there's history)"
-        lines.append("  kill above    \(ceiling)")
+        if let hard = throttle.maxMemory {
+            lines.append("  kill above    \(Bytes.format(hard)), whatever the machine is doing")
+        } else {
+            lines.append("  runaway above \(formatMultiplier(throttle.killMultiplier ?? 3))× a command's high-water peak, "
+                + "at least \(machine.killFloorPercent)% of RAM (75% before there's history)")
+            lines.append("  kill above    only under \(machine.pauseBelowPercent)% free, and only after a pause doesn't help")
+        }
         lines.append("  pause         \(throttle.pause ?? true ? "agent jobs may be paused" : "never paused")")
 
         let commands = (config.global.commands ?? [:]).merging(config.project?.commands ?? [:]) { $1 }

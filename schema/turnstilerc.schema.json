@@ -106,7 +106,7 @@
           "type": "number",
           "exclusiveMinimum": 0,
           "default": 3,
-          "description": "Kill a job that passes this multiple of its usual peak (at least 2 GB)."
+          "description": "Treat a job as a runaway past this multiple of its high-water peak (never below killFloor). A runaway is only paused, and killed only if memory stays critical; maxMemory is the hard limit."
         },
         "pause": {
           "type": "boolean",

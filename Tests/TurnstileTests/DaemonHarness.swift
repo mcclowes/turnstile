@@ -65,7 +65,8 @@ final class DaemonHarness {
     func request(
         _ client: FakeClient, key: String = "swift build", resourceClass: ResourceClass = .compile,
         memory: UInt64? = Bytes.gb, agent: Bool = true, fingerprint: String? = nil, captures: Bool = true,
-        root: String = "/repo", cwd: String? = nil, argv: [String]? = nil, pid: Int32? = nil, pausable: Bool? = nil
+        root: String = "/repo", cwd: String? = nil, argv: [String]? = nil, pid: Int32? = nil, pausable: Bool? = nil,
+        maxMemory: UInt64? = nil
     ) -> Int64? {
         var message = Message(type: "request")
         message.key = key
@@ -81,6 +82,7 @@ final class DaemonHarness {
         message.cwd = cwd ?? root
         message.pid = pid
         message.pausable = pausable
+        message.maxMemory = maxMemory
         daemon.handle(message, from: client.connection)
         return client.connection.job
     }

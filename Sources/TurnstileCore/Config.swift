@@ -113,6 +113,8 @@ public struct MachineConfig: Decodable, Equatable, Sendable {
     public var pauseBelow: Int?
     /// Resume paused jobs when free memory rises above this percent.
     public var resumeAbove: Int?
+    /// Floor under the runaway ceiling, as a percent of RAM. Nothing below it is ever a runaway.
+    public var killFloor: Int?
     /// Extra tools to shim, and built-in shims to drop.
     public var shims: ShimConfig?
     /// Extra environment variables that mark a process as an agent.
@@ -121,7 +123,7 @@ public struct MachineConfig: Decodable, Equatable, Sendable {
     public init() {}
 
     enum CodingKeys: String, CodingKey, CaseIterable {
-        case concurrency, reserve, pauseBelow, resumeAbove, shims, agentEnv
+        case concurrency, reserve, pauseBelow, resumeAbove, killFloor, shims, agentEnv
     }
 
     public init(from decoder: Decoder) throws {
@@ -130,6 +132,7 @@ public struct MachineConfig: Decodable, Equatable, Sendable {
         reserve = try c.decodeSizeIfPresent(forKey: .reserve)
         pauseBelow = try c.decodeIfPresent(Int.self, forKey: .pauseBelow)
         resumeAbove = try c.decodeIfPresent(Int.self, forKey: .resumeAbove)
+        killFloor = try c.decodeIfPresent(Int.self, forKey: .killFloor)
         shims = try c.decodeIfPresent(ShimConfig.self, forKey: .shims)
         agentEnv = try c.decodeIfPresent([String].self, forKey: .agentEnv)
     }
@@ -145,6 +148,7 @@ public struct MachineConfig: Decodable, Equatable, Sendable {
     public var reserveBytes: UInt64 { reserve ?? 2 * Bytes.gb }
     public var pauseBelowPercent: Int { pauseBelow ?? 8 }
     public var resumeAbovePercent: Int { resumeAbove ?? 20 }
+    public var killFloorPercent: Int { killFloor ?? 25 }
 }
 
 public struct ShimConfig: Decodable, Equatable, Sendable {

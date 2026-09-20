@@ -88,14 +88,44 @@ public enum Throttle {
 
 /// Pause and kill decisions for running jobs.
 public enum Pressure {
-    /// Ceiling above which a job is treated as a runaway and killed.
-    public static func ceiling(usualPeak: UInt64?, physicalMemory: UInt64, config: ThrottleConfig) -> UInt64 {
+    /// Ceiling above which a job is a runaway candidate. `highWaterPeak` is the command's high-water
+    /// mark rather than its recent average: a cold compile can be tens of times an incremental one, and
+    /// a ceiling that forgets the cold runs turns the next one into a "runaway".
+    /// The floor is a share of the machine, since a fixed one is far too small on a big Mac.
+    public static func ceiling(highWaterPeak: UInt64?, physicalMemory: UInt64, floorPercent: Int, config: ThrottleConfig) -> UInt64 {
         if let max = config.maxMemory { return max }
         let multiplier = config.killMultiplier ?? 3
-        if let usual = usualPeak {
-            return Swift.max(UInt64(Double(usual) * multiplier), 2 * Bytes.gb)
-        }
-        return physicalMemory / 4 * 3
+        guard let peak = highWaterPeak else { return physicalMemory / 4 * 3 }
+        let floor = physicalMemory * UInt64(Swift.max(0, Swift.min(100, floorPercent))) / 100
+        return Swift.max(UInt64(Double(peak) * multiplier), floor)
+    }
+
+    /// What to do about a job past its ceiling. Being past it only makes the job a candidate: memory
+    /// it isn't taking from anyone costs nothing, and ending a legitimate build costs a whole run.
+    public enum Runaway: Equatable, Sendable {
+        /// Past the ceiling with memory to spare. Say so once and leave it alone.
+        case watch
+        /// Past the ceiling with memory running out. Stop it growing, recoverably.
+        case pause
+        /// Past an explicit `maxMemory`, or paused and the pressure hasn't lifted.
+        case kill
+    }
+
+    /// Seconds a runaway stays paused before pausing is judged to have failed. Long enough for
+    /// another job to finish or for the pressure to pass, short enough that the machine isn't stuck.
+    public static let runawayGrace: Double = 15
+
+    /// `hard` is an explicit `maxMemory`: the one case where a person asked for a kill.
+    /// `pressuredFor` is how long the job has already been a runaway under pressure, nil if it hasn't.
+    public static func runaway(
+        footprint: UInt64, ceiling: UInt64, hard: Bool, memoryLevel: Int, pauseBelow: Int,
+        pressuredFor: Double?, grace: Double = runawayGrace
+    ) -> Runaway? {
+        guard footprint > ceiling else { return nil }
+        if hard { return .kill }
+        guard memoryLevel < pauseBelow else { return .watch }
+        guard let pressuredFor, pressuredFor >= grace else { return .pause }
+        return .kill
     }
 
     public struct Candidate: Equatable, Sendable {
@@ -105,13 +135,17 @@ public enum Pressure {
         public var pausable: Bool
         /// Paused by a person, so only a person resumes it.
         public var manual: Bool
+        /// Paused for being past its ceiling. Only memory actually recovering resumes it: the rule that
+        /// keeps one job running would just put the runaway straight back under the same pressure.
+        public var runaway: Bool
 
-        public init(id: Int64, startedAt: Double, paused: Bool, pausable: Bool = true, manual: Bool = false) {
+        public init(id: Int64, startedAt: Double, paused: Bool, pausable: Bool = true, manual: Bool = false, runaway: Bool = false) {
             self.id = id
             self.startedAt = startedAt
             self.paused = paused
             self.pausable = pausable
             self.manual = manual
+            self.runaway = runaway
         }
     }
 
@@ -129,8 +163,9 @@ public enum Pressure {
            newest.id != running.min(by: { $0.startedAt < $1.startedAt })?.id {
             return .pause(newest.id)
         }
-        if memoryLevel >= resumeAbove || running.isEmpty,
-           let oldest = jobs.filter({ $0.paused && !$0.manual }).min(by: { $0.startedAt < $1.startedAt }) {
+        let recovered = memoryLevel >= resumeAbove
+        let resumable = jobs.filter { $0.paused && !$0.manual && (recovered || !$0.runaway) }
+        if recovered || running.isEmpty, let oldest = resumable.min(by: { $0.startedAt < $1.startedAt }) {
             return .resume(oldest.id)
         }
         return nil

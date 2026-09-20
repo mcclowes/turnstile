@@ -50,6 +50,10 @@ final class Monitor: ObservableObject {
         }
     }
 
+    func clearMessage() {
+        message = nil
+    }
+
     func setLaunchAtLogin(_ enabled: Bool) {
         do {
             if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }

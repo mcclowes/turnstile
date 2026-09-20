@@ -377,6 +377,24 @@ struct DaemonPressureTests {
         #expect(harness.job(id)?.paused == false)
     }
 
+    /// The soak (`scripts/pressure-soak.sh`) checks that every process a pause stopped is in state T.
+    /// Walking the tree from outside can't find escapees, so status reports the tree the daemon signals.
+    @Test func statusReportsTheTreeAPauseWouldStop() throws {
+        let harness = try DaemonHarness()
+        let owner = FakeClient()
+        let tool = try harness.sleeper()
+        let id = harness.request(owner)
+        harness.started(owner, childPid: tool.processIdentifier)
+        let job = try #require(harness.job(id))
+        let escapee: pid_t = 999_999
+        job.tree = [tool.processIdentifier, escapee]
+        job.escapees = [escapee]
+
+        let running = try #require(harness.daemon.snapshot().running.first)
+        #expect(running.tree == [tool.processIdentifier, escapee])
+        #expect(running.escapees == [escapee])
+    }
+
     @Test func aRunawayIsTerminatedThenKilled() throws {
         let harness = try DaemonHarness()
         let owner = FakeClient()

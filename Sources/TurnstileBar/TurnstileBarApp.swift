@@ -20,6 +20,11 @@ struct TurnstileBarApp: App {
             if let count = indicator.count { Text("\(count)") }
         }
         .menuBarExtraStyle(.window)
+
+        Settings {
+            ShimSettingsView()
+        }
+        .windowResizability(.contentSize)
     }
 }
 

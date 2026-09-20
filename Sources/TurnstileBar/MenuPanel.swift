@@ -167,6 +167,13 @@ struct MenuPanel: View {
                     .font(.system(size: 11))
             }
             Spacer(minLength: 0)
+            SettingsLink {
+                Label("Settings", systemImage: "gearshape")
+                    .font(.system(size: 11))
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
             Button {
                 NSApplication.shared.terminate(nil)
             } label: {

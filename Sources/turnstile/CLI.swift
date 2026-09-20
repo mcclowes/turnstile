@@ -166,10 +166,7 @@ enum CLI {
     }
 
     static func shimNames(config: MachineConfig) -> [String] {
-        var names = Classifier.defaultShims + (config.shims?.add ?? [])
-        let removed = Set(config.shims?.remove ?? [])
-        names.removeAll { removed.contains($0) }
-        return Array(NSOrderedSet(array: names)) as? [String] ?? names
+        ShimSettings(machine: config).names
     }
 
     static func rebuildShims(announce: Bool) {

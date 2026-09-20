@@ -20,7 +20,7 @@ Name the formula alongside the app. Homebrew only trusts third-party formulae yo
 
 ## Release binary
 
-Download the universal binary from [releases](https://github.com/mcclowes/homebrew-turnstile/releases), then run:
+Download the universal binary from [releases](https://github.com/mcclowes/turnstile/releases), then run:
 
 ```sh
 ./turnstile init

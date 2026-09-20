@@ -99,10 +99,15 @@ public struct JobSnapshot: Codable, Equatable, Sendable {
     public var pausedBy: String?
     /// Where the estimate came from when it isn't this project's history, e.g. "other projects".
     public var estimateSource: String?
+    /// Every process the daemon counts against the job, and signals when it pauses or kills it.
+    /// Nil from daemons older than 0.4, and while the job is queued.
+    public var tree: [Int32]?
+    /// The part of `tree` that left the job for launchd, which nothing outside the daemon can find.
+    public var escapees: [Int32]?
 
     public var label: String { "\(project) \(key)" }
 
-    public init(id: Int64, state: String, resourceClass: ResourceClass, project: String, key: String, cwd: String, agent: Bool, estimate: UInt64, footprint: UInt64?, peak: UInt64?, paused: Bool, clientPid: Int32, childPid: Int32?, queuedAt: Double, startedAt: Double?, waiting: String?, joiners: Int, held: Bool? = nil, pausedBy: String? = nil, estimateSource: String? = nil) {
+    public init(id: Int64, state: String, resourceClass: ResourceClass, project: String, key: String, cwd: String, agent: Bool, estimate: UInt64, footprint: UInt64?, peak: UInt64?, paused: Bool, clientPid: Int32, childPid: Int32?, queuedAt: Double, startedAt: Double?, waiting: String?, joiners: Int, held: Bool? = nil, pausedBy: String? = nil, estimateSource: String? = nil, tree: [Int32]? = nil, escapees: [Int32]? = nil) {
         self.id = id
         self.state = state
         self.resourceClass = resourceClass
@@ -123,6 +128,8 @@ public struct JobSnapshot: Codable, Equatable, Sendable {
         self.held = held
         self.pausedBy = pausedBy
         self.estimateSource = estimateSource
+        self.tree = tree
+        self.escapees = escapees
     }
 }
 

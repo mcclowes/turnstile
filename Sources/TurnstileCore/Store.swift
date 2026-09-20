@@ -1,6 +1,24 @@
 import Foundation
 import SQLite3
 
+/// How close a job came to being paused for memory.
+public struct JobMemory: Equatable, Sendable {
+    /// Lowest `kern.memorystatus_level` seen while it ran.
+    public var minLevel: Int?
+    public var maxPressure: MemoryPressure?
+    /// Seconds paused for memory or by a person.
+    public var pausedFor: Double?
+    /// The kernel's pressure verdict would have paused it, though the level threshold didn't.
+    public var wouldPause: Bool
+
+    public init(minLevel: Int? = nil, maxPressure: MemoryPressure? = nil, pausedFor: Double? = nil, wouldPause: Bool = false) {
+        self.minLevel = minLevel
+        self.maxPressure = maxPressure
+        self.pausedFor = pausedFor
+        self.wouldPause = wouldPause
+    }
+}
+
 /// Job history in SQLite. Live queue state is held by the daemon; this records each job's lifecycle
 /// and the peaks used to estimate future runs.
 public final class Store {
@@ -34,12 +52,19 @@ public final class Store {
               queued_at REAL NOT NULL,
               started_at REAL,
               finished_at REAL,
-              ran_for REAL
+              ran_for REAL,
+              min_level INTEGER,
+              max_pressure INTEGER,
+              paused_for REAL,
+              would_pause INTEGER
             )
             """)
         var columns: Set<String> = []
         query("PRAGMA table_info(jobs)", []) { row in row.text(1).map { columns.insert($0) } }
-        if !columns.contains("ran_for") { try execute("ALTER TABLE jobs ADD COLUMN ran_for REAL") }
+        for (column, type) in [("ran_for", "REAL"), ("min_level", "INTEGER"), ("max_pressure", "INTEGER"), ("paused_for", "REAL"), ("would_pause", "INTEGER")]
+        where !columns.contains(column) {
+            try execute("ALTER TABLE jobs ADD COLUMN \(column) \(type)")
+        }
         try execute("CREATE INDEX IF NOT EXISTS jobs_cost ON jobs(key, root, finished_at)")
     }
 
@@ -76,11 +101,24 @@ public final class Store {
     }
 
     /// `ranFor` is seconds spent running, not counting time paused.
-    public func markFinished(_ id: Int64, outcome: String, exitCode: Int32?, signal: Int32?, peak: UInt64?, ranFor: Double? = nil, now: Double) {
+    public func markFinished(_ id: Int64, outcome: String, exitCode: Int32?, signal: Int32?, peak: UInt64?, ranFor: Double? = nil, memory: JobMemory = JobMemory(), now: Double) {
         run("""
-            UPDATE jobs SET state = 'finished', outcome = ?, exit_code = ?, signal = ?, peak = ?, ran_for = ?, finished_at = ?
+            UPDATE jobs SET state = 'finished', outcome = ?, exit_code = ?, signal = ?, peak = ?, ran_for = ?,
+              min_level = ?, max_pressure = ?, paused_for = ?, would_pause = ?, finished_at = ?
             WHERE id = ?
-            """, [outcome, exitCode.map { Int64($0) }, signal.map { Int64($0) }, peak.map { Int64(clamping: $0) }, ranFor, now, id])
+            """, [outcome, exitCode.map { Int64($0) }, signal.map { Int64($0) }, peak.map { Int64(clamping: $0) }, ranFor,
+                  memory.minLevel.map { Int64($0) }, memory.maxPressure.map { Int64($0.rawValue) }, memory.pausedFor, memory.wouldPause ? Int64(1) : nil, now, id])
+    }
+
+    public func memory(of id: Int64) -> JobMemory? {
+        var result: JobMemory?
+        query("SELECT min_level, max_pressure, paused_for, would_pause FROM jobs WHERE id = ?", [id]) { row in
+            result = JobMemory(
+                minLevel: row.int(0).map(Int.init), maxPressure: row.int(1).map { MemoryPressure(level: $0) },
+                pausedFor: row.double(2), wouldPause: row.int(3) == 1
+            )
+        }
+        return result
     }
 
     public func markJoined(_ id: Int64, to primary: Int64, outcome: String, exitCode: Int32?, now: Double) {

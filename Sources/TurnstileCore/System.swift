@@ -21,6 +21,20 @@ public enum SystemMemory {
         ProcessInfo.processInfo.activeProcessorCount
     }
 
+    /// The kernel's own pressure verdict. It can say warn while `level` still reads 30% or more, because
+    /// compressed and swapped pages count as available. Normal while the level is faked for tests.
+    public static func pressure(environment: [String: String] = ProcessInfo.processInfo.environment) -> MemoryPressure {
+        if environment["TURNSTILE_MEMORY_LEVEL_FILE"] != nil { return .normal }
+        return MemoryPressure(level: sysctlInt("kern.memorystatus_vm_pressure_level"))
+    }
+
+    public static var swapUsed: UInt64 {
+        var usage = xsw_usage()
+        var size = MemoryLayout<xsw_usage>.size
+        guard sysctlbyname("vm.swapusage", &usage, &size, nil, 0) == 0 else { return 0 }
+        return usage.xsu_used
+    }
+
     public static func free(level: Int) -> UInt64 {
         physical / 100 * UInt64(max(0, min(100, level)))
     }
@@ -37,6 +51,57 @@ public enum SystemMemory {
         size = 8
         guard sysctlbyname(name, &value, &size, nil, 0) == 0 else { return nil }
         return value
+    }
+}
+
+public enum Sandbox {
+    /// Running under a macOS sandbox profile, as agent harnesses like Codex apply. Such a sandbox usually blocks
+    /// the daemon's socket, and a daemon started from inside one would inherit its limits.
+    public static var isActive: Bool {
+        typealias Check = @convention(c) (pid_t, UnsafePointer<CChar>?, Int32) -> Int32
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "sandbox_check") else { return false }
+        return unsafeBitCast(symbol, to: Check.self)(getpid(), nil, 0) != 0
+    }
+}
+
+public enum MemoryPressure: Int, Comparable, Sendable {
+    case normal = 1, warn = 2, critical = 4
+
+    /// From `kern.memorystatus_vm_pressure_level`. Anything unrecognised counts as normal.
+    public init(level: Int64?) {
+        self = level.flatMap { MemoryPressure(rawValue: Int($0)) } ?? .normal
+    }
+
+    public static func < (lhs: MemoryPressure, rhs: MemoryPressure) -> Bool { lhs.rawValue < rhs.rawValue }
+
+    public var name: String {
+        switch self {
+        case .normal: return "normal"
+        case .warn: return "warn"
+        case .critical: return "critical"
+        }
+    }
+}
+
+public struct MemoryReading: Equatable, Sendable {
+    public var level: Int
+    public var pressure: MemoryPressure
+    public var swapUsed: UInt64
+
+    public init(level: Int, pressure: MemoryPressure, swapUsed: UInt64) {
+        self.level = level
+        self.pressure = pressure
+        self.swapUsed = swapUsed
+    }
+
+    public static func now(environment: [String: String] = ProcessInfo.processInfo.environment) -> MemoryReading {
+        MemoryReading(level: SystemMemory.level(environment: environment), pressure: SystemMemory.pressure(environment: environment), swapUsed: SystemMemory.swapUsed)
+    }
+
+    /// A new pressure verdict, or a level at least 5 points from the last one logged. Swap alone follows the others.
+    public func isWorthLogging(since previous: MemoryReading?) -> Bool {
+        guard let previous else { return true }
+        return pressure != previous.pressure || abs(level - previous.level) >= 5
     }
 }
 

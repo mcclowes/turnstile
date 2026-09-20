@@ -135,4 +135,13 @@ public enum Pressure {
         }
         return nil
     }
+
+    /// The job that would be paused if the kernel's pressure verdict were the trigger, where the level threshold pauses
+    /// nothing. Recorded but never acted on, to learn whether that trigger would fire at the right times.
+    public static func shadowPause(pressure: MemoryPressure, memoryLevel: Int, jobs: [Candidate], pauseBelow: Int, resumeAbove: Int) -> Int64? {
+        guard pressure >= .warn, memoryLevel >= pauseBelow,
+              case let .pause(id)? = action(memoryLevel: pauseBelow - 1, jobs: jobs, pauseBelow: pauseBelow, resumeAbove: resumeAbove)
+        else { return nil }
+        return id
+    }
 }

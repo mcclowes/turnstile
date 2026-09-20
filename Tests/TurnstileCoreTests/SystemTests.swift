@@ -57,6 +57,33 @@ struct SystemTests {
 }
 
 struct StoreTests {
+    @Test func recordsHowCloseAJobCameToPausing() throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("store-\(UUID().uuidString).sqlite").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let store = try Store(path: path)
+        let id = store.insertJob(state: "queued", resourceClass: .test, key: "swift test", root: "/a", cwd: "/a", argv: ["swift", "test"], agent: true, clientPid: 1, estimate: 0, now: 1)
+        let memory = JobMemory(minLevel: 12, maxPressure: .warn, pausedFor: 30, wouldPause: true)
+        store.markFinished(id, outcome: "ok", exitCode: 0, signal: nil, peak: nil, memory: memory, now: 2)
+        #expect(store.memory(of: id) == memory)
+
+        let bare = store.insertJob(state: "queued", resourceClass: .test, key: "swift test", root: "/a", cwd: "/a", argv: ["swift", "test"], agent: true, clientPid: 1, estimate: 0, now: 3)
+        store.markFinished(bare, outcome: "ok", exitCode: 0, signal: nil, peak: nil, now: 4)
+        #expect(store.memory(of: bare) == JobMemory())
+    }
+
+    @Test func addsMemoryColumnsToAnOlderDatabase() throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("store-\(UUID().uuidString).sqlite").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        var db: OpaquePointer?
+        sqlite3_open(path, &db)
+        sqlite3_exec(db, "CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, state TEXT NOT NULL, class TEXT NOT NULL, key TEXT NOT NULL, root TEXT NOT NULL, cwd TEXT NOT NULL, argv TEXT NOT NULL, agent INTEGER NOT NULL, client_pid INTEGER, child_pid INTEGER, estimate INTEGER, peak INTEGER, exit_code INTEGER, signal INTEGER, outcome TEXT, joined_to INTEGER, queued_at REAL NOT NULL, started_at REAL, finished_at REAL)", nil, nil, nil)
+        sqlite3_close(db)
+        let store = try Store(path: path)
+        let id = store.insertJob(state: "queued", resourceClass: .test, key: "k", root: "/a", cwd: "/a", argv: [], agent: true, clientPid: 1, estimate: 0, now: 1)
+        store.markFinished(id, outcome: "ok", exitCode: 0, signal: nil, peak: nil, ranFor: 5, memory: JobMemory(minLevel: 40), now: 2)
+        #expect(store.memory(of: id)?.minLevel == 40)
+    }
+
     @Test func learnsUsualPeakPerProject() throws {
         let path = FileManager.default.temporaryDirectory.appendingPathComponent("store-\(UUID().uuidString).sqlite").path
         defer { try? FileManager.default.removeItem(atPath: path) }
@@ -180,5 +207,36 @@ struct FingerprintInputTests {
     @Test func environmentThatChangesResultsIsPartOfTheFingerprint() {
         let inputs = Workspace.environmentInputs(["CI": "1", "NODE_ENV": "test", "RUN_E2E_TESTS": "1", "HOME": "/x", "TERM": "xterm"])
         #expect(inputs == ["CI=1", "NODE_ENV=test", "RUN_E2E_TESTS=1"])
+    }
+
+    static func makeRepo() throws -> String {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("repo-\(UUID().uuidString)").path
+        try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
+        try "one\n".write(toFile: root + "/a.txt", atomically: true, encoding: .utf8)
+        for args in [["init", "-q"], ["add", "."], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init"]] {
+            _ = Workspace.git(args, cwd: root, deadline: .distantFuture)
+        }
+        return Workspace.git(["rev-parse", "--show-toplevel"], cwd: root, deadline: .distantFuture)
+            .map { String(decoding: $0, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) } ?? root
+    }
+
+    @Test func fingerprintFollowsUncommittedChanges() throws {
+        let root = try Self.makeRepo()
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let clean = Workspace.inspect(cwd: root, argv: ["swift", "build"])
+        #expect(clean.root == root)
+        #expect(clean.fingerprint != nil)
+        #expect(Workspace.inspect(cwd: root, argv: ["swift", "build"]).fingerprint == clean.fingerprint)
+
+        try "two\n".write(toFile: root + "/a.txt", atomically: true, encoding: .utf8)
+        #expect(Workspace.inspect(cwd: root, argv: ["swift", "build"]).fingerprint != clean.fingerprint)
+    }
+
+    @Test func slowGitGivesUpOnTheFingerprintButKeepsTheRoot() throws {
+        let root = try Self.makeRepo()
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let workspace = Workspace.inspect(cwd: root, argv: ["swift", "build"], budget: 0)
+        #expect(workspace.root == root)
+        #expect(workspace.fingerprint == nil)
     }
 }

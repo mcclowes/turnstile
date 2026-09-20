@@ -30,7 +30,7 @@ public enum Classifier {
     public static let defaultShims = [
         "swift", "xcodebuild", "cargo", "go", "gradle", "make",
         "npm", "pnpm", "yarn", "bun", "npx",
-        "vitest", "jest", "playwright", "tsc",
+        "vitest", "jest", "playwright", "tsc", "xcrun",
     ]
 
     static let nodeRunners: Set<String> = ["npm", "pnpm", "yarn", "bun"]
@@ -64,6 +64,7 @@ public enum Classifier {
         case "playwright": return firstPositional(args) == "test" ? Classification(.browser, key: "playwright test") : nil
         case "cypress": return firstPositional(args) == "run" ? Classification(.browser, key: "cypress run") : nil
         case "tsc": return args.contains(where: { ["-w", "--watch", "--init"].contains($0) }) ? nil : Classification(.compile, key: "tsc")
+        case "xcrun": return xcrun(args, context: context)
         default: return nil
         }
     }
@@ -110,6 +111,24 @@ public enum Classifier {
         case "test": return Classification(.test, key: "swift test" + configuration(args, flags: ["-c", "--configuration"], default: "debug"))
         default: return nil  // run, package, format, repl, scripts
         }
+    }
+
+    /// `xcrun swift build` finds its tool through the developer dir, not PATH, so it would otherwise skip the shims.
+    /// Classifies the tool it runs; lookups like `--find` and `--show-sdk-path` pass through.
+    static func xcrun(_ args: [String], context: ClassifierContext) -> Classification? {
+        let valueFlags: Set<String> = ["--sdk", "-sdk", "--toolchain", "-toolchain"]
+        var index = 0
+        while index < args.count {
+            let arg = args[index]
+            if valueFlags.contains(arg) { index += 2; continue }
+            if arg.hasPrefix("-") {
+                if arg == "-f" || arg == "--find" || arg.hasPrefix("--show-") { return nil }
+                index += 1
+                continue
+            }
+            return classify(tool: (arg as NSString).lastPathComponent, args: Array(args[(index + 1)...]), context: context)
+        }
+        return nil
     }
 
     static func xcodebuild(_ args: [String]) -> Classification? {

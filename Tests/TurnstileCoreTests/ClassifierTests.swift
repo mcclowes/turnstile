@@ -36,6 +36,10 @@ struct ClassifierTests {
         ("pnpm exec jest", .test, "jest"),
         ("playwright test", .browser, "playwright test"),
         ("tsc -p .", .compile, "tsc"),
+        ("xcrun swift build", .compile, "swift build"),
+        ("xcrun --sdk macosx swift test", .test, "swift test"),
+        ("xcrun -sdk iphonesimulator xcodebuild -scheme App test", .test, "xcodebuild test"),
+        ("xcrun -r --toolchain swift swift build -c release", .compile, "swift build -c release"),
     ])
     func gates(command: String, cls: ResourceClass, key: String) {
         let result = classify(command)
@@ -52,6 +56,8 @@ struct ClassifierTests {
         "pnpm add left-pad", "yarn", "yarn dev", "bun install", "bun script.ts",
         "vitest watch", "vitest --watch", "jest --watch", "playwright install", "tsc --watch",
         "git status", "ls -la",
+        "xcrun", "xcrun --version", "xcrun --find swift", "xcrun -f clang", "xcrun --show-sdk-path",
+        "xcrun --sdk macosx --show-sdk-path", "xcrun simctl list", "xcrun swift --version", "xcrun clang -c a.c",
     ])
     func passesThrough(command: String) {
         #expect(classify(command) == nil)

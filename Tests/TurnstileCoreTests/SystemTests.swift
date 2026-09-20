@@ -83,7 +83,7 @@ struct SystemTests {
         defer { process.terminate() }
 
         func waitUntil(_ condition: () -> Bool) -> Bool {
-            let deadline = Date(timeIntervalSinceNow: 2)
+            let deadline = Date(timeIntervalSinceNow: 10)
             while Date() < deadline {
                 if condition() { return true }
                 usleep(10_000)

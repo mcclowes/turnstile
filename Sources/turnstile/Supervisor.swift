@@ -73,7 +73,7 @@ enum Supervisor {
         request.root = workspace.root
         request.fingerprint = workspace.fingerprint
         request.agent = agent
-        request.pausable = agent && (throttle.pause ?? true)
+        request.pausable = isPausable(agent: agent, resourceClass: classification.resourceClass, configured: throttle.pause)
         request.maxMemory = throttle.maxMemory
         request.killMultiplier = throttle.killMultiplier
         request.throttleJobs = throttle.jobs
@@ -144,6 +144,11 @@ enum Supervisor {
                 }
             }
         }
+    }
+
+    /// Test and browser runners use wall-clock deadlines that keep advancing through SIGSTOP.
+    static func isPausable(agent: Bool, resourceClass: ResourceClass, configured: Bool?) -> Bool {
+        agent && (configured ?? (resourceClass == .compile))
     }
 
     /// Fails open, and leaves a record so `turnstile doctor` can say it happened.

@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import Testing
+@testable import turnstile
 @testable import TurnstileCore
 
 /// A scripted stand-in for the daemon: listens on the turnstile socket and answers each message with `reply`.
@@ -150,6 +151,15 @@ func reply(_ type: String, job: Int64? = nil, text: String? = nil, exitCode: Int
 
 @Suite(.serialized)
 struct SupervisorTests {
+    @Test func onlyCompileJobsPauseByDefault() {
+        #expect(Supervisor.isPausable(agent: true, resourceClass: .compile, configured: nil))
+        #expect(!Supervisor.isPausable(agent: true, resourceClass: .test, configured: nil))
+        #expect(!Supervisor.isPausable(agent: true, resourceClass: .browser, configured: nil))
+        #expect(Supervisor.isPausable(agent: true, resourceClass: .test, configured: true))
+        #expect(!Supervisor.isPausable(agent: true, resourceClass: .compile, configured: false))
+        #expect(!Supervisor.isPausable(agent: false, resourceClass: .compile, configured: true))
+    }
+
     @Test func waitsThenRunsAndReportsTheResult() throws {
         let (run, daemon) = try ShimRun.run(environment: ["FAKE_EXIT": "3"]) { paths in
             FakeDaemon(socket: paths.socket) { message, _, send, _ in

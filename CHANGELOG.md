@@ -17,6 +17,7 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 - turnstile now needs macOS 26 or later.
 - Agent tests and browser runs get the utility clamp rather than background priority, which could starve them into timeouts.
+- Automatic memory pauses apply to compile jobs by default. Test and browser runners keep running because their wall-clock deadlines continue while stopped; projects can still opt in.
 - A command's first run in a project starts from its median peak in other projects, and release and debug builds keep separate histories.
 - Installing the menu bar app means naming the formula alongside the cask, so Homebrew trusts the tap.
 

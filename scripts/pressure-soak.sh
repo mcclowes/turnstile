@@ -213,7 +213,7 @@ EOF
 
 WORKLOADS=()
 SKIPPED=()
-add_workload() { WORKLOADS+=("$1|$2|$3"); }
+add_workload() { WORKLOADS+=("$1|$2|$3|$4"); }
 skip_workload() { SKIPPED+=("$1|$2"); }
 
 have() { command -v "$1" > /dev/null 2>&1; }
@@ -232,11 +232,11 @@ SOAK_SWIFT_FILES=1 swift_files=1 make_swift_package "$T/fixtures/probe"
 # and the daemon resumes the paused job however low the level is, which cuts every pause short.
 mkdir -p "$T/fixtures/holder"
 printf 'hold:\n\t@sleep $(SOAK_HOLD_TOTAL)\n' > "$T/fixtures/holder/Makefile"
-add_workload swift-build swiftpkg "swift build"
-add_workload swift-test swiftpkg "swift test"
+add_workload swift-build swiftpkg "swift build" yes
+add_workload swift-test swiftpkg "swift test" no
 if [ -d /Applications/Xcode.app ] && have xcodebuild; then
   # Its own derived data, so the second copy compiles from cold rather than reusing the first's modules.
-  add_workload xcodebuild swiftpkg "xcodebuild -scheme Soak-Package -destination platform=macOS -derivedDataPath .dd build"
+  add_workload xcodebuild swiftpkg "xcodebuild -scheme Soak-Package -destination platform=macOS -derivedDataPath .dd build" yes
 else
   skip_workload xcodebuild "Xcode is not installed"
 fi
@@ -255,9 +255,9 @@ else
   for w in vitest jest tsc; do skip_workload "$w" "npm install failed, see npm-install.log"; done
 fi
 if [ "$NODE_READY" = 1 ]; then
-  add_workload vitest node "npx vitest run"
-  add_workload jest node "npx jest"
-  add_workload tsc node "npx tsc -p ."
+  add_workload vitest node "npx vitest run" no
+  add_workload jest node "npx jest" no
+  add_workload tsc node "npx tsc -p ." yes
 fi
 
 for tool in cargo gradle; do
@@ -275,7 +275,7 @@ fi
 
 if [ "$LIST" = 1 ]; then
   echo "workloads:"
-  for entry in "${WORKLOADS[@]}"; do IFS='|' read -r name _ cmd <<< "$entry"; echo "  $name  ($cmd)"; done
+  for entry in "${WORKLOADS[@]}"; do IFS='|' read -r name _ cmd expected <<< "$entry"; echo "  $name  ($cmd; pause: $expected)"; done
   echo "skipped:"
   for entry in "${SKIPPED[@]}"; do IFS='|' read -r name why <<< "$entry"; echo "  $name  ($why)"; done
   exit 0
@@ -430,7 +430,7 @@ await_pause_state() {
 
 # The soak proper: an older copy holds a slot, a newer copy is the one pressure should pause.
 soak_run() {
-  local name=$1 fixture=$2 cmd=$3
+  local name=$1 fixture=$2 cmd=$3 expected_pause=$4
   local older="$T/work/$name/older" newer="$T/work/$name/newer" probe="$T/work/$name/probe"
   local holder="$T/work/$name/holder"
   copy_fixture "$fixture" "$older"
@@ -540,9 +540,15 @@ soak_run() {
   kill "$sampler_pid" 2> /dev/null
   wait "$sampler_pid" 2> /dev/null
 
-  PAUSE_DELAY=$pause_delay
+  EXPECTED_PAUSE=$expected_pause
   PAUSE_FIRED=$([ -n "$pause_seen" ] && echo yes || echo no)
-  RESUME_FIRED=$([ -n "$resume_seen" ] && echo yes || echo no)
+  if [ "$expected_pause" = yes ]; then
+    PAUSE_DELAY=$pause_delay
+    RESUME_FIRED=$([ -n "$resume_seen" ] && echo yes || echo no)
+  else
+    PAUSE_DELAY=na
+    RESUME_FIRED=na
+  fi
   TREE_BEFORE=$(echo "$tree_before" | wc -w | tr -d ' ')
   TREE_SIZE=$(echo "$tree_paused" | wc -w | tr -d ' ')
   ESCAPEES=$(echo "$escapees" | wc -w | tr -d ' ')
@@ -568,18 +574,18 @@ timeout_trouble() {
 row() { local IFS=$'\t'; echo "$*" >> "$OUT/runs.txt"; }
 
 for entry in "${WORKLOADS[@]}"; do
-  IFS='|' read -r name fixture cmd <<< "$entry"
+  IFS='|' read -r name fixture cmd expected_pause <<< "$entry"
   echo "--- $name"
   PROBE_AT_PAUSE=- PROBE_BETWEEN=- PROBE_WAITING=- UNPAUSED_AT=- UNPAUSED_WITH_OTHER=-
   baseline "$name" "$fixture" "$cmd"
   echo "    baseline: exit $BASE_CODE in ${BASE_SECONDS}s"
   if /usr/bin/python3 -c "import sys; sys.exit(0 if $BASE_SECONDS < $MIN_BASELINE else 1)"; then
     echo "    skipped: baseline is under ${MIN_BASELINE}s, too short to pause and resume inside one run"
-    row "$name" "too short to soak" "$BASE_CODE" "$BASE_SECONDS"
+    row "$name" "too short to soak" "$expected_pause" "$BASE_CODE" "$BASE_SECONDS"
     continue
   fi
-  soak_run "$name" "$fixture" "$cmd"
-  row "$name" "$(cat "$T/aborted" 2> /dev/null || echo ran)" "$BASE_CODE" "$BASE_SECONDS" \
+  soak_run "$name" "$fixture" "$cmd" "$expected_pause"
+  row "$name" "$(cat "$T/aborted" 2> /dev/null || echo ran)" "$EXPECTED_PAUSE" "$BASE_CODE" "$BASE_SECONDS" \
     "$PAUSE_FIRED" "$PAUSE_DELAY" "$RESUME_FIRED" "$NEWER_CODE" "$OLDER_CODE" \
     "$TREE_BEFORE" "$TREE_SIZE" "$ESCAPEES" "$ALL_STOPPED" "$SHARED_WITH_OLDER" "$OTHER_JOB_STOPPED" \
     "$(timeout_trouble "$OUT/$name-baseline.out")" "$(timeout_trouble "$OUT/$name-newer.out")" \
@@ -596,7 +602,7 @@ cp "$TURNSTILE_HOME/daemon.log" "$OUT/daemon.log" 2> /dev/null
 import json, os, sys
 out, budget = sys.argv[1], float(sys.argv[2])
 meta = json.load(open(f"{out}/meta.json"))
-fields = ["workload", "status", "baseline_exit", "baseline_seconds", "pause_fired", "pause_delay_seconds",
+fields = ["workload", "status", "expected_pause", "baseline_exit", "baseline_seconds", "pause_fired", "pause_delay_seconds",
           "resume_fired", "soak_exit", "older_exit", "tree_before", "tree_at_pause", "escapees",
           "all_stopped", "shared_pids_with_other_job", "other_job_processes_stopped",
           "baseline_timeout_lines", "soak_timeout_lines", "baseline_worker_lines", "soak_worker_lines",
@@ -611,8 +617,9 @@ for line in open(f"{out}/runs.txt"):
 def verdict(r):
     if r["status"] != "ran": return r["status"]
     problems = []
-    if r["pause_fired"] != "yes": problems.append("never paused")
-    else:
+    if r["expected_pause"] == "yes" and r["pause_fired"] != "yes": problems.append("never paused")
+    elif r["expected_pause"] == "no" and r["pause_fired"] == "yes": problems.append("paused a timeout-sensitive runner")
+    elif r["pause_fired"] == "yes":
         if r["pause_delay_seconds"] not in ("-", "") and float(r["pause_delay_seconds"]) > budget:
             problems.append(f"pause took {r['pause_delay_seconds']}s")
         # A process still running one second after the pause is the next tick catching up; longer is an escape.
@@ -630,7 +637,7 @@ def verdict(r):
 for r in runs: r["verdict"] = verdict(r)
 json.dump({"meta": meta, "runs": runs}, open(f"{out}/results.json", "w"), indent=2)
 
-cols = [("Workload", "workload"), ("Baseline exit / s", ("baseline_exit", "baseline_seconds")),
+cols = [("Workload", "workload"), ("Pause expected", "expected_pause"), ("Baseline exit / s", ("baseline_exit", "baseline_seconds")),
         ("Paused", "pause_fired"), ("Delay (s)", "pause_delay_seconds"), ("Resumed", "resume_fired"),
         ("Soak exit", "soak_exit"), ("Tree at pause / escapees", ("tree_at_pause", "escapees")),
         ("Whole tree stopped", "all_stopped"), ("Other job's pids stopped", "other_job_processes_stopped"),

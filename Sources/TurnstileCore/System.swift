@@ -5,12 +5,36 @@ public enum SystemMemory {
     /// Percent of memory the kernel considers available (`kern.memorystatus_level`).
     /// `TURNSTILE_MEMORY_LEVEL_FILE` substitutes a file's contents, for tests.
     public static func level(environment: [String: String] = ProcessInfo.processInfo.environment) -> Int {
-        if let path = environment["TURNSTILE_MEMORY_LEVEL_FILE"],
-           let text = try? String(contentsOfFile: path, encoding: .utf8),
-           let value = Int(text.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            return value
-        }
+        if let faked = faked("TURNSTILE_MEMORY_LEVEL_FILE", environment) { return Int(faked) }
         return sysctlInt("kern.memorystatus_level").map(Int.init) ?? 100
+    }
+
+    /// The kernel's own verdict (`kern.memorystatus_vm_pressure_level`): 1 normal, 2 warn, 4 critical.
+    /// `TURNSTILE_PRESSURE_LEVEL_FILE` substitutes a file's contents, for tests.
+    public static func kernelPressure(environment: [String: String] = ProcessInfo.processInfo.environment) -> Int {
+        if let faked = faked("TURNSTILE_PRESSURE_LEVEL_FILE", environment) { return Int(faked) }
+        return sysctlInt("kern.memorystatus_vm_pressure_level").map(Int.init) ?? 1
+    }
+
+    /// Bytes of swap in use (`vm.swapusage`).
+    /// `TURNSTILE_SWAP_USED_FILE` substitutes a file's contents, in bytes, for tests.
+    public static func swapUsed(environment: [String: String] = ProcessInfo.processInfo.environment) -> UInt64 {
+        if let faked = faked("TURNSTILE_SWAP_USED_FILE", environment) { return UInt64(max(0, faked)) }
+        var usage = xsw_usage()
+        var size = MemoryLayout<xsw_usage>.size
+        guard sysctlbyname("vm.swapusage", &usage, &size, nil, 0) == 0 else { return 0 }
+        return usage.xsu_used
+    }
+
+    public static func sample(environment: [String: String] = ProcessInfo.processInfo.environment, at: Double) -> MemorySample {
+        MemorySample(level: level(environment: environment), kernelPressure: kernelPressure(environment: environment),
+                     swapUsed: swapUsed(environment: environment), at: at)
+    }
+
+    /// A file standing in for a sysctl, so tests and the soak script can drive the daemon.
+    static func faked(_ key: String, _ environment: [String: String]) -> Int64? {
+        guard let path = environment[key], let text = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+        return Int64(text.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     public static var physical: UInt64 {

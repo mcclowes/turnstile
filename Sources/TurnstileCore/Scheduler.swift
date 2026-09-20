@@ -88,6 +88,8 @@ public enum WaitReason: Equatable, Sendable {
     case slots(ResourceClass, running: [String], eta: Double? = nil)
     /// Not enough free memory. `eta` is seconds until enough should free up, if known.
     case memory(need: UInt64, free: UInt64, running: [String], eta: Double? = nil)
+    /// The machine is swapping, so free memory means nothing; nothing new starts until it settles.
+    case swapping(running: [String])
     /// Someone held it; it waits until released.
     case held
 }
@@ -122,12 +124,21 @@ public enum Scheduler {
     /// could start anyway, or, when run times aren't known, small jobs while it has waited less than
     /// `backfillAge`. With nothing running, the head of the queue always starts, since waiting can't
     /// free memory. Held jobs are skipped entirely.
-    public static func decide(queue: [QueuedJob], running: [RunningJob], freeMemory: UInt64, policy: SchedulerPolicy, now: Double = 0) -> SchedulerDecision {
+    ///
+    /// While the machine is swapping, nothing starts at all: `freeMemory` comes from a level the kernel
+    /// is holding up by paging out, so it describes the stand-off rather than room for another job.
+    public static func decide(queue: [QueuedJob], running: [RunningJob], freeMemory: UInt64, policy: SchedulerPolicy, now: Double = 0, pressure: EffectiveMemoryPressure = .normal) -> SchedulerDecision {
         var admit: [Int64] = []
         var waiting: [Int64: WaitReason] = [:]
         var skipped: [Int64: String] = [:]
         var counts: [ResourceClass: Int] = [:]
         for job in running { counts[job.resourceClass, default: 0] += 1 }
+
+        if pressure > .normal, !running.isEmpty {
+            let labels = running.map(\.label)
+            for job in queue { waiting[job.id] = job.held ? .held : .swapping(running: labels) }
+            return SchedulerDecision(admit: [], waiting: waiting)
+        }
 
         let committed = running.reduce(UInt64(0)) { $0 + $1.pendingGrowth }
         var headroom = Int64(clamping: freeMemory) - Int64(clamping: policy.reserve) - Int64(clamping: committed)
@@ -222,6 +233,8 @@ public enum Scheduler {
             return "waiting for a \(cls.rawValue) slot\(startsIn(eta)) (running: \(summary(running)))"
         case let .memory(need, free, running, eta):
             return "waiting for memory, needs ~\(Bytes.format(need)), ~\(Bytes.format(free)) spare\(startsIn(eta)) (running: \(summary(running)))"
+        case let .swapping(running):
+            return "waiting, the machine is swapping (running: \(summary(running)))"
         case .held:
             return "held; waiting until someone releases it"
         }

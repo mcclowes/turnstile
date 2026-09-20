@@ -17,6 +17,29 @@ struct SystemTests {
         #expect(SystemMemory.level(environment: ["TURNSTILE_MEMORY_LEVEL_FILE": file.path]) == 7)
     }
 
+    @Test func readsSwapAndTheKernelsPressureLevel() {
+        #expect(SystemMemory.swapUsed(environment: [:]) < SystemMemory.physical * 8)
+        #expect((1...4).contains(SystemMemory.kernelPressure(environment: [:])))
+    }
+
+    @Test func aWholeSampleCanBeFaked() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("sample-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        func write(_ name: String, _ text: String) throws -> String {
+            let file = directory.appendingPathComponent(name)
+            try text.write(to: file, atomically: true, encoding: .utf8)
+            return file.path
+        }
+        let environment = [
+            "TURNSTILE_MEMORY_LEVEL_FILE": try write("level", "31\n"),
+            "TURNSTILE_SWAP_USED_FILE": try write("swap", "\(6 * Bytes.gb)\n"),
+            "TURNSTILE_PRESSURE_LEVEL_FILE": try write("pressure", "2\n"),
+        ]
+        #expect(SystemMemory.sample(environment: environment, at: 12)
+            == MemorySample(level: 31, kernelPressure: 2, swapUsed: 6 * Bytes.gb, at: 12))
+    }
+
     @Test func measuresAProcessTree() throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")

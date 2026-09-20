@@ -6,7 +6,7 @@ slug: /scheduling
 
 # Scheduling
 
-A job starts when its class has a free slot and its expected peak memory fits in free memory, minus a [reserve](../reference/configuration.md#machine-settings) for everything else.
+A job starts when its class has a free slot and its expected peak memory fits in free memory, minus a [reserve](../reference/configuration.md#machine-settings) for everything else. Nothing starts at all while the machine is [swapping](pressure.md), since free memory means nothing in that state.
 
 ## Learned peaks
 
@@ -22,6 +22,8 @@ A job waiting for memory holds up the queue behind it, with two exceptions:
 
 - A job that fits and should finish before the blocked one could start goes ahead, going by run times.
 - When run times aren't known, only small jobs (up to 5% of RAM, at least 512 MB) that fit can go ahead, and only during the blocked job's first 2 minutes of waiting.
+
+Neither applies while the machine is swapping; then nothing goes ahead of anything.
 
 ## Priority
 

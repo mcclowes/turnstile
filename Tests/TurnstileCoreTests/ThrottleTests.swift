@@ -82,10 +82,10 @@ struct PressureTests {
 
     func runaway(
         footprint: UInt64, ceiling: UInt64 = Bytes.gb, hard: Bool = false, memoryLevel: Int = 60,
-        pressuredFor: Double? = nil
+        pressure: EffectiveMemoryPressure = .normal, pressuredFor: Double? = nil
     ) -> Pressure.Runaway? {
         Pressure.runaway(footprint: footprint, ceiling: ceiling, hard: hard, memoryLevel: memoryLevel,
-                         pauseBelow: 8, pressuredFor: pressuredFor)
+                         pressure: pressure, pauseBelow: 8, pressuredFor: pressuredFor)
     }
 
     @Test func aJobUnderItsCeilingIsLeftAlone() {
@@ -104,6 +104,10 @@ struct PressureTests {
         #expect(runaway(footprint: 2 * gb, memoryLevel: 3) == .pause)
         #expect(runaway(footprint: 2 * gb, memoryLevel: 3, pressuredFor: 2) == .pause)
         #expect(runaway(footprint: 2 * gb, memoryLevel: 3, pressuredFor: 30) == .kill)
+    }
+
+    @Test func swappingMakesARunawayPauseWhileTheLevelLooksHealthy() {
+        #expect(runaway(footprint: 2 * gb, memoryLevel: 35, pressure: .swapping) == .pause)
     }
 
     /// Pressure lifting resets the escalation: the job is watched again, not killed.
@@ -186,5 +190,34 @@ struct PressureTests {
         let jobs = [job(1, started: 1, paused: true, runaway: true)]
         #expect(Pressure.action(memoryLevel: 5, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == nil)
         #expect(Pressure.action(memoryLevel: 25, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == .resume(1))
+    }
+
+    /// The bug in #17: the level never fell under `pauseBelow` because swapping held it up,
+    /// so nothing paused while the machine swapped 5 GB.
+    @Test func pausesWhileSwappingWhateverTheLevelSays() {
+        let jobs = [job(1, started: 1), job(2, started: 2)]
+        #expect(Pressure.action(memoryLevel: 35, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == nil)
+        #expect(Pressure.action(memoryLevel: 35, pressure: .swapping, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == .pause(2))
+    }
+
+    @Test func swappingKeepsOneJobRunningToo() {
+        #expect(Pressure.action(memoryLevel: 35, pressure: .critical, jobs: [job(1, started: 1)], pauseBelow: 8, resumeAbove: 20) == nil)
+    }
+
+    @Test func doesntResumeBackIntoSwap() {
+        let jobs = [job(1, started: 1), job(2, started: 2, paused: true)]
+        #expect(Pressure.action(memoryLevel: 60, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == .resume(2))
+        #expect(Pressure.action(memoryLevel: 60, pressure: .swapping, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == nil)
+    }
+
+    /// Nothing else is running, so keeping it paused can't help anyone.
+    @Test func resumesWhileSwappingWhenNothingElseRuns() {
+        #expect(Pressure.action(memoryLevel: 35, pressure: .critical, jobs: [job(2, started: 2, paused: true)], pauseBelow: 8, resumeAbove: 20) == .resume(2))
+    }
+
+    @Test func swappingSizesLimitsAsIfMemoryWereShort() {
+        let config = ThrottleConfig()
+        #expect(Throttle.limits(memoryLevel: 40, cpuCount: 8, config: config) == JobLimits())
+        #expect(Throttle.limits(memoryLevel: 40, pressure: .swapping, cpuCount: 8, config: config) == JobLimits(jobs: 2, nodeHeapMB: 2048))
     }
 }

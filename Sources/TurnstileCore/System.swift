@@ -59,7 +59,7 @@ public enum SystemMemory {
         return usage.xsu_used
     }
 
-    public static func free(level: Int) -> UInt64 {
+    public static func free(level: Int, of physical: UInt64 = SystemMemory.physical) -> UInt64 {
         physical / 100 * UInt64(max(0, min(100, level)))
     }
 

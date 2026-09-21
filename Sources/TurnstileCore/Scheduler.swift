@@ -148,8 +148,7 @@ public enum Scheduler {
             return SchedulerDecision(admit: [], waiting: waiting)
         }
 
-        let committed = running.reduce(UInt64(0)) { $0 + $1.pendingGrowth }
-        var headroom = Int64(clamping: freeMemory) - Int64(clamping: policy.reserve) - Int64(clamping: committed)
+        var headroom = headroom(freeMemory: freeMemory, reserve: policy.reserve, running: running)
         var anythingRunning = !running.isEmpty
         var memoryBlocked: QueuedJob?
         var blockerStart: Double?
@@ -202,6 +201,13 @@ public enum Scheduler {
             anythingRunning = true
         }
         return SchedulerDecision(admit: admit, waiting: waiting, skipped: skipped)
+    }
+
+    /// Memory a new job may claim: free, less the reserve, less what running jobs are still expected to grow into.
+    /// Negative when running jobs have already been promised more than is free.
+    public static func headroom(freeMemory: UInt64, reserve: UInt64, running: [RunningJob]) -> Int64 {
+        let committed = running.reduce(UInt64(0)) { $0 + $1.pendingGrowth }
+        return Int64(clamping: freeMemory) - Int64(clamping: reserve) - Int64(clamping: committed)
     }
 
     private struct Active {

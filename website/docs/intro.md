@@ -5,6 +5,8 @@ slug: /
 sidebar_label: Overview
 ---
 
+import HomepageDemo from '@site/src/components/HomepageDemo';
+
 # turnstile
 
 A machine-wide, memory-aware gate for builds and tests on macOS.
@@ -21,6 +23,10 @@ turnstile: starting after 41s
 ```
 
 There's no project setup. Once it's installed, every repo, agent, and terminal on the machine is covered.
+
+## Turnstile in action
+
+<HomepageDemo />
 
 ## Where to go next
 

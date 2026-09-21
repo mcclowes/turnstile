@@ -11,6 +11,7 @@ let package = Package(
     targets: [
         .target(
             name: "TurnstileCore",
+            swiftSettings: [.swiftLanguageMode(.v6)],
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),
         .executableTarget(

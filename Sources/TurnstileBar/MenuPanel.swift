@@ -34,14 +34,19 @@ struct MenuPanel: View {
 
     @ViewBuilder
     private func body(for snapshot: StatusSnapshot) -> some View {
-        let now = Date().timeIntervalSince1970
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if snapshot.running.isEmpty && snapshot.queued.isEmpty {
                     empty
                 }
-                jobs("Running", snapshot.running, now: now)
-                jobs("Queued", snapshot.queued, now: now)
+                // Ticks between polls, so elapsed times and countdowns don't freeze.
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    let now = context.date.timeIntervalSince1970
+                    VStack(alignment: .leading, spacing: 0) {
+                        jobs("Running", snapshot.running, now: now)
+                        jobs("Queued", snapshot.queued, now: now)
+                    }
+                }
                 if !snapshot.recent.isEmpty {
                     recent(snapshot.recent)
                 }

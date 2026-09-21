@@ -26,7 +26,7 @@ struct JobRow: View {
                             .foregroundStyle(.secondary)
                     }
                     .padding(.top, 1)
-                } else if let waiting = job.waiting {
+                } else if let waiting = MenuBarState.waitingText(for: job, now: now) {
                     Text(waiting)
                         .font(.system(size: 10))
                         .foregroundStyle(.tertiary)
@@ -41,6 +41,9 @@ struct JobRow: View {
         .onHover { inside in
             hovering = inside
             if !inside { confirmingKill = false }
+        }
+        .contextMenu {
+            Button("Open folder") { NSWorkspace.shared.open(URL(fileURLWithPath: job.cwd)) }
         }
     }
 

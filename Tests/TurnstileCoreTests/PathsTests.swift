@@ -23,4 +23,19 @@ struct PathsTests {
         #expect(!paths.isDisabled)
         try paths.setDisabled(false)
     }
+
+    @Test func pausingTheQueueWritesItsOwnFlag() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("turnstile-paths-\(UUID().uuidString)").path
+        defer { try? FileManager.default.removeItem(atPath: home) }
+        let paths = Paths(home: home)
+        #expect(!paths.isQueuePaused)
+
+        try paths.setQueuePaused(true)
+        #expect(paths.isQueuePaused)
+        #expect(!paths.isDisabled)
+
+        try paths.setQueuePaused(false)
+        #expect(!paths.isQueuePaused)
+        try paths.setQueuePaused(false)
+    }
 }

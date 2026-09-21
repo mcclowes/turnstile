@@ -181,6 +181,7 @@ struct MenuPanel: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
+            pauseQueue
             Spacer(minLength: 0)
             SettingsLink {
                 Label("Settings", systemImage: "gearshape")
@@ -202,6 +203,21 @@ struct MenuPanel: View {
         }
         .padding(.horizontal, Panel.gutter)
         .padding(.vertical, 8)
+    }
+
+    /// Stops new admissions only; a single running job is paused from its own row.
+    private var pauseQueue: some View {
+        let paused = monitor.queuePaused
+        return Button {
+            monitor.setQueuePaused(!paused)
+        } label: {
+            Label(paused ? "Resume queue" : "Pause queue", systemImage: paused ? "play.fill" : "pause.fill")
+                .font(.system(size: 11))
+                .contentShape(.rect)
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(paused ? MenuBarState.Tone.warning.color : Color.secondary)
+        .help(paused ? "Let queued commands start again" : "Start nothing new; running commands carry on")
     }
 }
 

@@ -577,6 +577,13 @@ final class Daemon {
     func schedule() {
         let queued = jobs.values.filter { $0.state == .queued }
         guard !queued.isEmpty else { return }
+        if paths.isQueuePaused {
+            for job in queued {
+                job.startsAt = nil
+                tellWaiting(job, "the queue is paused; resume it from the menu bar")
+            }
+            return
+        }
         let running = jobs.values.filter { $0.state != .queued }
         let clock = Daemon.clock()
         let decision = Scheduler.decide(
@@ -591,7 +598,6 @@ final class Daemon {
             pressure: memoryPressure
         )
         let now = Daemon.now()
-        let tick = Daemon.clock()
         for id in decision.admit {
             guard let job = jobs[id] else { continue }
             admit(job, now: now, ahead: decision.skipped[id])
@@ -599,16 +605,19 @@ final class Daemon {
         for (id, reason) in decision.waiting {
             guard let job = jobs[id] else { continue }
             job.startsAt = reason.eta.map { now + $0 }
-            let text = reason == .held ? "held; `turnstile release #\(id)` lets it run" : Scheduler.message(for: reason)
-            // Repeat now and then, so a long wait never looks like a hang.
-            if text != job.lastWait || tick - job.lastWaitSentAt >= 30 {
-                var reply = Message(type: "queued")
-                reply.text = text
-                job.owner?.send(reply)
-                job.lastWait = text
-                job.lastWaitSentAt = tick
-            }
+            tellWaiting(job, reason == .held ? "held; `turnstile release #\(id)` lets it run" : Scheduler.message(for: reason))
         }
+    }
+
+    /// Repeats now and then, so a long wait never looks like a hang.
+    private func tellWaiting(_ job: Job, _ text: String) {
+        let tick = Daemon.clock()
+        guard text != job.lastWait || tick - job.lastWaitSentAt >= 30 else { return }
+        var reply = Message(type: "queued")
+        reply.text = text
+        job.owner?.send(reply)
+        job.lastWait = text
+        job.lastWaitSentAt = tick
     }
 
     func admit(_ job: Job, now: Double, ahead blocker: String? = nil) {

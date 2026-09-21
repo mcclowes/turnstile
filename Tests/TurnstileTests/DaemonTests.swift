@@ -103,6 +103,20 @@ struct DaemonAdmissionTests {
         #expect(held.types().contains("admitted"))
     }
 
+    @Test func aPausedQueueAdmitsNothingUntilResumed() throws {
+        let harness = try DaemonHarness()
+        let waiting = FakeClient()
+        try harness.daemon.paths.setQueuePaused(true)
+        harness.request(waiting)
+        let told = waiting.received()
+        #expect(!told.contains { $0.type == "admitted" })
+        #expect(told.contains { $0.type == "queued" && $0.text?.contains("paused") == true })
+
+        try harness.daemon.paths.setQueuePaused(false)
+        harness.daemon.schedule()
+        #expect(waiting.types().contains("admitted"))
+    }
+
     @Test func aNestedCallInsideARunningJobIsReleased() throws {
         let harness = try DaemonHarness()
         let owner = FakeClient(), nested = FakeClient()

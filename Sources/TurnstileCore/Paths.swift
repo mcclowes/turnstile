@@ -43,15 +43,29 @@ public struct Paths: Sendable {
     }
 
     public func setDisabled(_ disabled: Bool) throws {
-        if !disabled {
-            guard isDisabled else { return }
-            try FileManager.default.removeItem(atPath: disabledFlag)
+        try setFlag(disabledFlag, disabled)
+    }
+
+    /// While this file exists the daemon admits nothing new; running jobs carry on.
+    public var queuePausedFlag: String { home + "/queue-paused" }
+
+    public var isQueuePaused: Bool { FileManager.default.fileExists(atPath: queuePausedFlag) }
+
+    public func setQueuePaused(_ paused: Bool) throws {
+        try setFlag(queuePausedFlag, paused)
+    }
+
+    /// Leaves an existing flag untouched, so its modification date says when it was first set.
+    private func setFlag(_ path: String, _ on: Bool) throws {
+        let exists = FileManager.default.fileExists(atPath: path)
+        if !on {
+            if exists { try FileManager.default.removeItem(atPath: path) }
             return
         }
-        guard !isDisabled else { return }
+        guard !exists else { return }
         try ensure()
-        guard FileManager.default.createFile(atPath: disabledFlag, contents: Data()) else {
-            throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: disabledFlag])
+        guard FileManager.default.createFile(atPath: path, contents: Data()) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: path])
         }
     }
 

@@ -11,6 +11,8 @@ final class Monitor: NSObject, ObservableObject, UNUserNotificationCenterDelegat
     @Published private(set) var evidence: Health.Evidence?
     /// Read on every poll, so a `turnstile disable` in a shell shows within seconds.
     @Published private(set) var disabled = false
+    /// A flag file like `disabled`, so it holds across daemon restarts.
+    @Published private(set) var queuePaused = false
     @Published private(set) var notifying = Set(MenuBarState.Event.Kind.allCases.filter { Monitor.isOn($0) })
 
     private let paths = Paths()
@@ -40,10 +42,11 @@ final class Monitor: NSObject, ObservableObject, UNUserNotificationCenterDelegat
     }
 
     /// A fixed snapshot for rendering the panel: no polling, no notifications, no daemon.
-    init(fixture: StatusSnapshot?, disabled: Bool = false) {
+    init(fixture: StatusSnapshot?, disabled: Bool = false, queuePaused: Bool = false) {
         super.init()
         snapshot = fixture
         self.disabled = disabled
+        self.queuePaused = queuePaused
         evidence = nil
     }
 
@@ -63,8 +66,10 @@ final class Monitor: NSObject, ObservableObject, UNUserNotificationCenterDelegat
         queue.async { [paths] in
             let status = Client.connect(socketPath: paths.socket)?.roundTrip(Message(type: "status"), timeout: 2)?.status
             let disabled = paths.isDisabled
+            let queuePaused = paths.isQueuePaused
             DispatchQueue.main.async {
                 self.disabled = disabled
+                self.queuePaused = queuePaused
                 self.update(status)
             }
         }
@@ -97,6 +102,16 @@ final class Monitor: NSObject, ObservableObject, UNUserNotificationCenterDelegat
             message = "Couldn't turn gating \(enabled ? "on" : "off"): \(error.localizedDescription)"
         }
         disabled = paths.isDisabled
+    }
+
+    /// Running jobs carry on; the daemon picks the change up on its next tick.
+    func setQueuePaused(_ paused: Bool) {
+        do {
+            try paths.setQueuePaused(paused)
+        } catch {
+            message = "Couldn't \(paused ? "pause" : "resume") the queue: \(error.localizedDescription)"
+        }
+        queuePaused = paths.isQueuePaused
     }
 
     func clearMessage() {

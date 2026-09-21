@@ -28,6 +28,12 @@ There's no project setup. Once it's installed, every repo, agent, and terminal o
 
 <HomepageDemo />
 
+### From the terminal
+
+![Turnstile status in a terminal with two running jobs and recent command history](/img/screenshots/status.webp)
+
+`turnstile status` gives the same queue a more detailed view, including current memory use, learned estimates, and recent runs.
+
 ## Where to go next
 
 - [Install](./start/install.md) turnstile and check it's wired up.

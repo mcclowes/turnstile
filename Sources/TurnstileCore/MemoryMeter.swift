@@ -8,6 +8,7 @@ import Foundation
 public struct MemoryMeter: Equatable, Sendable {
     public struct Segment: Equatable, Sendable {
         public var id: Int64
+        public var project: String
         public var label: String
         public var resourceClass: ResourceClass
         public var used: UInt64
@@ -67,7 +68,7 @@ public struct MemoryMeter: Equatable, Sendable {
 
         other = inUse > inJobs ? inUse - inJobs : 0
         segments = zip(snapshot.running, running).map { job, scheduled in
-            Segment(id: job.id, label: job.label, resourceClass: job.resourceClass, used: scheduled.footprint, committed: scheduled.pendingGrowth, paused: job.paused)
+            Segment(id: job.id, project: job.project, label: job.label, resourceClass: job.resourceClass, used: scheduled.footprint, committed: scheduled.pendingGrowth, paused: job.paused)
         }
         spare = UInt64(max(0, headroom))
         reserve = snapshot.reserve

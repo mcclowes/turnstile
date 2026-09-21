@@ -62,7 +62,7 @@ enum PanelFixtures {
     private static let now = Date().timeIntervalSince1970
 
     private static func snapshot(level: Int, running: [JobSnapshot] = [], queued: [JobSnapshot] = [], recent: [HistoryEntry] = []) -> StatusSnapshot {
-        StatusSnapshot(memoryLevel: level, physicalMemory: 32 * Bytes.gb, reserve: 3 * Bytes.gb, limits: [:], running: running, queued: queued, recent: recent, daemonPid: 1)
+        StatusSnapshot(memoryLevel: level, physicalMemory: 32 * Bytes.gb, reserve: 3 * Bytes.gb, limits: ["compile": 1, "test": 2, "browser": 1], running: running, queued: queued, recent: recent, daemonPid: 1)
     }
 
     private static func busy(queued count: Int = 4) -> StatusSnapshot {
@@ -93,7 +93,7 @@ enum PanelFixtures {
         let recent = outcomes.enumerated().map { index, outcome in
             HistoryEntry(id: Int64(11 - index), project: ["api", "web", "docs", "mobile-app", "api"][index], key: ["swift test", "npm run lint -- --max-warnings 0", "npm run build", "xcodebuild build", "swift build"][index], outcome: outcome.0, exitCode: outcome.1, peak: UInt64(Double(Bytes.gb) * [1.8, 0.6, 1.1, 9.4, 3.2][index]), duration: [94, 21, 38, 612, 150][index], finishedAt: now - 60 * Double(index + 1))
         }
-        return snapshot(level: 24, running: running, queued: queued, recent: recent)
+        return snapshot(level: 20, running: running, queued: queued, recent: recent)
     }
 
     private static func job(_ id: Int64, _ resourceClass: ResourceClass, _ project: String, _ key: String, estimate: Double, footprint: Double? = nil, started: Double? = nil, queuedAt: Double = 200, joiners: Int = 0, pausedBy: String? = nil) -> JobSnapshot {

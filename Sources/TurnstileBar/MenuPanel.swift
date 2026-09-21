@@ -236,33 +236,23 @@ struct RecentRow: View {
     }
 }
 
-/// Free memory, the number that decides what runs and what waits.
+/// Memory in use and who holds it, the numbers that decide what runs and what waits.
 struct MemoryHeader: View {
     var snapshot: StatusSnapshot
 
     private var tone: MenuBarState.Tone { MenuBarState.memoryTone(snapshot.memoryLevel) }
-    private var free: UInt64 { snapshot.physicalMemory / 100 * UInt64(snapshot.memoryLevel) }
+    private var used: UInt64 { snapshot.physicalMemory - SystemMemory.free(level: snapshot.memoryLevel, of: snapshot.physicalMemory) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
-                Gauge(value: Double(snapshot.memoryLevel), in: 0...100) {
-                    EmptyView()
-                } currentValueLabel: {
-                    Text("\(snapshot.memoryLevel)")
-                        .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                }
-                .gaugeStyle(.accessoryCircularCapacity)
-                .tint(tone.color)
-                .frame(width: 44, height: 44)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Memory free")
-                        .font(.system(size: 13, weight: .semibold))
-                    Text("\(Bytes.format(free)) of \(Bytes.format(snapshot.physicalMemory))")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("Memory")
+                    .font(.system(size: 13, weight: .semibold))
+                // The tone is the only warning: amber when tight, red when jobs start pausing.
+                Text("\(Bytes.format(used)) used of \(Bytes.format(snapshot.physicalMemory))")
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(tone == .good ? Color.secondary : tone.color)
+                    .help("\(snapshot.memoryLevel)% free")
                 Spacer(minLength: 0)
                 if let version = snapshot.version {
                     Text(version)
@@ -270,17 +260,7 @@ struct MemoryHeader: View {
                         .foregroundStyle(.tertiary)
                 }
             }
-            if tone != .good {
-                HStack(spacing: 6) {
-                    Image(systemName: MenuBarState.pressureSymbol)
-                        .font(.system(size: 10))
-                    Text(tone == .danger
-                        ? "Memory is low. Jobs pause until it recovers."
-                        : "Memory is getting tight.")
-                        .font(.system(size: 11))
-                }
-                .foregroundStyle(tone.color)
-            }
+            MemoryMeterView(meter: MemoryMeter(snapshot))
         }
         .padding(.horizontal, Panel.gutter)
         .padding(.top, 14)

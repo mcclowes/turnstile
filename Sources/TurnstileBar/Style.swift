@@ -23,7 +23,7 @@ enum Panel {
     /// Past this the job list scrolls rather than growing down the screen.
     static let maxListHeight: CGFloat = 480
     /// What the header, banners, and footer need around the list.
-    private static let chromeHeight: CGFloat = 220
+    private static let chromeHeight: CGFloat = 260
     private static let sectionHeight: CGFloat = 36
     private static let runningHeight: CGFloat = 70
     private static let queuedHeight: CGFloat = 70

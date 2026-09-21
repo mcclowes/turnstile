@@ -216,6 +216,13 @@ public final class Store {
         return result
     }
 
+    /// How a finished job ended, or nil while it runs or once it's pruned.
+    public func outcome(of id: Int64) -> String? {
+        var outcome: String?
+        query("SELECT outcome FROM jobs WHERE id = ? AND state = 'finished'", [id]) { row in outcome = row.text(0) }
+        return outcome
+    }
+
     /// Every finished job since `cutoff`, for the history summary, optionally narrowed to one project.
     /// `ran_for` excludes time paused, and is missing from jobs a restarted daemon adopted, so those
     /// fall back to wall-clock time.

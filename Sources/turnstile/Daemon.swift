@@ -1006,7 +1006,8 @@ final class Daemon {
                 estimateSource: job.estimateSource,
                 tree: job.state == .queued ? nil : job.tree,
                 escapees: job.escapees.isEmpty ? nil : job.escapees.sorted(),
-                startsAt: job.state == .queued ? job.startsAt : nil
+                startsAt: job.state == .queued ? job.startsAt : nil,
+                log: job.log
             )
         }
         var limits: [String: Int] = [:]
@@ -1015,7 +1016,7 @@ final class Daemon {
             memoryLevel: memoryLevel, physicalMemory: physical, reserve: config.machine.reserveBytes, limits: limits,
             running: jobs.values.filter { $0.state != .queued }.sorted { ($0.startedAt ?? 0) < ($1.startedAt ?? 0) }.map(describe),
             queued: ordered.compactMap { jobs[$0] }.map(describe),
-            recent: store.recent(limit: 10),
+            recent: store.recent(limit: 10).map(withLog),
             daemonPid: getpid(),
             ungated: store.escapes(since: Daemon.now() - 3600, limit: 3)
         )
@@ -1041,13 +1042,22 @@ final class Daemon {
         }
     }
 
+    /// Points a recent run at its captured output only while the file is still there, so nothing offers a dead link.
+    func withLog(_ entry: HistoryEntry) -> HistoryEntry {
+        var entry = entry
+        let path = paths.log(forJob: entry.id)
+        entry.log = FileManager.default.fileExists(atPath: path) ? path : nil
+        return entry
+    }
+
     func cleanLogs() {
-        let cutoff = Date().addingTimeInterval(-86400)
+        let now = Date()
         let files = (try? FileManager.default.contentsOfDirectory(atPath: paths.logs)) ?? []
         for file in files {
             let path = paths.logs + "/" + file
-            let modified = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
-            if let modified, modified < cutoff { try? FileManager.default.removeItem(atPath: path) }
+            guard let modified = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date else { continue }
+            let outcome = RunLogs.job(fromFileName: file).flatMap(store.outcome)
+            if now.timeIntervalSince(modified) > RunLogs.retention(outcome: outcome) { try? FileManager.default.removeItem(atPath: path) }
         }
     }
 }

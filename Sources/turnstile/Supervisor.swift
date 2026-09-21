@@ -182,7 +182,7 @@ enum Supervisor {
         var outPipe: [Int32] = [-1, -1]
         var errPipe: [Int32] = [-1, -1]
         if capture {
-            let candidate = "\(paths.logs)/\(job).log"
+            let candidate = paths.log(forJob: job)
             try? FileManager.default.createDirectory(atPath: paths.logs, withIntermediateDirectories: true)
             log = open(candidate, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0o644)
             if log >= 0, pipe(&outPipe) == 0, pipe(&errPipe) == 0 {

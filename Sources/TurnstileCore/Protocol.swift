@@ -106,10 +106,12 @@ public struct JobSnapshot: Codable, Equatable, Sendable {
     public var escapees: [Int32]?
     /// When a queued job should start, in epoch seconds, if the wait has a known end. Nil from daemons older than 0.5.
     public var startsAt: Double?
+    /// Where the run's output is captured. Nil when it has a terminal, before it starts, and from older daemons.
+    public var log: String?
 
     public var label: String { "\(project) \(key)" }
 
-    public init(id: Int64, state: String, resourceClass: ResourceClass, project: String, key: String, cwd: String, agent: Bool, estimate: UInt64, footprint: UInt64?, peak: UInt64?, paused: Bool, clientPid: Int32, childPid: Int32?, queuedAt: Double, startedAt: Double?, waiting: String?, joiners: Int, held: Bool? = nil, pausedBy: String? = nil, estimateSource: String? = nil, tree: [Int32]? = nil, escapees: [Int32]? = nil, startsAt: Double? = nil) {
+    public init(id: Int64, state: String, resourceClass: ResourceClass, project: String, key: String, cwd: String, agent: Bool, estimate: UInt64, footprint: UInt64?, peak: UInt64?, paused: Bool, clientPid: Int32, childPid: Int32?, queuedAt: Double, startedAt: Double?, waiting: String?, joiners: Int, held: Bool? = nil, pausedBy: String? = nil, estimateSource: String? = nil, tree: [Int32]? = nil, escapees: [Int32]? = nil, startsAt: Double? = nil, log: String? = nil) {
         self.id = id
         self.state = state
         self.resourceClass = resourceClass
@@ -133,6 +135,7 @@ public struct JobSnapshot: Codable, Equatable, Sendable {
         self.tree = tree
         self.escapees = escapees
         self.startsAt = startsAt
+        self.log = log
     }
 }
 
@@ -173,8 +176,10 @@ public struct HistoryEntry: Codable, Equatable, Sendable {
     public var peak: UInt64?
     public var duration: Double?
     public var finishedAt: Double
+    /// The run's captured output, set only while the file still exists.
+    public var log: String?
 
-    public init(id: Int64, project: String, key: String, outcome: String, exitCode: Int32?, peak: UInt64?, duration: Double?, finishedAt: Double) {
+    public init(id: Int64, project: String, key: String, outcome: String, exitCode: Int32?, peak: UInt64?, duration: Double?, finishedAt: Double, log: String? = nil) {
         self.id = id
         self.project = project
         self.key = key
@@ -183,6 +188,7 @@ public struct HistoryEntry: Codable, Equatable, Sendable {
         self.peak = peak
         self.duration = duration
         self.finishedAt = finishedAt
+        self.log = log
     }
 }
 

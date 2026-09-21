@@ -42,7 +42,7 @@ struct MenuPanel: View {
             }
             .padding(.bottom, 8)
         }
-        .frame(maxHeight: Panel.listHeight)
+        .frame(height: Panel.listHeight(for: snapshot, showingRecent: showRecent))
     }
 
     @ViewBuilder

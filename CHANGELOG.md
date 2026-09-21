@@ -8,6 +8,10 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 - `turnstile restart` replaces the daemon without releasing its queued and running jobs. Installing a newer version uses the same recovery path when the existing daemon supports it.
 
+### Fixed
+
+- The menu bar app's settings window and active-job list now reserve enough height for their contents.
+
 ## 0.4.0
 
 ### Added

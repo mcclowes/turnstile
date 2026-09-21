@@ -141,7 +141,7 @@ struct ShimSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520)
+        .frame(width: 520, height: 500)
         .padding(.vertical, 8)
     }
 }

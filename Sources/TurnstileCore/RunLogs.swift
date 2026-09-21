@@ -23,6 +23,12 @@ public enum RunLogs {
         guard let id = Int64(trimmed), id > 0 else { return nil }
         return id
     }
+
+    /// A `.command` file's contents that follows a job's output in whichever terminal opens it.
+    public static func followScript(executable: String, job id: Int64) -> String {
+        let quoted = "'" + executable.replacingOccurrences(of: "'", with: #"'\''"#) + "'"
+        return "#!/bin/sh\nexec \(quoted) logs \(id) -f\n"
+    }
 }
 
 extension Paths {

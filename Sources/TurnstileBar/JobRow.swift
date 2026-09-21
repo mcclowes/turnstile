@@ -45,6 +45,11 @@ struct JobRow: View {
             if !inside { confirmingKill = false }
         }
         .contextMenu {
+            if let log = job.log {
+                Button("Open log") { RunLogActions.open(log) }
+                Button("Follow in Terminal") { RunLogActions.follow(job: job.id) }
+                Divider()
+            }
             Button("Open folder") { NSWorkspace.shared.open(URL(fileURLWithPath: job.cwd)) }
         }
     }

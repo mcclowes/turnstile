@@ -94,7 +94,7 @@ enum PanelFixtures {
         }
         let outcomes: [(String, Int32?)] = [("ok", nil), ("failed", 1), ("ok", nil), ("killed", nil), ("superseded", nil)]
         let recent = outcomes.enumerated().map { index, outcome in
-            HistoryEntry(id: Int64(11 - index), project: ["api", "web", "docs", "mobile-app", "api"][index], key: ["swift test", "npm run lint -- --max-warnings 0", "npm run build", "xcodebuild build", "swift build"][index], outcome: outcome.0, exitCode: outcome.1, peak: UInt64(Double(Bytes.gb) * [1.8, 0.6, 1.1, 9.4, 3.2][index]), duration: [94, 21, 38, 612, 150][index], finishedAt: now - 60 * Double(index + 1))
+            HistoryEntry(id: Int64(11 - index), project: ["api", "web", "docs", "mobile-app", "api"][index], key: ["swift test", "npm run lint -- --max-warnings 0", "npm run build", "xcodebuild build", "swift build"][index], outcome: outcome.0, exitCode: outcome.1, peak: UInt64(Double(Bytes.gb) * [1.8, 0.6, 1.1, 9.4, 3.2][index]), duration: [94, 21, 38, 612, 150][index], finishedAt: now - 60 * Double(index + 1), log: outcome.0 == "failed" ? "/tmp/\(11 - index).log" : nil)
         }
         return snapshot(level: 20, running: running, queued: queued, recent: recent)
     }

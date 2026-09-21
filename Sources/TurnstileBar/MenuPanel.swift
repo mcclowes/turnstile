@@ -266,12 +266,29 @@ struct RecentRow: View {
                     .foregroundStyle(badge.tone == .neutral ? Color.secondary : badge.tone.color)
                     .fixedSize()
             }
+            // A failure's output is the thing you came to read, so it gets a button rather than only a context menu.
+            if let log = entry.log, entry.outcome != "ok" {
+                Button { RunLogActions.open(log) } label: {
+                    Image(systemName: "doc.text")
+                        .font(.system(size: 10))
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("Open #\(entry.id)'s output")
+                .accessibilityLabel("Open log")
+            }
             Spacer(minLength: 6)
             column(entry.duration.map(formatDuration) ?? "–", width: 52, help: "How long it ran")
             column(entry.peak.map { Bytes.format($0) } ?? "–", width: 52, help: "Peak memory")
         }
         .padding(.horizontal, Panel.gutter)
         .padding(.vertical, 5)
+        .contentShape(.rect)
+        .contextMenu {
+            if let log = entry.log {
+                Button("Open log") { RunLogActions.open(log) }
+            }
+        }
     }
 
     private func column(_ text: String, width: CGFloat, help: String) -> some View {

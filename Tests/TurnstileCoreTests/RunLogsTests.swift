@@ -32,6 +32,11 @@ struct RunLogsTests {
         #expect(RunLogs.job(fromTarget: "-3") == nil)
     }
 
+    @Test func followScriptRunsTheCLIWithItsPathQuoted() {
+        let script = RunLogs.followScript(executable: "/Users/o'neil/.turnstile/shims/turnstile", job: 7)
+        #expect(script == "#!/bin/sh\nexec '/Users/o'\\''neil/.turnstile/shims/turnstile' logs 7 -f\n")
+    }
+
     @Test func snapshotsFromOlderDaemonsDecodeWithoutALog() throws {
         let json = #"{"id":1,"project":"p","key":"k","outcome":"ok","finishedAt":0}"#
         let entry = try JSONDecoder().decode(HistoryEntry.self, from: Data(json.utf8))

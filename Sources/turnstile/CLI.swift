@@ -13,6 +13,7 @@ enum CLI {
           turnstile doctor [--shells]                        check the install, PATH, config, and daemon
           turnstile status [--json] [--watch]                running and queued jobs, memory, recent runs
           turnstile history [--days 30] [--here] [--json]    what each command has cost, and how long jobs waited
+          turnstile logs <job> [-f]                          a run's captured output; -f follows it until the run ends
           turnstile top                                      interactive view: select a job to bump, pause, hold, or kill
           turnstile bump <job>                               move a job (number, pid, or name) to the front
           turnstile kill <job>                               drop a queued job, or stop a running one
@@ -44,6 +45,7 @@ enum CLI {
         case "init": initialize(rest)
         case "status": status(rest)
         case "history": history(rest)
+        case "logs": logs(rest)
         case "top": Top.main(rest)
         case "bump", "kill", "pause", "resume", "hold", "release": control(command, rest)
         case "run": run(rest)
@@ -325,6 +327,37 @@ enum CLI {
         }
         print(reply.text ?? "done")
         exit(0)
+    }
+
+    /// Prints a run's captured output. Following ends when the run does, unlike `tail -f`.
+    static func logs(_ args: [String]) -> Never {
+        let follow = args.contains("-f") || args.contains("--follow")
+        guard let target = args.first(where: { !$0.hasPrefix("-") }), let id = RunLogs.job(fromTarget: target) else {
+            warn("usage: turnstile logs <job number> [-f]")
+            exit(64)
+        }
+        guard let file = FileHandle(forReadingAtPath: paths.log(forJob: id)) else {
+            warn("no captured output for #\(id): it ran in a terminal, hasn't started, or its log was cleaned up")
+            exit(1)
+        }
+        let copy = { FileHandle.standardOutput.write(file.readDataToEndOfFile()) }
+        copy()
+        if follow {
+            while isRunning(id) {
+                for _ in 0..<4 {
+                    usleep(250_000)
+                    copy()
+                }
+            }
+            copy()
+        }
+        exit(0)
+    }
+
+    static func isRunning(_ id: Int64) -> Bool {
+        guard let client = Client.connect(socketPath: paths.socket),
+              let status = client.roundTrip(Message(type: "status"))?.status else { return false }
+        return status.running.contains { $0.id == id }
     }
 
     static func stop() -> Never {

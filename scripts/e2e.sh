@@ -220,6 +220,20 @@ check "status text" 'turnstile status | grep -q "recent:"'
 check "history summarizes what has run" 'turnstile history | grep -q "commands:" && turnstile history | grep -q "swift "'
 check "history --json" 'turnstile history --json | /usr/bin/python3 -c "import json,sys; d=json.load(sys.stdin); assert d[\"jobs\"] > 0 and d[\"commands\"]"'
 check "history rejects a bad window" '! turnstile history --days 0 > /dev/null 2>&1'
+
+# Output captured from a run with no terminal can be read back, and followed until the run ends.
+mkdir -p logged
+(cd logged && FAKE_SLEEP=2 FAKE_EXIT=5 swift build > /dev/null 2>&1) &
+wait_for_job running logged "swift build"
+logged_job="$(turnstile status --json | /usr/bin/python3 -c 'import json, sys; j = next(j for j in json.load(sys.stdin)["running"] if j["project"] == "logged"); assert j["log"].endswith("/%d.log" % j["id"]); print(j["id"])')"
+check "a running job reports where its output goes" '[ -n "$logged_job" ]'
+started=$SECONDS
+out="$(turnstile logs "#$logged_job" -f)"
+check "logs -f follows the run to its end" 'echo "$out" | grep -q "fake swift build" && echo "$out" | grep -q "fake swift done" && [ $((SECONDS - started)) -ge 1 ]'
+check "logs prints a finished run" 'turnstile logs "$logged_job" | grep -q "fake swift done"'
+check "a recent run reports its log" 'turnstile status --json | /usr/bin/python3 -c "import json,sys; assert any(r[\"id\"] == $logged_job and r[\"log\"] for r in json.load(sys.stdin)[\"recent\"])"'
+check "logs explains a run with no capture" '! turnstile logs 99999 > /dev/null 2> "$T/nolog.err" && grep -q "no captured output" "$T/nolog.err"'
+check "logs wants a job number" '! turnstile logs swift > /dev/null 2>&1'
 check "run gates any command, leaving its arguments alone" '[ "$(turnstile run --class test -- /bin/echo --class test)" = "--class test" ]'
 check "classify explains a command" '[ "$(turnstile classify npm run test:e2e)" = "browser (npm run test:e2e)" ]'
 

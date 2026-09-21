@@ -174,6 +174,10 @@ final class Daemon {
     /// The last tick memory was low or swap was growing, which is what a paused job's backoff counts from.
     var lastPressuredAt = -Double.infinity
     var idleSince = Daemon.clock()
+    /// When the escape scan last recorded something, on the monotonic clock. It holds an idle daemon up.
+    var lastEscapeAt: Double?
+    /// This daemon's row in `daemon_runs`, so doctor can say which hours the escape report covers.
+    var runId: Int64?
     let idleExit: Double
     let physical = SystemMemory.physical
     let cpuCount = SystemMemory.cpuCount
@@ -217,6 +221,7 @@ final class Daemon {
 
         store.abandonOpenJobs(now: Daemon.now())
         store.prune(olderThan: Daemon.now() - 30 * 86400)
+        runId = store.startDaemonRun(at: Daemon.now())
         cleanLogs()
         reloadConfig()
         readMemory()
@@ -235,6 +240,7 @@ final class Daemon {
 
     func shutdown(reason: String, releaseJobs: Bool = true) -> Never {
         log("stopping: \(reason)")
+        if let runId { store.touchDaemonRun(runId, at: Daemon.now()) }
         for job in jobs.values where job.paused { ProcessTree.signal(job.tree, SIGCONT) }
         if releaseJobs {
             for job in jobs.values {
@@ -656,10 +662,11 @@ final class Daemon {
         schedule()
 
         if jobs.isEmpty && connectionsAreIdle() {
-            if now - idleSince > idleExit { shutdown(reason: "idle") }
+            if IdleExit.isDue(now: now, idleSince: idleSince, lastEscape: lastEscapeAt, idleExit: idleExit) { shutdown(reason: "idle") }
         } else {
             idleSince = now
         }
+        if ticks % 60 == 0, let runId { store.touchDaemonRun(runId, at: Daemon.now()) }
         if ticks % 3600 == 0 { cleanLogs() }
     }
 
@@ -737,6 +744,7 @@ final class Daemon {
             let via = Escapes.via(chain: chain)
             let cwd = probe.workingDirectory(pid) ?? "an unknown directory"
             store.insertEscape(label: label, via: via, cwd: cwd, executable: executable, chain: chain, at: now)
+            lastEscapeAt = Daemon.clock()
             if loggedEscapes.insert("\(label) \(via) \(cwd)").inserted {
                 log("\(label) ran outside turnstile, under \(via) in \(cwd)")
             }

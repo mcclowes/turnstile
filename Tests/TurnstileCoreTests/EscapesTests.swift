@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import TurnstileCore
 
@@ -45,5 +46,28 @@ struct EscapesTests {
         #expect(Escapes.report(rows, home: "/Users/me")
             == "14 × swift-frontend under Xcode in ~/app, 3 × node vitest under zsh in ~/web")
         #expect(Escapes.report([], home: "/Users/me") == nil)
+    }
+
+    @Test("Doctor says how long it was watching, rather than implying it saw everything", .bug(id: 30))
+    func describesTheWindowItWatched() {
+        #expect(Escapes.watched(uptime: 0) == "the daemon didn't run in the last day")
+        #expect(Escapes.watched(uptime: 3 * 3600 + 720) == "the daemon was up 3h12m of the last day")
+        #expect(Escapes.watched(uptime: 86400 - 60) == "the daemon was up all of the last day")
+    }
+
+    @Test("Uptime is the part of each daemon run inside the window", .bug(id: 30))
+    func sumsUptimeInsideTheWindow() throws {
+        let path = NSTemporaryDirectory() + "turnstile-runs-\(UUID().uuidString).sqlite"
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let store = try Store(path: path)
+        let early = store.startDaemonRun(at: 100)
+        store.touchDaemonRun(early, at: 400)
+        let late = store.startDaemonRun(at: 1000)
+        store.touchDaemonRun(late, at: 1500)
+
+        #expect(store.daemonUptime(since: 0, until: 2000) == 800)
+        // Clipped at both ends of the window.
+        #expect(store.daemonUptime(since: 300, until: 1200) == 300)
+        #expect(store.daemonUptime(since: 1600, until: 2000) == 0)
     }
 }

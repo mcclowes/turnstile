@@ -78,6 +78,7 @@ public final class Store {
             )
             """)
         try execute("CREATE INDEX IF NOT EXISTS escapes_seen ON escapes(seen_at)")
+        try execute("CREATE TABLE IF NOT EXISTS daemon_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, started_at REAL NOT NULL, seen_at REAL NOT NULL)")
     }
 
     deinit { sqlite3_close(db) }
@@ -252,6 +253,27 @@ public final class Store {
     public func prune(olderThan cutoff: Double) {
         run("DELETE FROM jobs WHERE state = 'finished' AND finished_at < ?", [cutoff])
         run("DELETE FROM escapes WHERE seen_at < ?", [cutoff])
+        run("DELETE FROM daemon_runs WHERE seen_at < ?", [cutoff])
+    }
+
+    // MARK: When the daemon was up to watch
+
+    public func startDaemonRun(at now: Double) -> Int64 {
+        run("INSERT INTO daemon_runs (started_at, seen_at) VALUES (?, ?)", [now, now])
+        return sqlite3_last_insert_rowid(db)
+    }
+
+    public func touchDaemonRun(_ id: Int64, at now: Double) {
+        run("UPDATE daemon_runs SET seen_at = ? WHERE id = ?", [now, id])
+    }
+
+    /// Seconds the daemon was up between `since` and `until`.
+    public func daemonUptime(since: Double, until: Double) -> Double {
+        var total: Double = 0
+        query("""
+            SELECT SUM(MAX(0, MIN(seen_at, ?) - MAX(started_at, ?))) FROM daemon_runs WHERE seen_at > ? AND started_at < ?
+            """, [until, since, since, until]) { total = $0.double(0) ?? 0 }
+        return total
     }
 
     // MARK: Runs that went around the shims

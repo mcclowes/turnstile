@@ -18,7 +18,9 @@ slug: /limits
 While the daemon is awake it watches for heavy processes that belong to no job: compilers started by absolute path or by Xcode, `node_modules/.bin` test runners, and tools that aren't shimmed. It records what ran, what started it, and where. `turnstile doctor` and `turnstile top` show the last day's and the last hour's:
 
 ```
-note  ungated   ran outside turnstile in the last day: 14 × swift-frontend under Xcode in ~/app, 3 × node vitest under zsh in ~/web
+note  ungated   ran outside turnstile in the last day: 14 × swift-frontend under Xcode in ~/app, 3 × node vitest under zsh in ~/web (seen only while the daemon was up; the daemon was up 3h12m of the last day)
 ```
 
 A tool that itself spawned one of these counts once, not once per compiler process.
+
+The report only covers time the daemon was up, and doctor says how much of the day that was. Once it has seen something escape, an idle daemon stays up for 4 hours after the last one instead of 30 minutes, so a day of Xcode builds stays covered. It still only starts with a gated command, so a machine that builds only in Xcode shows nothing.

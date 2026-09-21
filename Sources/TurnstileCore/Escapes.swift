@@ -87,4 +87,14 @@ public enum Escapes {
             return "\(row.count) × \(row.label) under \(row.via) in \(cwd)"
         }.joined(separator: ", ")
     }
+
+    /// Heartbeats are a minute apart, so a daemon up throughout reads slightly short.
+    public static func watchedThroughout(uptime: Double, window: Double = 86400) -> Bool { uptime >= window - 120 }
+
+    /// How much of the last day the daemon was up to watch, since escapes are only seen while it runs.
+    public static func watched(uptime: Double, window: Double = 86400) -> String {
+        if uptime <= 0 { return "the daemon didn't run in the last day" }
+        if watchedThroughout(uptime: uptime, window: window) { return "the daemon was up all of the last day" }
+        return "the daemon was up \(formatDuration(uptime)) of the last day"
+    }
 }

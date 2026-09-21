@@ -535,6 +535,8 @@ struct DaemonPressureTests {
 
         harness.daemon.watchForEscapes(now: 1000)
         #expect(harness.daemon.store.escapes(since: 0) == [EscapeRow(label: "swift-frontend", via: "Xcode", cwd: "/Users/me/app", count: 1, lastSeen: 1000)])
+        // Seeing one keeps an idle daemon up to watch for more (#30).
+        #expect(harness.daemon.lastEscapeAt != nil)
 
         // Counted once, not once per scan.
         harness.daemon.watchForEscapes(now: 1001)
@@ -553,6 +555,7 @@ struct DaemonPressureTests {
         ])
         harness.daemon.watchForEscapes(now: 1000)
         #expect(harness.daemon.store.escapes(since: 0).isEmpty)
+        #expect(harness.daemon.lastEscapeAt == nil)
     }
 
     @Test("A sampled child stays attached to its job after launchd adopts it", .bug(id: 49))

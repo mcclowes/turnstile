@@ -14,7 +14,7 @@ Heavy commands run in place with the same output, exit code, working directory, 
 
 ## The daemon
 
-The daemon starts on the first gated command, listens on a Unix socket in `~/.turnstile`, and exits after 30 idle minutes. There's nothing to launch or keep running.
+The daemon starts on the first gated command, listens on a Unix socket in `~/.turnstile`, and exits after 30 idle minutes, or 4 hours after it last saw a build [run outside turnstile](limits.md#seeing-what-escaped). There's nothing to launch or keep running.
 
 It fails open. If the daemon is missing or broken, commands run ungated rather than failing. If it crashes, running jobs re-register with a fresh one and waiting jobs requeue, so limits still hold, and anything it had paused carries on.
 

@@ -183,25 +183,92 @@ public enum MenuBarState {
         return [bump, toggle, kill]
     }
 
+    /// A wait this long means you've probably walked away, so its end is worth telling you about.
+    public static let longWait: Double = 120
+
     public struct Event: Equatable, Sendable {
+        public enum Kind: String, CaseIterable, Sendable {
+            case memoryPause, runawayKill, longWait, ownFailure, queueDrained
+
+            /// Menu label for the toggle.
+            public var title: String {
+                switch self {
+                case .memoryPause: return "Paused for memory"
+                case .runawayKill: return "Killed as a runaway"
+                case .longWait: return "Your job started after a long wait"
+                case .ownFailure: return "Your run failed"
+                case .queueDrained: return "Queue is clear"
+                }
+            }
+
+            public var isOnByDefault: Bool { self != .queueDrained }
+
+            /// Only a job stuck on memory is worth breaking Focus for.
+            public var urgency: Urgency {
+                switch self {
+                case .memoryPause: return .timeSensitive
+                case .runawayKill, .longWait, .ownFailure: return .active
+                case .queueDrained: return .passive
+                }
+            }
+
+            /// Buttons on the notification, sent as control messages to the event's job.
+            public var actions: [Action] {
+                guard self == .memoryPause else { return [] }
+                return [
+                    Action(title: "Resume", message: "resume", help: "Resume it now, whatever memory is doing"),
+                    Action(title: "Kill", message: "kill", help: "Stop it and everything it started"),
+                ]
+            }
+        }
+
+        public enum Urgency: Sendable { case passive, active, timeSensitive }
+
+        public var kind: Kind
         public var title: String
         public var body: String
+        /// Set only when the job still exists to act on.
+        public var job: Int64?
     }
 
-    /// Jobs newly paused for memory, and runs newly killed as runaways. Nothing on the first snapshot, so launching doesn't replay history.
+    /// What changed between two polls that someone might want to hear about. Nothing on the first snapshot, so launching doesn't replay history.
+    /// Unfiltered: the caller decides which kinds to show.
     public static func events(from old: StatusSnapshot?, to new: StatusSnapshot?) -> [Event] {
         guard let old, let new else { return [] }
         var events: [Event] = []
         let alreadyPaused = Set(old.running.filter { $0.pausedBy == "memory" }.map(\.id))
         for job in new.running where job.pausedBy == "memory" && !alreadyPaused.contains(job.id) {
-            events.append(Event(title: "Paused #\(job.id) \(job.label)", body: "Memory is low (\(new.memoryLevel)% free). It resumes when memory recovers."))
+            events.append(Event(kind: .memoryPause, title: "Paused #\(job.id) \(job.label)", body: "Memory is low (\(new.memoryLevel)% free). It resumes when memory recovers.", job: job.id))
         }
+        let wasQueued = Set(old.queued.map(\.id))
+        for job in new.running where !job.agent && wasQueued.contains(job.id) {
+            guard let startedAt = job.startedAt, startedAt - job.queuedAt >= longWait else { continue }
+            events.append(Event(kind: .longWait, title: "Started #\(job.id) \(job.label)", body: "After waiting \(duration(startedAt - job.queuedAt))."))
+        }
+        let yours = Set((old.running + old.queued).filter { !$0.agent }.map(\.id))
         let newest = old.recent.map(\.id).max() ?? 0
-        for entry in new.recent where entry.id > newest && entry.outcome == "killed" {
-            let peak = entry.peak.map { " at \(Bytes.format($0))" } ?? ""
-            events.append(Event(title: "Killed #\(entry.id) \(entry.project) \(entry.key)", body: "It used far more memory than usual\(peak)."))
+        for entry in new.recent where entry.id > newest {
+            let title = "#\(entry.id) \(entry.project) \(entry.key)"
+            switch entry.outcome {
+            case "killed":
+                let peak = entry.peak.map { " at \(Bytes.format($0))" } ?? ""
+                events.append(Event(kind: .runawayKill, title: "Killed \(title)", body: "It used far more memory than usual\(peak)."))
+            case "failed" where yours.contains(entry.id), "signaled" where yours.contains(entry.id):
+                let how = entry.exitCode.map { "It exited with code \($0)." } ?? "It was stopped by a signal."
+                events.append(Event(kind: .ownFailure, title: "Failed \(title)", body: how))
+            default:
+                break
+            }
+        }
+        let wasBusy = !old.running.isEmpty || !old.queued.isEmpty
+        if wasBusy && new.running.isEmpty && new.queued.isEmpty {
+            events.append(Event(kind: .queueDrained, title: "Queue is clear", body: "Nothing is running or waiting."))
         }
         return events
+    }
+
+    private static func duration(_ seconds: Double) -> String {
+        seconds < 60 ? "\(Int(seconds))s" : "\(Int((seconds / 60).rounded()))m"
     }
 
     /// The daemon's reason for a wait, with its coarse "starts in" replaced by one that ticks locally.

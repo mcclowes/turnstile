@@ -136,8 +136,66 @@ struct MenuBarStateTests {
         let events = MenuBarState.events(from: before, to: after)
         #expect(events.count == 1)
         #expect(events.first?.title == "Paused #2 api swift test")
-        let killed = snapshot(recent: [entry(8, "killed"), entry(5, "ok")])
+        let killed = snapshot(running: [job(2)], recent: [entry(8, "killed"), entry(5, "ok")])
         #expect(MenuBarState.events(from: before, to: killed).map(\.title) == ["Killed #8 api swift test"])
+    }
+
+    func yours(_ job: JobSnapshot, queuedAt: Double = 0, startedAt: Double? = nil) -> JobSnapshot {
+        var job = job
+        job.agent = false
+        job.queuedAt = queuedAt
+        job.startedAt = startedAt
+        return job
+    }
+
+    @Test func pausesCarryTheJobSoTheNotificationCanActOnIt() {
+        let events = MenuBarState.events(from: snapshot(running: [job(2)]), to: snapshot(running: [job(2, pausedBy: "memory")]))
+        #expect(events.map(\.kind) == [.memoryPause])
+        #expect(events.first?.job == 2)
+        #expect(MenuBarState.Event.Kind.memoryPause.actions.map(\.message) == ["resume", "kill"])
+        #expect(MenuBarState.Event.Kind.runawayKill.actions.isEmpty)
+    }
+
+    @Test func notifiesWhenYourLongWaitEnds() {
+        let before = snapshot(running: [job(1)], queued: [yours(job(2, state: "queued"), queuedAt: 100)])
+        let after = snapshot(running: [yours(job(2), queuedAt: 100, startedAt: 340)])
+        let events = MenuBarState.events(from: before, to: after)
+        #expect(events.map(\.kind) == [.longWait])
+        #expect(events.first?.title == "Started #2 api swift test")
+        #expect(events.first?.body == "After waiting 4m.")
+    }
+
+    @Test func shortWaitsAndAgentsWaitsStaySilent() {
+        let before = snapshot(running: [job(1)], queued: [yours(job(2, state: "queued"), queuedAt: 100), job(3, state: "queued")])
+        let after = snapshot(running: [yours(job(2), queuedAt: 100, startedAt: 130), { var j = job(3); j.startedAt = 1000; return j }()])
+        #expect(MenuBarState.events(from: before, to: after).isEmpty)
+    }
+
+    @Test func notifiesWhenYourRunFailsButNotAnAgents() {
+        var failed = entry(2, "failed")
+        failed.exitCode = 1
+        let before = snapshot(running: [job(1), yours(job(2)), job(3)], recent: [entry(0, "ok")])
+        let after = snapshot(running: [job(1)], recent: [entry(3, "failed"), failed, entry(0, "ok")])
+        let events = MenuBarState.events(from: before, to: after)
+        #expect(events.map(\.kind) == [.ownFailure])
+        #expect(events.first?.title == "Failed #2 api swift test")
+        #expect(events.first?.body == "It exited with code 1.")
+    }
+
+    @Test func notifiesWhenTheQueueDrains() {
+        let busy = snapshot(running: [job(1)], queued: [job(2, state: "queued")])
+        let idle = snapshot()
+        #expect(MenuBarState.events(from: busy, to: idle).map(\.kind) == [.queueDrained])
+        #expect(MenuBarState.events(from: idle, to: idle).isEmpty)
+    }
+
+    @Test func routineNewsWaitsForFocusToEndAndOnlyTheQueueDrainIsOffByDefault() {
+        typealias Kind = MenuBarState.Event.Kind
+        #expect(Kind.allCases.filter { !$0.isOnByDefault } == [.queueDrained])
+        #expect(Kind.memoryPause.urgency == .timeSensitive)
+        #expect(Kind.queueDrained.urgency == .passive)
+        #expect([Kind.longWait, .ownFailure, .runawayKill].allSatisfy { $0.urgency == .active })
+        #expect(Kind.allCases.allSatisfy { !$0.title.isEmpty })
     }
 
     @Test func noNotificationsForWhatWasAlreadyThere() {

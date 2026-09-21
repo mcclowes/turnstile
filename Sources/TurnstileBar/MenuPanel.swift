@@ -5,6 +5,7 @@ import TurnstileCore
 /// The whole menu: memory at the top, jobs in the middle, Settings and Quit at the bottom.
 struct MenuPanel: View {
     @ObservedObject var monitor: Monitor
+    @Environment(\.openSettings) private var openSettings
     @State private var showAllRecent: Bool
     @State private var measuredList: CGFloat?
 
@@ -183,7 +184,11 @@ struct MenuPanel: View {
         HStack(spacing: 10) {
             pauseQueue
             Spacer(minLength: 0)
-            SettingsLink {
+            Button {
+                // An accessory app isn't active, so SettingsLink alone opens nothing visible.
+                NSApplication.shared.activate()
+                openSettings()
+            } label: {
                 Label("Settings", systemImage: "gearshape")
                     .font(.system(size: 11))
                     .contentShape(.rect)

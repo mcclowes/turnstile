@@ -16,6 +16,7 @@ const config: Config = {
   markdown: {hooks: {onBrokenMarkdownLinks: 'throw'}},
   organizationName: 'mcclowes',
   projectName: 'turnstile',
+  headTags: [{tagName: 'link', attributes: {rel: 'apple-touch-icon', href: '/img/apple-touch-icon.png'}}],
   presets: [
     [
       'classic',

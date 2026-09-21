@@ -93,6 +93,19 @@ public final class Store {
         return (try Store(path: path), aside)
     }
 
+    /// When a shim last registered a command. Opens read-only, so it never creates or migrates the database.
+    public static func lastQueued(path: String) -> Double? {
+        var db: OpaquePointer?
+        defer { sqlite3_close(db) }
+        guard sqlite3_open_v2(path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else { return nil }
+        var statement: OpaquePointer?
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_prepare_v2(db, "SELECT MAX(queued_at) FROM jobs", -1, &statement, nil) == SQLITE_OK,
+              sqlite3_step(statement) == SQLITE_ROW,
+              sqlite3_column_type(statement, 0) != SQLITE_NULL else { return nil }
+        return sqlite3_column_double(statement, 0)
+    }
+
     var isHealthy: Bool {
         var ok = false
         query("PRAGMA quick_check", []) { ok = ok || $0.text(0) == "ok" }

@@ -8,10 +8,12 @@ final class Monitor: ObservableObject {
     @Published private(set) var snapshot: StatusSnapshot?
     @Published private(set) var message: String?
     @Published private(set) var launchAtLogin = false
+    @Published private(set) var evidence: Health.Evidence?
 
     private let paths = Paths()
     private let queue = DispatchQueue(label: "turnstile.monitor")
     private var timer: Timer?
+    private var healthTimer: Timer?
     /// Notifications and login items need a real app bundle, which `swift run` doesn't give us.
     private let bundled = Bundle.main.bundleIdentifier != nil
 
@@ -24,6 +26,21 @@ final class Monitor: ObservableObject {
         }
         poll()
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.poll() }
+        checkHealth()
+        // None of what this checks changes quickly.
+        healthTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in self?.checkHealth() }
+    }
+
+    /// Skew is derived from each status poll; the rest comes from the filesystem, never from starting the daemon.
+    var health: [Health.Finding] {
+        evidence.map { Health.findings($0, snapshot: snapshot) } ?? []
+    }
+
+    func checkHealth() {
+        queue.async { [paths] in
+            let evidence = Health.gather(paths: paths)
+            DispatchQueue.main.async { self.evidence = evidence }
+        }
     }
 
     func poll() {
@@ -36,6 +53,8 @@ final class Monitor: ObservableObject {
     private func update(_ status: StatusSnapshot?) {
         for event in MenuBarState.events(from: snapshot, to: status) { notify(event) }
         snapshot = status
+        // A running daemon usually means a shim just registered something, so don't wait five minutes to say so.
+        if status != nil, let evidence, evidence.lastGated == nil { checkHealth() }
     }
 
     func send(_ action: String, to job: Int64) {

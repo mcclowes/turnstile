@@ -8,12 +8,18 @@ struct MenuPanel: View {
     @State private var showRecent = false
 
     var body: some View {
+        let health = monitor.health
         VStack(alignment: .leading, spacing: 0) {
+            if !health.isEmpty {
+                HealthBanner(findings: health)
+                Divider()
+            }
             if let snapshot = monitor.snapshot {
                 MemoryHeader(snapshot: snapshot)
                 Divider()
                 body(for: snapshot)
-            } else {
+            } else if !health.contains(where: { $0.tone == .danger }) {
+                // "It starts with the next gated command" is false while nothing is gated.
                 idle
             }
             if let message = monitor.message {
@@ -239,5 +245,54 @@ struct MemoryHeader: View {
         .padding(.horizontal, Panel.gutter)
         .padding(.top, 12)
         .padding(.bottom, 10)
+    }
+}
+
+/// What's wrong with the install, and the command that fixes it.
+struct HealthBanner: View {
+    var findings: [Health.Finding]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(findings, id: \.text) { finding in
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: Health.brokenSymbol)
+                        .font(.system(size: 11))
+                        .foregroundStyle(finding.tone.color)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(finding.text)
+                            .font(.system(size: 11, weight: .medium))
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let fix = finding.fix {
+                            fixButton(fix)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .padding(.horizontal, Panel.gutter)
+        .padding(.vertical, 10)
+        .background((findings.first?.tone.color ?? .clear).opacity(0.08))
+    }
+
+    private func fixButton(_ fix: String) -> some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(fix, forType: .string)
+        } label: {
+            HStack(spacing: 4) {
+                Text(fix)
+                    .font(.system(size: 10).monospaced())
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                Image(systemName: "doc.on.doc")
+                    .font(.system(size: 9))
+            }
+            .foregroundStyle(.secondary)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.borderless)
+        .help("Copy to paste into a terminal")
     }
 }

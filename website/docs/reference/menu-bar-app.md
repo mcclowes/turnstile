@@ -22,4 +22,6 @@ The cask depends on the `turnstile` formula rather than bundling its own CLI, so
 
 It only watches the daemon, polling every 2 seconds, and never starts it or keeps it alive. When the daemon is idle the menu says so, and picks it up again when it starts.
 
+Every few minutes it also checks the install, without a shell or the daemon, and turns the icon red when nothing is gated: the CLI isn't set up (the app installed on its own, or `turnstile init` never run), the shims are missing, or `turnstile disable` is on. It turns orange when no command has gone through the shims yet, the global config is invalid, or the daemon and the app are from different releases. The menu names the problem and the command that fixes it; click the command to copy it. It can't see your shell's PATH, so `turnstile doctor` in a terminal remains the full check.
+
 Open it once and turn on "Launch at login" from its menu.

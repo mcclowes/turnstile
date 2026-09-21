@@ -15,6 +15,8 @@ struct MenuPanel: View {
 
     var body: some View {
         let health = monitor.health
+        // "It starts with the next gated command" is false while nothing is gated.
+        let showsIdle = monitor.snapshot == nil && !monitor.disabled && !health.contains(where: { $0.tone == .danger })
         VStack(alignment: .leading, spacing: 0) {
             if !health.isEmpty {
                 HealthBanner(findings: health)
@@ -24,10 +26,13 @@ struct MenuPanel: View {
                 MemoryHeader(snapshot: snapshot)
                 Divider()
                 body(for: snapshot)
-            } else if !health.contains(where: { $0.tone == .danger }) {
-                // "It starts with the next gated command" is false while nothing is gated.
+            } else if showsIdle {
                 idle
             }
+            if monitor.snapshot != nil || showsIdle {
+                Divider()
+            }
+            gating
             if let message = monitor.message {
                 Divider()
                 banner(message)
@@ -131,6 +136,33 @@ struct MenuPanel: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 22)
+    }
+
+    /// Machine-wide, so it sits below the jobs rather than on any one of them.
+    private var gating: some View {
+        let on = !monitor.disabled
+        return HStack(spacing: 8) {
+            Image(systemName: on ? "shield.fill" : MenuBarState.disabledSymbol)
+                .font(.system(size: 12))
+                .foregroundStyle(on ? MenuBarState.Tone.good.color : MenuBarState.Tone.danger.color)
+                .frame(width: BadgeTile.defaultSize)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Gating")
+                    .font(.system(size: 12, weight: .medium))
+                Text(on ? "Heavy commands wait their turn" : "Off: every command runs ungated")
+                    .font(.system(size: 11))
+                    .foregroundStyle(on ? Color.secondary : MenuBarState.Tone.danger.color)
+            }
+            Spacer(minLength: 0)
+            Toggle("Gating", isOn: Binding(get: { on }, set: { monitor.setGating($0) }))
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .labelsHidden()
+                .help(on ? "Let every command run ungated, on every shell, until you turn this back on" : "Gate heavy commands again")
+        }
+        .padding(.horizontal, Panel.gutter)
+        .padding(.vertical, 8)
+        .background(on ? Color.clear : MenuBarState.Tone.danger.color.opacity(0.08))
     }
 
     private func banner(_ message: String) -> some View {

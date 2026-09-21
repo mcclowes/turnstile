@@ -6,7 +6,8 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ### Added
 
-- The menu bar app says when nothing is gated, and why: the CLI isn't set up, the shims are missing, gating is disabled, no command has gone through the shims yet, the config is invalid, or the daemon and the app are from different releases. The icon turns red or orange, and the menu shows the fix (#47).
+- The menu bar app has a gating switch below the job list, the same flag as `turnstile disable` and `enable`, so it works without a shell or a running daemon. While gating is off the icon turns into a red slashed shield whatever else is going on, and `turnstile doctor` says how long it's been off (#45).
+- The menu bar app says when nothing is gated, and why: the CLI isn't set up, the shims are missing, no command has gone through the shims yet, the config is invalid, or the daemon and the app are from different releases. The icon turns red or orange, and the menu shows the fix (#47).
 - The menu bar app counts down to when a waiting job should start, and its elapsed times tick between polls. Status snapshots carry the expected start as `startsAt`. Right-click a job to open its folder (#44).
 - The menu bar panel is wider and easier to scan. Commands get their own line, rows only name a state their section doesn't (paused, held), and waiting reasons get up to three lines. The two most recent runs are always visible, with the rest a click away. Queued jobs show a "Move to front" button, other controls appear in place on hover without shifting the row, and memory bars say they measure memory against the estimate, not progress (#57).
 - `turnstile restart` replaces the daemon without releasing its queued and running jobs. Installing a newer version uses the same recovery path when the existing daemon supports it.

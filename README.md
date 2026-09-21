@@ -59,7 +59,7 @@ More in [how it works](https://turnstile.marginalutility.dev/how-it-works), [sch
 | `turnstile bump <job>` | Move a job to the front |
 | `turnstile doctor` | Check the install and daemon, with a fix for anything wrong |
 | `turnstile restart` | Replace the daemon while queued and running jobs reconnect |
-| `turnstile disable` / `enable` | Turn gating off and on for every shell |
+| `turnstile disable` / `enable` | Turn gating off and on for every shell (the menu bar app has the same switch) |
 
 The full list is in the [command reference](https://turnstile.marginalutility.dev/commands). Configuration is optional, and the defaults are meant to be left alone. When you need it, see [configuration](https://turnstile.marginalutility.dev/configuration).
 

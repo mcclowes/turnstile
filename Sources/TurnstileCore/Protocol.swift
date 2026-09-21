@@ -104,10 +104,12 @@ public struct JobSnapshot: Codable, Equatable, Sendable {
     public var tree: [Int32]?
     /// The part of `tree` that left the job for launchd, which nothing outside the daemon can find.
     public var escapees: [Int32]?
+    /// When a queued job should start, in epoch seconds, if the wait has a known end. Nil from daemons older than 0.5.
+    public var startsAt: Double?
 
     public var label: String { "\(project) \(key)" }
 
-    public init(id: Int64, state: String, resourceClass: ResourceClass, project: String, key: String, cwd: String, agent: Bool, estimate: UInt64, footprint: UInt64?, peak: UInt64?, paused: Bool, clientPid: Int32, childPid: Int32?, queuedAt: Double, startedAt: Double?, waiting: String?, joiners: Int, held: Bool? = nil, pausedBy: String? = nil, estimateSource: String? = nil, tree: [Int32]? = nil, escapees: [Int32]? = nil) {
+    public init(id: Int64, state: String, resourceClass: ResourceClass, project: String, key: String, cwd: String, agent: Bool, estimate: UInt64, footprint: UInt64?, peak: UInt64?, paused: Bool, clientPid: Int32, childPid: Int32?, queuedAt: Double, startedAt: Double?, waiting: String?, joiners: Int, held: Bool? = nil, pausedBy: String? = nil, estimateSource: String? = nil, tree: [Int32]? = nil, escapees: [Int32]? = nil, startsAt: Double? = nil) {
         self.id = id
         self.state = state
         self.resourceClass = resourceClass
@@ -130,6 +132,7 @@ public struct JobSnapshot: Codable, Equatable, Sendable {
         self.estimateSource = estimateSource
         self.tree = tree
         self.escapees = escapees
+        self.startsAt = startsAt
     }
 }
 

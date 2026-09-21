@@ -105,6 +105,7 @@ final class Daemon {
         var warnedAboveCeiling = false
         var lastWait: String?
         var lastWaitSentAt: Double = 0
+        var startsAt: Double?
         var tree: [pid_t] = []
         /// Unique ids of every process seen in the tree, to recognise children that escape to launchd.
         var lineage: Set<UInt64> = []
@@ -591,6 +592,7 @@ final class Daemon {
         }
         for (id, reason) in decision.waiting {
             guard let job = jobs[id] else { continue }
+            job.startsAt = reason.eta.map { now + $0 }
             let text = reason == .held ? "held; `turnstile release #\(id)` lets it run" : Scheduler.message(for: reason)
             // Repeat now and then, so a long wait never looks like a hang.
             if text != job.lastWait || tick - job.lastWaitSentAt >= 30 {
@@ -1003,7 +1005,8 @@ final class Daemon {
                 held: job.held, pausedBy: job.paused ? (job.pausedByUser ? "you" : "memory") : nil,
                 estimateSource: job.estimateSource,
                 tree: job.state == .queued ? nil : job.tree,
-                escapees: job.escapees.isEmpty ? nil : job.escapees.sorted()
+                escapees: job.escapees.isEmpty ? nil : job.escapees.sorted(),
+                startsAt: job.state == .queued ? job.startsAt : nil
             )
         }
         var limits: [String: Int] = [:]

@@ -104,4 +104,21 @@ struct MenuBarStateTests {
         #expect(MenuBarState.events(from: now, to: now).isEmpty)
         #expect(MenuBarState.events(from: now, to: nil).isEmpty)
     }
+
+    @Test("A wait with a known end counts down between polls", .bug(id: 44))
+    func waitsCountDownLive() {
+        var queued = job(2, state: "queued")
+        queued.waiting = Scheduler.message(for: .memory(need: 4 * Bytes.gb, free: Bytes.gb, running: ["a"], eta: 200))
+        queued.startsAt = 1000
+        #expect(MenuBarState.waitingText(for: queued, now: 800) == "waiting for memory, needs ~4 GB, ~1 GB spare, starts in ~4m (running: a)")
+        #expect(MenuBarState.waitingText(for: queued, now: 958) == "waiting for memory, needs ~4 GB, ~1 GB spare, starts in 42s (running: a)")
+        #expect(MenuBarState.waitingText(for: queued, now: 1003) == "waiting for memory, needs ~4 GB, ~1 GB spare, should start any moment (running: a)")
+    }
+
+    @Test func waitsWithoutAnExpectedStartReadAsSent() {
+        var queued = job(2, state: "queued")
+        #expect(MenuBarState.waitingText(for: queued, now: 0) == nil)
+        queued.waiting = Scheduler.message(for: .slots(.test, running: ["a"]))
+        #expect(MenuBarState.waitingText(for: queued, now: 0) == "waiting for a test slot (running: a)")
+    }
 }

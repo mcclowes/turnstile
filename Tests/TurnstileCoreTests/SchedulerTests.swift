@@ -128,6 +128,15 @@ struct SchedulerTests {
         #expect(slots.waiting[1] == .slots(.test, running: ["r9"], eta: 30))
     }
 
+    @Test func onlySlotAndMemoryWaitsHaveAnExpectedStart() {
+        #expect(WaitReason.memory(need: gb, free: 0, running: [], eta: 45).eta == 45)
+        #expect(WaitReason.slots(.test, running: [], eta: 30).eta == 30)
+        #expect(WaitReason.slots(.test, running: []).eta == nil)
+        #expect(WaitReason.queue(ahead: 1, next: "a").eta == nil)
+        #expect(WaitReason.swapping(running: []).eta == nil)
+        #expect(WaitReason.held.eta == nil)
+    }
+
     @Test func expectedStartsReadCoarsely() {
         #expect(Scheduler.message(for: .memory(need: 4 * gb, free: gb / 2, running: ["a"], eta: 45))
             == "waiting for memory, needs ~4 GB, ~512 MB spare, starts in under a minute (running: a)")

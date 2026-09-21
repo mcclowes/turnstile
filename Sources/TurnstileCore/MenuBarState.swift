@@ -168,4 +168,14 @@ public enum MenuBarState {
         }
         return events
     }
+
+    /// The daemon's reason for a wait, with its coarse "starts in" replaced by one that ticks locally.
+    public static func waitingText(for job: JobSnapshot, now: Double) -> String? {
+        guard let waiting = job.waiting, let startsAt = job.startsAt else { return job.waiting }
+        let remaining = startsAt - now
+        let live = remaining <= 0 ? ", should start any moment"
+            : remaining < 60 ? ", starts in \(Int(remaining.rounded(.up)))s"
+            : ", starts in ~\(Int((remaining / 60).rounded(.up)))m"
+        return waiting.replacingOccurrences(of: #", starts in (under a minute|~\d+m)"#, with: live, options: .regularExpression)
+    }
 }

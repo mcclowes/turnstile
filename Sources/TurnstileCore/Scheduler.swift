@@ -92,6 +92,14 @@ public enum WaitReason: Equatable, Sendable {
     case swapping(running: [String])
     /// Someone held it; it waits until released.
     case held
+
+    /// Seconds until the job should start, when the wait has a known end.
+    public var eta: Double? {
+        switch self {
+        case let .slots(_, _, eta), let .memory(_, _, _, eta): return eta
+        case .queue, .swapping, .held: return nil
+        }
+    }
 }
 
 public struct SchedulerDecision: Equatable, Sendable {

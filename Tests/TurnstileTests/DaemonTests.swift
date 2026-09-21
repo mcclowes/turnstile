@@ -30,6 +30,29 @@ struct DaemonAdmissionTests {
         #expect(harness.job(id)?.state == .running)
     }
 
+    @Test("Status carries when a waiting job should start, so the app can count down", .bug(id: 44))
+    func statusCarriesAnExpectedStart() throws {
+        let harness = try DaemonHarness()
+        let first = FakeClient(), second = FakeClient()
+        let running = harness.request(first, key: "swift test", resourceClass: .test)
+        try #require(harness.job(running)).usualDuration = 600
+        let before = Date().timeIntervalSince1970
+        harness.request(second, key: "swift test", resourceClass: .test, root: "/other")
+
+        let queued = try #require(harness.daemon.snapshot().queued.first)
+        let startsAt = try #require(queued.startsAt)
+        #expect(startsAt >= before + 590 && startsAt <= Date().timeIntervalSince1970 + 600)
+        #expect(harness.daemon.snapshot().running.first?.startsAt == nil)
+    }
+
+    @Test func aWaitWithNoKnownEndHasNoExpectedStart() throws {
+        let harness = try DaemonHarness()
+        let first = FakeClient(), second = FakeClient()
+        harness.request(first, key: "swift test", resourceClass: .test)
+        harness.request(second, key: "swift test", resourceClass: .test, root: "/other")
+        #expect(harness.daemon.snapshot().queued.first?.startsAt == nil)
+    }
+
     @Test func waitsForMemory() throws {
         let harness = try DaemonHarness(memoryLevel: 50)
         let first = FakeClient(), second = FakeClient()

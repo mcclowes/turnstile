@@ -26,7 +26,7 @@ enum Panel {
     private static let chromeHeight: CGFloat = 220
     private static let sectionHeight: CGFloat = 36
     private static let runningHeight: CGFloat = 70
-    private static let queuedHeight: CGFloat = 80
+    private static let queuedHeight: CGFloat = 70
     private static let emptyHeight: CGFloat = 56
     private static let recentHeaderHeight: CGFloat = 45
     private static let recentRowHeight: CGFloat = 28

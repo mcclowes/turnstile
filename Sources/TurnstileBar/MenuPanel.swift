@@ -123,9 +123,9 @@ struct MenuPanel: View {
                 .font(.system(size: 22, weight: .light))
                 .foregroundStyle(.tertiary)
                 .padding(.bottom, 2)
-            Text("Daemon idle")
+            Text("Nothing queued")
                 .font(.system(size: 13, weight: .semibold))
-            Text("It starts with the next gated command")
+            Text("The daemon starts with the next gated command")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
         }

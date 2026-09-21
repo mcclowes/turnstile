@@ -348,6 +348,8 @@ struct DaemonPressureTests {
 
         harness.daemon.memoryLevel = 50
         harness.daemon.relievePressure(now: Daemon.clock() + 10)
+        #expect(harness.job(newerID)?.paused == true)
+        harness.daemon.relievePressure(now: Daemon.clock() + Pressure.resumeDelay(pressurePauses: 1) + 1)
         #expect(harness.job(newerID)?.paused == false)
         #expect(!DaemonHarness.state(newerTool.processIdentifier).hasPrefix("T"))
     }
@@ -413,6 +415,8 @@ struct DaemonPressureTests {
 
         harness.daemon.memoryPressure = .normal
         harness.daemon.relievePressure(now: Daemon.clock() + 20)
+        #expect(harness.job(newerID)?.paused == true)
+        harness.daemon.relievePressure(now: Daemon.clock() + 10 + Pressure.resumeDelay(pressurePauses: 1) + 1)
         #expect(harness.job(newerID)?.paused == false)
     }
 

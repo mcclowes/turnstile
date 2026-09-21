@@ -140,14 +140,17 @@ public enum Pressure {
         /// Paused for being past its ceiling. Only memory actually recovering resumes it: the rule that
         /// keeps one job running would just put the runaway straight back under the same pressure.
         public var runaway: Bool
+        /// Times memory pressure has paused it. Each one makes it wait longer for calm before resuming.
+        public var pressurePauses: Int
 
-        public init(id: Int64, startedAt: Double, paused: Bool, pausable: Bool = true, manual: Bool = false, runaway: Bool = false) {
+        public init(id: Int64, startedAt: Double, paused: Bool, pausable: Bool = true, manual: Bool = false, runaway: Bool = false, pressurePauses: Int = 0) {
             self.id = id
             self.startedAt = startedAt
             self.paused = paused
             self.pausable = pausable
             self.manual = manual
             self.runaway = runaway
+            self.pressurePauses = pressurePauses
         }
     }
 
@@ -156,25 +159,32 @@ public enum Pressure {
         case resume(Int64)
     }
 
+    /// Seconds of calm a job needs before resuming, doubling with each pressure pause (#35). On a machine that
+    /// stays over-committed, a resumed job faults its pages back in and swap grows again within seconds, so a
+    /// fixed wait just sets the period of a pause/resume cycle. A growing one lets the running job finish first.
+    public static func resumeDelay(pressurePauses: Int) -> Double {
+        guard pressurePauses > 0 else { return 0 }
+        return Swift.min(30 * pow(2, Double(Swift.min(pressurePauses, 8) - 1)), 480)
+    }
+
     /// Pauses the newest job when memory runs low, keeping at least one running so work progresses.
     /// Resumes the oldest paused job once pressure clears, leaving jobs a person paused alone.
     ///
     /// Swapping counts as low whatever the level reads: the kernel pages out to hold that level up,
     /// so on a machine that is already swapping it never falls to `pauseBelow`. Resuming needs both
     /// a recovered level and quiet swap, unless nothing else is running and waiting can't help.
-    public static func action(memoryLevel: Int, pressure: EffectiveMemoryPressure = .normal, jobs: [Candidate], pauseBelow: Int, resumeAbove: Int) -> Action? {
+    /// `calmFor` is how long the machine has gone without pressure; see `resumeDelay`.
+    public static func action(memoryLevel: Int, pressure: EffectiveMemoryPressure = .normal, calmFor: Double = .infinity, jobs: [Candidate], pauseBelow: Int, resumeAbove: Int) -> Action? {
         let running = jobs.filter { !$0.paused }
         if memoryLevel < pauseBelow || pressure > .normal, running.count > 1,
            let newest = running.filter(\.pausable).max(by: { $0.startedAt < $1.startedAt }),
            newest.id != running.min(by: { $0.startedAt < $1.startedAt })?.id {
             return .pause(newest.id)
         }
-        let recovered = memoryLevel >= resumeAbove && pressure == .normal
-        let resumable = jobs.filter { $0.paused && !$0.manual && (recovered || !$0.runaway) }
-        if recovered || running.isEmpty, let oldest = resumable.min(by: { $0.startedAt < $1.startedAt }) {
-            return .resume(oldest.id)
-        }
-        return nil
+        let settled = memoryLevel >= resumeAbove && pressure == .normal
+        func recovered(_ job: Candidate) -> Bool { settled && calmFor >= resumeDelay(pressurePauses: job.pressurePauses) }
+        let resumable = jobs.filter { $0.paused && !$0.manual && (recovered($0) || (running.isEmpty && !$0.runaway)) }
+        return resumable.min(by: { $0.startedAt < $1.startedAt }).map { .resume($0.id) }
     }
 
     /// The job that would be paused if the kernel's pressure verdict were the trigger, where the level threshold pauses

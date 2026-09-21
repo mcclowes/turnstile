@@ -91,6 +91,8 @@ final class Daemon {
         var adopted = false
         /// Paused by a person, so it's never resumed automatically.
         var pausedByUser = false
+        /// Times memory pressure has paused it; see `Pressure.resumeDelay`.
+        var pressurePauses = 0
         /// Held by a person: stays queued until released.
         var held = false
         /// Killed by a person, so callers are told not to retry.
@@ -168,6 +170,8 @@ final class Daemon {
     /// Escape kinds logged this run, so a thousand compiler processes make one log line.
     var loggedEscapes: Set<String> = []
     var lastPressureAction: Double = 0
+    /// The last tick memory was low or swap was growing, which is what a paused job's backoff counts from.
+    var lastPressuredAt = -Double.infinity
     var idleSince = Daemon.clock()
     let idleExit: Double
     let physical = SystemMemory.physical
@@ -827,13 +831,14 @@ final class Daemon {
 
     /// Pauses the newest job when memory runs out, and resumes jobs once it recovers.
     func relievePressure(now: Double) {
+        if memoryLevel < config.machine.pauseBelowPercent || memoryPressure > .normal { lastPressuredAt = now }
         guard now - lastPressureAction >= 3 else { return }
         let candidates = jobs.values.filter { $0.state != .queued && !$0.tree.isEmpty && $0.killReason == nil }.map {
             Pressure.Candidate(id: $0.id, startedAt: $0.admittedTick ?? 0, paused: $0.paused, pausable: $0.pausable,
-                               manual: $0.pausedByUser, runaway: $0.runawaySince != nil)
+                               manual: $0.pausedByUser, runaway: $0.runawaySince != nil, pressurePauses: $0.pressurePauses)
         }
         let action = Pressure.action(
-            memoryLevel: memoryLevel, pressure: memoryPressure, jobs: candidates,
+            memoryLevel: memoryLevel, pressure: memoryPressure, calmFor: now - lastPressuredAt, jobs: candidates,
             pauseBelow: config.machine.pauseBelowPercent, resumeAbove: config.machine.resumeAbovePercent
         )
         let swapping = memoryPressure > .normal
@@ -841,9 +846,11 @@ final class Daemon {
         case let .pause(id)?:
             guard let job = jobs[id] else { return }
             job.paused = true
+            job.pressurePauses += 1
             ProcessTree.signal(job.tree, SIGSTOP)
             lastPressureAction = now
-            log("#\(id) paused at \(memoryLevel)% free\(swapping ? ", machine swapping" : "")")
+            let calm = Int(Pressure.resumeDelay(pressurePauses: job.pressurePauses))
+            log("#\(id) paused at \(memoryLevel)% free\(swapping ? ", machine swapping" : ""); resumes after \(calm)s of calm")
             let why = swapping ? "the machine is swapping" : "memory is low (\(memoryLevel)% free)"
             for connection in job.connections {
                 connection.send(.notice("paused, \(why); resumes when it recovers"))

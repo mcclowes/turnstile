@@ -26,7 +26,7 @@ By default it leaves parallelism alone until free memory drops under 25%, then h
 
 ## Pause the newest agent job
 
-If free memory drops below `pauseBelow` (8% by default), or the machine is swapping whatever the level says, the newest agent job is paused with SIGSTOP. It resumes once free memory is back above `resumeAbove` (20%) and swap is quiet again. Your own jobs are never paused, and a project can opt out with `"throttle": {"pause": false}`.
+If free memory drops below `pauseBelow` (8% by default), or the machine is swapping whatever the level says, the newest agent job is paused with SIGSTOP. It resumes once free memory is back above `resumeAbove` (20%) and swap has been quiet for 30 seconds. Each time pressure pauses the same job, that wait doubles, up to 8 minutes, so a machine that stays over-committed lets the running job finish instead of stopping and starting the other one every few seconds. Your own jobs are never paused, and a project can opt out with `"throttle": {"pause": false}`.
 
 One job always keeps running, so work still progresses and the pauses can't deadlock.
 

@@ -121,8 +121,8 @@ struct PressureTests {
         #expect(runaway(footprint: 500 * Bytes.mb, hard: true) == nil)
     }
 
-    func job(_ id: Int64, started: Double, paused: Bool = false, pausable: Bool = true, manual: Bool = false, runaway: Bool = false) -> Pressure.Candidate {
-        Pressure.Candidate(id: id, startedAt: started, paused: paused, pausable: pausable, manual: manual, runaway: runaway)
+    func job(_ id: Int64, started: Double, paused: Bool = false, pausable: Bool = true, manual: Bool = false, runaway: Bool = false, pressurePauses: Int = 0) -> Pressure.Candidate {
+        Pressure.Candidate(id: id, startedAt: started, paused: paused, pausable: pausable, manual: manual, runaway: runaway, pressurePauses: pressurePauses)
     }
 
     @Test func neverResumesAJobSomeonePaused() {
@@ -208,6 +208,30 @@ struct PressureTests {
         let jobs = [job(1, started: 1), job(2, started: 2, paused: true)]
         #expect(Pressure.action(memoryLevel: 60, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == .resume(2))
         #expect(Pressure.action(memoryLevel: 60, pressure: .swapping, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == nil)
+    }
+
+    /// #35: swap quietens for one 20 s window after a pause, the job resumes, faults its pages back in, and is
+    /// paused again. Each pause makes the next resume wait longer for calm, so the cycle lengthens.
+    @Test func eachPressurePauseWaitsLongerForCalm() {
+        #expect(Pressure.resumeDelay(pressurePauses: 0) == 0)
+        #expect(Pressure.resumeDelay(pressurePauses: 1) == 30)
+        #expect(Pressure.resumeDelay(pressurePauses: 2) == 60)
+        #expect(Pressure.resumeDelay(pressurePauses: 3) == 120)
+        #expect(Pressure.resumeDelay(pressurePauses: 24) == 480)
+
+        let jobs = [job(1, started: 1), job(2, started: 2, paused: true, pressurePauses: 2)]
+        #expect(Pressure.action(memoryLevel: 40, calmFor: 30, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == nil)
+        #expect(Pressure.action(memoryLevel: 40, calmFor: 60, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == .resume(2))
+    }
+
+    @Test func aJobThatHasBeenPausedLessResumesFirst() {
+        let jobs = [job(1, started: 1), job(2, started: 2, paused: true, pressurePauses: 5), job(3, started: 3, paused: true, pressurePauses: 1)]
+        #expect(Pressure.action(memoryLevel: 40, calmFor: 45, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == .resume(3))
+    }
+
+    @Test func theBackoffNeverHoldsTheOnlyJob() {
+        let jobs = [job(2, started: 2, paused: true, pressurePauses: 5)]
+        #expect(Pressure.action(memoryLevel: 40, calmFor: 0, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == .resume(2))
     }
 
     /// Nothing else is running, so keeping it paused can't help anyone.

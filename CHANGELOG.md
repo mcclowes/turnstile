@@ -11,6 +11,7 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 ### Fixed
 
 - The menu bar app's settings window and active-job list now reserve enough height for their contents.
+- A job paused for memory no longer flips between paused and running every few seconds on a machine that stays over-committed. Each pressure pause doubles the calm it waits for before resuming, from 30 seconds up to 8 minutes (#35).
 
 ## 0.4.0
 

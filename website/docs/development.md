@@ -21,6 +21,8 @@ npm install
 npm start
 ```
 
+`./scripts/record-demo.sh` rerecords `static/img/demo.svg`, the terminal recording in the README and the intro. It runs two builds against a throwaway turnstile home, so the turnstile lines are real output. Rerun it when that output changes.
+
 ## Releasing
 
 Bump `Turnstile.version` in `Sources/TurnstileCore/Paths.swift`, rename "Unreleased" in `CHANGELOG.md` to the new version, commit, push, and push a matching tag:

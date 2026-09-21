@@ -10,12 +10,7 @@ Run three coding agents across a few worktrees and they'll happily start three `
 
 turnstile sits underneath the shell, so it works the same for Claude Code, Codex, any other agent, and you. Heavy commands queue for a slot and for free memory, then run in place with the same output, exit code, working directory, environment, and Ctrl-C. Everything else passes straight through.
 
-```
-$ swift test
-turnstile: waiting for memory, needs ~4 GB, ~1.2 GB spare (running: api swift test, ~3 GB; web npm run build, ~2 GB)
-turnstile: starting after 41s
-...
-```
+![Two agents start builds at once; the second waits for memory until the first finishes, then runs](website/static/img/demo.svg)
 
 ![turnstile status with two running jobs and recent runs](website/static/img/screenshots/status.webp)
 

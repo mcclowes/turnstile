@@ -30,6 +30,8 @@ There's no project setup. Once it's installed, every repo, agent, and terminal o
 
 ### From the terminal
 
+![Two agents start builds at once; the second waits for memory until the first finishes, then runs](/img/demo.svg)
+
 ![Turnstile status in a terminal with two running jobs and recent command history](/img/screenshots/status.webp)
 
 `turnstile status` gives the same queue a more detailed view, including current memory use, learned estimates, and recent runs.

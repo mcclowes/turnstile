@@ -204,10 +204,22 @@ public enum MenuBarState {
     /// The daemon's reason for a wait, with its coarse "starts in" replaced by one that ticks locally.
     public static func waitingText(for job: JobSnapshot, now: Double) -> String? {
         guard let waiting = job.waiting, let startsAt = job.startsAt else { return job.waiting }
+        return waiting.replacingOccurrences(of: #", starts in (under a minute|~\d+m)"#, with: ", " + countdown(to: startsAt, now: now), options: .regularExpression)
+    }
+
+    /// What a row shows of a wait: the reason and when it ends. The full text belongs in a tooltip.
+    public static func waitingHeadline(for job: JobSnapshot, now: Double) -> String? {
+        guard let waiting = job.waiting else { return nil }
+        let reason = waiting.prefix { $0 != "," && $0 != "(" }.trimmingCharacters(in: .whitespaces)
+        let headline = reason.prefix(1).uppercased() + reason.dropFirst()
+        guard let startsAt = job.startsAt else { return headline }
+        return headline + ", " + countdown(to: startsAt, now: now)
+    }
+
+    private static func countdown(to startsAt: Double, now: Double) -> String {
         let remaining = startsAt - now
-        let live = remaining <= 0 ? ", should start any moment"
-            : remaining < 60 ? ", starts in \(Int(remaining.rounded(.up)))s"
-            : ", starts in ~\(Int((remaining / 60).rounded(.up)))m"
-        return waiting.replacingOccurrences(of: #", starts in (under a minute|~\d+m)"#, with: live, options: .regularExpression)
+        return remaining <= 0 ? "should start any moment"
+            : remaining < 60 ? "starts in \(Int(remaining.rounded(.up)))s"
+            : "starts in ~\(Int((remaining / 60).rounded(.up)))m"
     }
 }

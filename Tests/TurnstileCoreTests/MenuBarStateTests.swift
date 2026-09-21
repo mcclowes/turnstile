@@ -157,4 +157,16 @@ struct MenuBarStateTests {
         queued.waiting = Scheduler.message(for: .slots(.test, running: ["a"]))
         #expect(MenuBarState.waitingText(for: queued, now: 0) == "waiting for a test slot (running: a)")
     }
+
+    @Test func rowsShowOnlyTheReasonAndWhenItEnds() {
+        var queued = job(2, state: "queued")
+        #expect(MenuBarState.waitingHeadline(for: queued, now: 0) == nil)
+        queued.waiting = Scheduler.message(for: .memory(need: 4 * Bytes.gb, free: Bytes.gb, running: ["a"], eta: 200))
+        #expect(MenuBarState.waitingHeadline(for: queued, now: 0) == "Waiting for memory")
+        queued.startsAt = 1000
+        #expect(MenuBarState.waitingHeadline(for: queued, now: 958) == "Waiting for memory, starts in 42s")
+        queued.waiting = Scheduler.message(for: .slots(.test, running: ["a"]))
+        queued.startsAt = nil
+        #expect(MenuBarState.waitingHeadline(for: queued, now: 0) == "Waiting for a test slot")
+    }
 }

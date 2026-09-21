@@ -45,10 +45,6 @@ struct MenuBarStateTests {
         #expect(MenuBarState.badge(for: job(1, pausedBy: "you")).tone == .neutral)
         #expect(MenuBarState.badge(for: job(1, pausedBy: "memory")).tone == .warning)
         #expect(MenuBarState.badge(for: job(2, state: "queued", held: true)) == .init("hand.raised.fill", .warning))
-        #expect(MenuBarState.stateText(for: job(1)) == "Running")
-        #expect(MenuBarState.stateText(for: job(1, pausedBy: "memory")) == "Paused for memory")
-        #expect(MenuBarState.stateText(for: job(2, state: "queued")) == "Queued")
-        #expect(MenuBarState.stateText(for: job(2, state: "queued", held: true)) == "Held")
     }
 
     @Test func memoryBarOnlyAppliesToWhatIsRunning() {
@@ -75,10 +71,50 @@ struct MenuBarStateTests {
         #expect(MenuBarState.badge(for: entry(1, "signaled")).tone == .danger)
         #expect(MenuBarState.badge(for: entry(1, "lost")).tone == .warning)
         #expect(MenuBarState.badge(for: entry(1, "cancelled")).tone == .neutral)
-        #expect(MenuBarState.detail(for: entry(1, "ok")) == "ok · 3s · peak 7 GB")
+    }
+
+    @Test func rowsOnlyRepeatStateTheSectionDoesNotAlreadySay() {
+        #expect(MenuBarState.tag(for: job(1)) == nil)
+        #expect(MenuBarState.tag(for: job(2, state: "queued")) == nil)
+        #expect(MenuBarState.tag(for: job(1, pausedBy: "memory")) == .init(text: "Paused for memory", tone: .warning))
+        #expect(MenuBarState.tag(for: job(1, pausedBy: "you")) == .init(text: "Paused", tone: .neutral))
+        #expect(MenuBarState.tag(for: job(2, state: "queued", held: true)) == .init(text: "Held", tone: .warning))
+    }
+
+    @Test func memoryBarSaysItIsMemoryNotProgress() {
+        var running = job(1)
+        running.estimate = 4 * Bytes.gb
+        running.footprint = Bytes.gb
+        let help = MenuBarState.memoryHelp(for: running)
+        #expect(help?.contains("1 GB") == true)
+        #expect(help?.contains("~4 GB") == true)
+        #expect(help?.contains("not progress") == true)
+        #expect(MenuBarState.memoryHelp(for: job(2, state: "queued")) == nil)
+    }
+
+    @Test func recentShowsTwoUntilExpanded() {
+        let entries = (1...5).map { entry(Int64($0), "ok") }
+        #expect(MenuBarState.visibleRecent(entries, expanded: false).map(\.id) == [1, 2])
+        #expect(MenuBarState.visibleRecent(entries, expanded: true).count == 5)
+        #expect(MenuBarState.visibleRecent(Array(entries.prefix(1)), expanded: false).count == 1)
+    }
+
+    @Test func recentOnlyNamesOutcomesThatWereNotFine() {
+        #expect(MenuBarState.outcomeNote(for: entry(1, "ok")) == nil)
+        #expect(MenuBarState.outcomeNote(for: entry(1, "killed")) == "killed")
         var failed = entry(1, "failed")
         failed.exitCode = 2
-        #expect(MenuBarState.detail(for: failed).hasPrefix("failed (2) · "))
+        #expect(MenuBarState.outcomeNote(for: failed) == "exit 2")
+    }
+
+    @Test func promotionExplainsItselfAndSkipsTheHeadOfTheQueue() {
+        let queue = [job(2, state: "queued"), job(3, state: "queued")]
+        #expect(!MenuBarState.canPromote(queue[0], in: queue))
+        #expect(MenuBarState.canPromote(queue[1], in: queue))
+        #expect(MenuBarState.canPromote(job(1), in: [job(1)]))
+        let bump = MenuBarState.actions(for: queue[1])[0]
+        #expect(bump.help.contains("next"))
+        #expect(MenuBarState.actions(for: job(1)).allSatisfy { !$0.help.isEmpty })
     }
 
     @Test func actionsFitTheJobsState() {

@@ -5,7 +5,13 @@ import TurnstileCore
 /// The whole menu: memory at the top, jobs in the middle, the app's own switches at the bottom.
 struct MenuPanel: View {
     @ObservedObject var monitor: Monitor
-    @State private var showRecent = false
+    @State private var showAllRecent: Bool
+    @State private var measuredList: CGFloat?
+
+    init(monitor: Monitor, expandRecent: Bool = false) {
+        self.monitor = monitor
+        _showAllRecent = State(initialValue: expandRecent)
+    }
 
     var body: some View {
         let health = monitor.health
@@ -34,6 +40,7 @@ struct MenuPanel: View {
 
     @ViewBuilder
     private func body(for snapshot: StatusSnapshot) -> some View {
+        let recent = MenuBarState.visibleRecent(snapshot.recent, expanded: showAllRecent)
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if snapshot.running.isEmpty && snapshot.queued.isEmpty {
@@ -47,74 +54,55 @@ struct MenuPanel: View {
                         jobs("Queued", snapshot.queued, now: now)
                     }
                 }
-                if !snapshot.recent.isEmpty {
-                    recent(snapshot.recent)
-                }
             }
-            .padding(.bottom, 8)
+            .padding(.bottom, 10)
+            .onGeometryChange(for: CGFloat.self, of: \.size.height) { measuredList = $0 }
         }
-        .frame(height: Panel.listHeight(for: snapshot, showingRecent: showRecent))
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(height: Panel.listHeight(for: snapshot, recent: recent.count, measured: measuredList))
+        // Outside the scroll view, so the last runs show on opening however long the queue is.
+        if !snapshot.recent.isEmpty {
+            recentSection(recent, total: snapshot.recent.count)
+        }
     }
 
     @ViewBuilder
     private func jobs(_ title: String, _ jobs: [JobSnapshot], now: Double) -> some View {
         if !jobs.isEmpty {
-            SectionHeader(title: title, count: jobs.count)
-            ForEach(jobs, id: \.id) { job in
-                JobRow(job: job, now: now) { monitor.send($0, to: job.id) }
+            SectionHeader(title: title, count: jobs.count) {
+                if jobs.contains(where: { MenuBarState.memoryFraction(for: $0) != nil }) {
+                    Label("Memory vs. estimate", systemImage: "memorychip")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                        .help("Each bar is memory in use against what the job was expected to need. It isn't progress.")
+                }
+            }
+            VStack(spacing: 2) {
+                ForEach(jobs, id: \.id) { job in
+                    JobRow(job: job, now: now, canPromote: MenuBarState.canPromote(job, in: jobs)) { monitor.send($0, to: job.id) }
+                }
             }
         }
     }
 
     @ViewBuilder
-    private func recent(_ entries: [HistoryEntry]) -> some View {
-        Divider().padding(.top, 8)
-        Button {
-            withAnimation(.snappy(duration: 0.15)) { showRecent.toggle() }
-        } label: {
-            HStack(spacing: 6) {
-                Text("RECENT")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(0.6)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
-                    .rotationEffect(.degrees(showRecent ? 90 : 0))
-            }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, Panel.gutter)
-            .padding(.top, 10)
-            .padding(.bottom, 4)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        if showRecent {
-            ForEach(entries, id: \.id) { entry in
-                let badge = MenuBarState.badge(for: entry)
-                HStack(spacing: 8) {
-                    Image(systemName: badge.symbol)
-                        .font(.system(size: 11))
-                        .foregroundStyle(badge.tone.color)
-                    VStack(alignment: .leading, spacing: 1) {
-                        HStack(spacing: 5) {
-                            Text(entry.project).font(.system(size: 11, weight: .medium))
-                            Text(entry.key).font(.system(size: 11)).foregroundStyle(.secondary)
-                        }
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        Text(MenuBarState.detail(for: entry))
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
-                    }
-                    Spacer(minLength: 0)
-                    Text("#\(entry.id)")
-                        .font(.system(size: 10).monospacedDigit())
-                        .foregroundStyle(.tertiary)
+    private func recentSection(_ entries: [HistoryEntry], total: Int) -> some View {
+        Divider()
+        SectionHeader(title: "Recent", count: nil) {
+            if total > MenuBarState.recentPreviewCount {
+                Button(showAllRecent ? "Show less" : "Show \(total - MenuBarState.recentPreviewCount) more") {
+                    withAnimation(.snappy(duration: 0.15)) { showAllRecent.toggle() }
                 }
-                .padding(.horizontal, Panel.gutter)
-                .padding(.vertical, 4)
+                .buttonStyle(.borderless)
+                .font(.system(size: 10, weight: .medium))
             }
         }
+        VStack(spacing: 0) {
+            ForEach(entries, id: \.id) { entry in
+                RecentRow(entry: entry)
+            }
+        }
+        .padding(.bottom, 8)
     }
 
     private var empty: some View {
@@ -201,6 +189,53 @@ struct MenuPanel: View {
     }
 }
 
+/// A finished run on one line: outcome, what it was, how long, and how much memory at worst.
+struct RecentRow: View {
+    var entry: HistoryEntry
+
+    var body: some View {
+        let badge = MenuBarState.badge(for: entry)
+        HStack(spacing: 8) {
+            Image(systemName: badge.symbol)
+                .font(.system(size: 12))
+                .foregroundStyle(badge.tone.color)
+                .frame(width: BadgeTile.defaultSize)
+                .help(entry.outcome)
+            HStack(spacing: 5) {
+                Text(entry.project)
+                    .font(.system(size: 12, weight: .medium))
+                    .layoutPriority(1)
+                Text(entry.key)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .truncationMode(.middle)
+            }
+            .lineLimit(1)
+            .help("#\(entry.id) \(entry.project) \(entry.key)")
+            if let note = MenuBarState.outcomeNote(for: entry) {
+                Text(note)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(badge.tone == .neutral ? Color.secondary : badge.tone.color)
+                    .fixedSize()
+            }
+            Spacer(minLength: 6)
+            column(entry.duration.map(formatDuration) ?? "–", width: 52, help: "How long it ran")
+            column(entry.peak.map { Bytes.format($0) } ?? "–", width: 52, help: "Peak memory")
+        }
+        .padding(.horizontal, Panel.gutter)
+        .padding(.vertical, 5)
+    }
+
+    private func column(_ text: String, width: CGFloat, help: String) -> some View {
+        Text(text)
+            .font(.system(size: 11).monospacedDigit())
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .frame(width: width, alignment: .trailing)
+            .help(help)
+    }
+}
+
 /// Free memory, the number that decides what runs and what waits.
 struct MemoryHeader: View {
     var snapshot: StatusSnapshot
@@ -248,8 +283,8 @@ struct MemoryHeader: View {
             }
         }
         .padding(.horizontal, Panel.gutter)
-        .padding(.top, 12)
-        .padding(.bottom, 10)
+        .padding(.top, 14)
+        .padding(.bottom, 12)
     }
 }
 

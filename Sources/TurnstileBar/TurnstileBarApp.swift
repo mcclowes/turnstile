@@ -9,6 +9,7 @@ struct TurnstileBarApp: App {
     init() {
         // No Dock icon, even when run outside the app bundle.
         NSApplication.shared.setActivationPolicy(.accessory)
+        PanelFixtures.renderIfRequested()
     }
 
     var body: some Scene {

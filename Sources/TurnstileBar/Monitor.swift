@@ -31,6 +31,12 @@ final class Monitor: ObservableObject {
         healthTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in self?.checkHealth() }
     }
 
+    /// A fixed snapshot for rendering the panel: no polling, no notifications, no daemon.
+    init(fixture: StatusSnapshot?) {
+        snapshot = fixture
+        evidence = nil
+    }
+
     /// Skew is derived from each status poll; the rest comes from the filesystem, never from starting the daemon.
     var health: [Health.Finding] {
         evidence.map { Health.findings($0, snapshot: snapshot) } ?? []

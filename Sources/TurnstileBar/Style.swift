@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import TurnstileCore
 
@@ -14,56 +15,89 @@ extension MenuBarState.Tone {
 
 /// The panel's one fixed dimension. Everything else sizes to content.
 enum Panel {
-    static let width: CGFloat = 320
-    static let gutter: CGFloat = 12
+    static let width: CGFloat = 390
+    static let gutter: CGFloat = 16
+    /// Room for a row's trailing controls, held whether or not they're showing so nothing shifts on hover.
+    static let actionsWidth: CGFloat = 76
+    static let actionSize: CGFloat = 22
     /// Past this the job list scrolls rather than growing down the screen.
-    static let listHeight: CGFloat = 320
-    private static let sectionHeight: CGFloat = 31
-    private static let jobHeight: CGFloat = 62
+    static let maxListHeight: CGFloat = 480
+    /// What the header, banners, and footer need around the list.
+    private static let chromeHeight: CGFloat = 220
+    private static let sectionHeight: CGFloat = 36
+    private static let runningHeight: CGFloat = 70
+    private static let queuedHeight: CGFloat = 80
     private static let emptyHeight: CGFloat = 56
-    private static let recentHeaderHeight: CGFloat = 39
+    private static let recentHeaderHeight: CGFloat = 45
+    private static let recentRowHeight: CGFloat = 28
 
-    /// ScrollView has no useful ideal height inside a MenuBarExtra window. Size it from the
-    /// visible rows, then cap it before the panel crowds out the screen.
-    static func listHeight(for snapshot: StatusSnapshot, showingRecent: Bool) -> CGFloat {
-        let jobs = snapshot.running.count + snapshot.queued.count
+    /// The cap, shrunk on short screens so the panel, recent runs included, never runs off the bottom.
+    static func listCap(recent: Int) -> CGFloat {
+        let room = maxListHeight
+        guard let screen = NSScreen.main?.visibleFrame.height else { return room }
+        return max(160, min(room, screen - chromeHeight - recentHeight(recent)))
+    }
+
+    /// ScrollView has no useful ideal height inside a MenuBarExtra window. Estimate it from the
+    /// visible rows until the content has been measured, then cap it.
+    static func listHeight(for snapshot: StatusSnapshot, recent: Int, measured: CGFloat?) -> CGFloat {
+        min(listCap(recent: recent), measured ?? estimate(snapshot))
+    }
+
+    private static func recentHeight(_ count: Int) -> CGFloat {
+        count == 0 ? 0 : recentHeaderHeight + CGFloat(count) * recentRowHeight
+    }
+
+    private static func estimate(_ snapshot: StatusSnapshot) -> CGFloat {
         let sections = (snapshot.running.isEmpty ? 0 : 1) + (snapshot.queued.isEmpty ? 0 : 1)
-        var height = jobs == 0 ? emptyHeight : CGFloat(sections) * sectionHeight + CGFloat(jobs) * jobHeight
-        if !snapshot.recent.isEmpty { height += recentHeaderHeight }
-        if showingRecent { height += CGFloat(snapshot.recent.count) * jobHeight }
-        return min(listHeight, height + 8)
+        let empty = snapshot.running.isEmpty && snapshot.queued.isEmpty
+        var height = empty ? emptyHeight : CGFloat(sections) * sectionHeight
+        height += CGFloat(snapshot.running.count) * runningHeight + CGFloat(snapshot.queued.count) * queuedHeight
+        return height + 10
     }
 }
 
-/// A small uppercase heading with the number of things under it.
-struct SectionHeader: View {
+/// A small uppercase heading with the number of things under it, and optionally what its rows measure.
+struct SectionHeader<Accessory: View>: View {
     var title: String
-    var count: Int
+    var count: Int?
+    @ViewBuilder var accessory: Accessory
 
     var body: some View {
         HStack(spacing: 6) {
             Text(title.uppercased())
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.6)
-            Text("\(count)")
-                .font(.system(size: 10, weight: .semibold))
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
-                .background(Color(nsColor: .quaternaryLabelColor), in: Capsule())
-            Spacer()
+            if let count {
+                Text("\(count)")
+                    .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(Color(nsColor: .quaternaryLabelColor), in: Capsule())
+            }
+            Spacer(minLength: 0)
+            accessory
         }
         .foregroundStyle(.secondary)
         .padding(.horizontal, Panel.gutter)
-        .padding(.top, 10)
-        .padding(.bottom, 4)
+        .padding(.top, 14)
+        .padding(.bottom, 6)
+    }
+}
+
+extension SectionHeader where Accessory == EmptyView {
+    init(title: String, count: Int?) {
+        self.init(title: title, count: count) { EmptyView() }
     }
 }
 
 /// A symbol in a tinted rounded square, the same shape wherever a row starts.
 struct BadgeTile: View {
     var symbol: String
+    static let defaultSize: CGFloat = 28
+
     var tone: MenuBarState.Tone
-    var size: CGFloat = 26
+    var size: CGFloat = defaultSize
 
     var body: some View {
         RoundedRectangle(cornerRadius: size / 3.5, style: .continuous)
@@ -74,6 +108,21 @@ struct BadgeTile: View {
                     .font(.system(size: size * 0.44, weight: .semibold))
                     .foregroundStyle(tone.color)
             }
+    }
+}
+
+/// A small capsule for a state the section heading doesn't already give.
+struct TagLabel: View {
+    var tag: MenuBarState.Tag
+
+    var body: some View {
+        Text(tag.text)
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(tag.tone == .neutral ? Color.secondary : tag.tone.color)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background((tag.tone == .neutral ? Color(nsColor: .quaternaryLabelColor) : tag.tone.color.opacity(0.14)), in: Capsule())
+            .fixedSize()
     }
 }
 

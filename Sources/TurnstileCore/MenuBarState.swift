@@ -75,11 +75,16 @@ public enum MenuBarState {
         return Badge("play.fill", .good)
     }
 
-    /// A job's state in a word or two.
-    public static func stateText(for job: JobSnapshot) -> String {
-        if job.held == true { return "Held" }
-        if job.paused { return job.pausedBy == "memory" ? "Paused for memory" : "Paused" }
-        return job.state == "queued" ? "Queued" : "Running"
+    public struct Tag: Equatable, Sendable {
+        public var text: String
+        public var tone: Tone
+    }
+
+    /// A job's state, only when its section heading doesn't already say it.
+    public static func tag(for job: JobSnapshot) -> Tag? {
+        if job.held == true { return Tag(text: "Held", tone: .warning) }
+        if job.paused { return job.pausedBy == "memory" ? Tag(text: "Paused for memory", tone: .warning) : Tag(text: "Paused", tone: .neutral) }
+        return nil
     }
 
     /// "579 MB of ~2 GB" once it's running, "~2 GB expected" while it waits.
@@ -93,6 +98,12 @@ public enum MenuBarState {
     public static func memoryFraction(for job: JobSnapshot) -> Double? {
         guard job.state != "queued", job.estimate > 0 else { return nil }
         return min(1, Double(job.footprint ?? 0) / Double(job.estimate))
+    }
+
+    /// A full bar reads as "done" unless something says otherwise.
+    public static func memoryHelp(for job: JobSnapshot) -> String? {
+        guard memoryFraction(for: job) != nil else { return nil }
+        return "Memory in use: \(memoryText(for: job)) estimated. The bar fills toward the estimate. It shows memory, not progress."
     }
 
     /// Over its estimate is worth a look; well over is where the runaway killer lives.
@@ -113,13 +124,20 @@ public enum MenuBarState {
         }
     }
 
-    /// "failed (1) · 2m04s · peak 7 GB".
-    public static func detail(for entry: HistoryEntry) -> String {
-        var parts = [entry.outcome]
-        if let code = entry.exitCode, entry.outcome == "failed" { parts[0] += " (\(code))" }
-        if let duration = entry.duration { parts.append(formatDuration(duration)) }
-        if let peak = entry.peak { parts.append("peak \(Bytes.format(peak))") }
-        return parts.joined(separator: " · ")
+    /// Recent runs shown before the list is expanded.
+    public static let recentPreviewCount = 2
+
+    public static func visibleRecent(_ entries: [HistoryEntry], expanded: Bool) -> [HistoryEntry] {
+        expanded ? entries : Array(entries.prefix(recentPreviewCount))
+    }
+
+    /// Nothing for a run that went fine; the badge already says so.
+    public static func outcomeNote(for entry: HistoryEntry) -> String? {
+        switch entry.outcome {
+        case "ok": return nil
+        case "failed": return entry.exitCode.map { "exit \($0)" } ?? "failed"
+        default: return entry.outcome
+        }
     }
 
     public static func symbol(for action: Action) -> String {
@@ -137,15 +155,29 @@ public enum MenuBarState {
         public var title: String
         /// The control message to send, with the job as its target.
         public var message: String
+        /// Hover text: what happens, in a sentence.
+        public var help: String
+    }
+
+    /// Moving the head of the queue to the front does nothing.
+    public static func canPromote(_ job: JobSnapshot, in section: [JobSnapshot]) -> Bool {
+        job.state != "queued" || section.first?.id != job.id
     }
 
     public static func actions(for job: JobSnapshot) -> [Action] {
-        let bump = Action(title: job.state == "queued" ? "Move to front" : "Raise priority", message: "bump")
-        let kill = Action(title: "Kill", message: "kill")
+        let kill = Action(title: "Kill", message: "kill", help: job.state == "queued" ? "Drop #\(job.id) from the queue" : "Stop #\(job.id) and everything it started")
         if job.state == "queued" {
-            return [bump, job.held == true ? Action(title: "Release", message: "unhold") : Action(title: "Hold", message: "hold"), kill]
+            let bump = Action(title: "Move to front", message: "bump", help: "Start #\(job.id) next, as soon as memory and a slot are free")
+            let hold = job.held == true
+                ? Action(title: "Release", message: "unhold", help: "Let #\(job.id) start when its turn comes")
+                : Action(title: "Hold", message: "hold", help: "Keep #\(job.id) queued until released")
+            return [bump, hold, kill]
         }
-        return [bump, job.paused ? Action(title: "Resume", message: "resume") : Action(title: "Pause", message: "pause"), kill]
+        let bump = Action(title: "Raise priority", message: "bump", help: "Run #\(job.id) at normal CPU priority, and resume it if paused")
+        let toggle = job.paused
+            ? Action(title: "Resume", message: "resume", help: "Resume #\(job.id)")
+            : Action(title: "Pause", message: "pause", help: "Pause #\(job.id) until you resume it")
+        return [bump, toggle, kill]
     }
 
     public struct Event: Equatable, Sendable {

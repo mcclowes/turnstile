@@ -4,13 +4,14 @@ import TurnstileCore
 import UserNotifications
 
 /// Polls the daemon's status. It never starts or keeps the daemon alive: when it's idle, the menu says so and waits.
-final class Monitor: ObservableObject {
+final class Monitor: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
     @Published private(set) var snapshot: StatusSnapshot?
     @Published private(set) var message: String?
     @Published private(set) var launchAtLogin = false
     @Published private(set) var evidence: Health.Evidence?
     /// Read on every poll, so a `turnstile disable` in a shell shows within seconds.
     @Published private(set) var disabled = false
+    @Published private(set) var notifying = Set(MenuBarState.Event.Kind.allCases.filter { Monitor.isOn($0) })
 
     private let paths = Paths()
     private let queue = DispatchQueue(label: "turnstile.monitor")
@@ -20,11 +21,16 @@ final class Monitor: ObservableObject {
     private let bundled = Bundle.main.bundleIdentifier != nil
 
     var canLaunchAtLogin: Bool { bundled }
+    var canNotify: Bool { bundled }
 
-    init() {
+    override init() {
+        super.init()
         if bundled {
             launchAtLogin = SMAppService.mainApp.status == .enabled
-            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+            let center = UNUserNotificationCenter.current()
+            center.delegate = self
+            center.setNotificationCategories(Set(MenuBarState.Event.Kind.allCases.filter { !$0.actions.isEmpty }.map(Monitor.category)))
+            center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
         }
         poll()
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.poll() }
@@ -35,6 +41,7 @@ final class Monitor: ObservableObject {
 
     /// A fixed snapshot for rendering the panel: no polling, no notifications, no daemon.
     init(fixture: StatusSnapshot?, disabled: Bool = false) {
+        super.init()
         snapshot = fixture
         self.disabled = disabled
         evidence = nil
@@ -64,7 +71,7 @@ final class Monitor: ObservableObject {
     }
 
     private func update(_ status: StatusSnapshot?) {
-        for event in MenuBarState.events(from: snapshot, to: status) { notify(event) }
+        for event in MenuBarState.events(from: snapshot, to: status) where notifying.contains(event.kind) { notify(event) }
         snapshot = status
         // A running daemon usually means a shim just registered something, so don't wait five minutes to say so.
         if status != nil, let evidence, evidence.lastGated == nil { checkHealth() }
@@ -105,11 +112,46 @@ final class Monitor: ObservableObject {
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 
+    func setNotifying(_ kind: MenuBarState.Event.Kind, _ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: Monitor.defaultsKey(kind))
+        if enabled { notifying.insert(kind) } else { notifying.remove(kind) }
+    }
+
+    private static func defaultsKey(_ kind: MenuBarState.Event.Kind) -> String { "notify.\(kind.rawValue)" }
+
+    private static func isOn(_ kind: MenuBarState.Event.Kind) -> Bool {
+        UserDefaults.standard.object(forKey: defaultsKey(kind)) as? Bool ?? kind.isOnByDefault
+    }
+
+    private static func category(_ kind: MenuBarState.Event.Kind) -> UNNotificationCategory {
+        let actions = kind.actions.map {
+            UNNotificationAction(identifier: $0.message, title: $0.title, options: $0.message == "kill" ? [.destructive] : [])
+        }
+        return UNNotificationCategory(identifier: kind.rawValue, actions: actions, intentIdentifiers: [])
+    }
+
     private func notify(_ event: MenuBarState.Event) {
         guard bundled else { return }
         let content = UNMutableNotificationContent()
         content.title = event.title
         content.body = event.body
+        content.categoryIdentifier = event.kind.rawValue
+        if let job = event.job { content.userInfo = ["job": job] }
+        switch event.kind.urgency {
+        case .passive: content.interruptionLevel = .passive
+        case .active: content.interruptionLevel = .active
+        case .timeSensitive: content.interruptionLevel = .timeSensitive
+        }
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+    }
+
+    /// Resume or Kill from a notification goes through the same control path as the menu.
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        let content = response.notification.request.content
+        let kind = MenuBarState.Event.Kind(rawValue: content.categoryIdentifier)
+        if let job = content.userInfo["job"] as? Int64, kind?.actions.contains(where: { $0.message == response.actionIdentifier }) == true {
+            DispatchQueue.main.async { self.send(response.actionIdentifier, to: job) }
+        }
+        completionHandler()
     }
 }

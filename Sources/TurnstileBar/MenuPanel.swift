@@ -165,6 +165,21 @@ struct MenuPanel: View {
         .background(on ? Color.clear : MenuBarState.Tone.danger.color.opacity(0.08))
     }
 
+    private var notificationsMenu: some View {
+        Menu {
+            ForEach(MenuBarState.Event.Kind.allCases, id: \.self) { kind in
+                Toggle(kind.title, isOn: Binding(get: { monitor.notifying.contains(kind) }, set: { monitor.setNotifying(kind, $0) }))
+            }
+        } label: {
+            Label("Notifications", systemImage: "bell")
+                .font(.system(size: 11))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .foregroundStyle(.secondary)
+        .help("Choose what Turnstile tells you about")
+    }
+
     private func banner(_ message: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "info.circle.fill")
@@ -198,6 +213,7 @@ struct MenuPanel: View {
                     .font(.system(size: 11))
             }
             Spacer(minLength: 0)
+            if monitor.canNotify { notificationsMenu }
             SettingsLink {
                 Label("Settings", systemImage: "gearshape")
                     .font(.system(size: 11))

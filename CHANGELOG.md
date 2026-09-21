@@ -2,13 +2,22 @@
 
 Notable changes to turnstile. Versions follow [semantic versioning](https://semver.org/).
 
-## Unreleased
+## 0.6.0
+
+### Added
+
+- Pause the whole queue from the menu bar. Running jobs carry on, nothing new starts, and waiting callers are told why. Resuming takes effect on the daemon's next tick.
 
 ### Changed
 
 - The menu bar panel shows less. Memory reads as a share of the machine ("52% of 16 GB"), and a running job's memory as a share of its estimate. The slot counts sit beside the memory figure instead of the version. Running jobs drop their number, and the "Memory vs. estimate" label is gone; hover the bar for the detail.
 - A recent run's icon explains how it ended on hover, and opens its log when clicked, replacing the separate log button.
 - The gating switch, notification switches, and "Launch at login" have moved from the panel to a new General tab in Settings. While gating is off, the panel shows a banner with a button to turn it back on.
+
+### Fixed
+
+- The Settings button in the menu bar panel brings the Settings window to the front instead of opening it behind other windows.
+- The empty state's padding is even, and slot chips explain themselves on hover.
 
 ## 0.5.0
 

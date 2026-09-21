@@ -137,9 +137,17 @@ struct SlotChips: View {
                 .padding(.vertical, 1)
                 .background(blocking ? MenuBarState.Tone.warning.color.opacity(0.14) : Color(nsColor: .quaternaryLabelColor), in: Capsule())
                 .fixedSize()
-                .help("\(slot.resourceClass.rawValue.capitalized) slots: \(slot.running) of \(slot.limit) in use, \(slot.queued) queued")
+                .hoverTip(Self.help(for: slot, blocking: blocking))
             }
         }
         .font(.system(size: 10))
+    }
+
+    static func help(for slot: MemoryMeter.Slot, blocking: Bool) -> String {
+        let name = slot.resourceClass.rawValue
+        let limit = slot.limit == 1 ? "1 \(name) job runs" : "\(slot.limit) \(name) jobs run"
+        let queued = slot.queued > 0 ? ", \(slot.queued) waiting" : ""
+        let waiting = blocking ? " The next job is waiting on this, not memory." : ""
+        return "\(name.capitalized) slots: \(slot.running) of \(slot.limit) in use\(queued). At most \(limit) at once, however much memory is spare.\(waiting)"
     }
 }

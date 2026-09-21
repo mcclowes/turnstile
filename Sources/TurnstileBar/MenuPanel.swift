@@ -28,6 +28,7 @@ struct MenuPanel: View {
             }
             if let snapshot = monitor.snapshot {
                 MemoryHeader(snapshot: snapshot)
+                    .zIndex(1)
                 Divider()
                 body(for: snapshot)
                 Divider()
@@ -47,9 +48,10 @@ struct MenuPanel: View {
     @ViewBuilder
     private func body(for snapshot: StatusSnapshot) -> some View {
         let recent = MenuBarState.visibleRecent(snapshot.recent, expanded: showAllRecent)
+        let isEmpty = snapshot.running.isEmpty && snapshot.queued.isEmpty
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if snapshot.running.isEmpty && snapshot.queued.isEmpty {
+                if isEmpty {
                     empty
                 }
                 // Ticks between polls, so elapsed times and countdowns don't freeze.
@@ -61,7 +63,7 @@ struct MenuPanel: View {
                     }
                 }
             }
-            .padding(.bottom, 10)
+            .padding(.bottom, isEmpty ? 0 : 10)
             .onGeometryChange(for: CGFloat.self, of: \.size.height) { measuredList = $0 }
         }
         .scrollBounceBehavior(.basedOnSize)
@@ -296,6 +298,7 @@ struct MemoryHeader: View {
                 Spacer(minLength: 0)
                 SlotChips(meter: meter)
             }
+            .zIndex(1)
             MemoryMeterView(meter: meter)
         }
         .padding(.horizontal, Panel.gutter)

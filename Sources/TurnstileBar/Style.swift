@@ -51,10 +51,53 @@ enum Panel {
     private static func estimate(_ snapshot: StatusSnapshot) -> CGFloat {
         let sections = (snapshot.running.isEmpty ? 0 : 1) + (snapshot.queued.isEmpty ? 0 : 1)
         let empty = snapshot.running.isEmpty && snapshot.queued.isEmpty
-        var height = empty ? emptyHeight : CGFloat(sections) * sectionHeight
-        height += CGFloat(snapshot.running.count) * runningHeight + CGFloat(snapshot.queued.count) * queuedHeight
+        if empty { return emptyHeight }
+        let height = CGFloat(sections) * sectionHeight
+            + CGFloat(snapshot.running.count) * runningHeight + CGFloat(snapshot.queued.count) * queuedHeight
         return height + 10
     }
+}
+
+/// `.help` rarely shows in the menu bar panel because the app is never active, so this draws one in the panel.
+/// Put the parent above later siblings with `zIndex`, or they'll paint over the tip.
+struct HoverTip: ViewModifier {
+    var text: String
+    var width: CGFloat = 230
+    @State private var hovering = false
+    @State private var shown = false
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { hovering = $0 }
+            .task(id: hovering) {
+                guard hovering else { shown = false; return }
+                try? await Task.sleep(for: .milliseconds(400))
+                if !Task.isCancelled { shown = true }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if shown {
+                    Text(text)
+                        .font(.system(size: 11))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .frame(width: width, alignment: .leading)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Color(nsColor: .separatorColor)))
+                        .shadow(color: .black.opacity(0.2), radius: 6, y: 2)
+                        // Hangs the tip 6pt below the content rather than over it.
+                        .alignmentGuide(.bottom) { $0[.top] - 6 }
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeOut(duration: 0.12), value: shown)
+            .accessibilityHint(text)
+    }
+}
+
+extension View {
+    func hoverTip(_ text: String) -> some View { modifier(HoverTip(text: text)) }
 }
 
 /// A small uppercase heading with the number of things under it, and optionally what its rows measure.

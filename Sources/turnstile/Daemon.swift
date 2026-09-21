@@ -228,14 +228,16 @@ final class Daemon {
 
     private var retained: [DispatchSourceSignal] = []
 
-    func shutdown(reason: String) -> Never {
+    func shutdown(reason: String, releaseJobs: Bool = true) -> Never {
         log("stopping: \(reason)")
         for job in jobs.values where job.paused { ProcessTree.signal(job.tree, SIGCONT) }
-        for job in jobs.values {
-            // `release` tells clients this stop is deliberate, so they carry on rather than restart the daemon.
-            var message = Message(type: "release")
-            message.text = job.state == .queued ? "daemon stopped; running ungated" : "daemon stopped; continuing untracked"
-            for connection in job.connections { connection.send(message) }
+        if releaseJobs {
+            for job in jobs.values {
+                // `release` tells clients this stop is deliberate, so they carry on rather than restart the daemon.
+                var message = Message(type: "release")
+                message.text = job.state == .queued ? "daemon stopped; running ungated" : "daemon stopped; continuing untracked"
+                for connection in job.connections { connection.send(message) }
+            }
         }
         unlink(paths.socket)
         exit(0)
@@ -332,6 +334,9 @@ final class Daemon {
         case "stop":
             connection.send(Message(type: "ok"))
             shutdown(reason: "requested")
+        case "restart":
+            connection.send(Message(type: "ok"))
+            shutdown(reason: "restart requested", releaseJobs: false)
         default:
             connection.send(.error("unknown message \(message.type)"))
         }

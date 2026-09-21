@@ -3,7 +3,7 @@ import Foundation
 /// One newline-delimited JSON message between a client and the daemon.
 ///
 /// Client to daemon: `request`, `adopt` (a running job re-registering after a daemon restart), `started`, `finished`, `status`,
-/// and the controls `bump`, `kill`, `pause`, `resume`, `hold`, `unhold`, each with a `target`.
+/// lifecycle commands `restart` and `stop`, and the controls `bump`, `kill`, `pause`, `resume`, `hold`, `unhold`, each with a `target`.
 /// Daemon to client: `queued`, `admitted`, `joined`, `output`, `done`, `notice`, `release`, `cancelled`, `status`, `ok`, `error`.
 public struct Message: Codable, Equatable, Sendable {
     public var type: String

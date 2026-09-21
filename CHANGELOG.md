@@ -2,6 +2,12 @@
 
 Notable changes to turnstile. Versions follow [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- `turnstile restart` replaces the daemon without releasing its queued and running jobs. Installing a newer version uses the same recovery path when the existing daemon supports it.
+
 ## 0.4.0
 
 ### Added

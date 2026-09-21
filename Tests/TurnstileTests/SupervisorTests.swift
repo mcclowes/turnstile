@@ -305,3 +305,66 @@ struct SupervisorTests {
         #expect(run.ungated.first?.cause == "the daemon stopped answering")
     }
 }
+
+@Suite(.serialized)
+struct CLILifecycleTests {
+    @Test func installingANewerVersionRestartsABusyOlderDaemon() throws {
+        let root = NSTemporaryDirectory() + "ts-cli-" + UUID().uuidString.prefix(8)
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let paths = Paths(home: root + "/home")
+        try paths.ensure()
+        let running = JobSnapshot(
+            id: 1, state: "running", resourceClass: .compile, project: "repo", key: "swift build",
+            cwd: "/repo", agent: true, estimate: Bytes.gb, footprint: Bytes.gb, peak: Bytes.gb,
+            paused: false, clientPid: 10, childPid: 11, queuedAt: 1, startedAt: 2, waiting: nil, joiners: 0
+        )
+        let daemon = FakeDaemon(socket: paths.socket) { message, _, send, hangUp in
+            switch message.type {
+            case "status":
+                var reply = Message(type: "status")
+                reply.status = StatusSnapshot(
+                    memoryLevel: 50, physicalMemory: 16 * Bytes.gb, reserve: 2 * Bytes.gb,
+                    limits: [:], running: [running], queued: [], recent: [], daemonPid: 123,
+                    version: "older"
+                )
+                send(reply)
+            case "restart":
+                send(reply("ok"))
+                hangUp()
+            default: break
+            }
+        }
+
+        CLI.retireOldDaemon(paths: paths)
+
+        #expect(daemon.types == ["status", "restart"])
+    }
+
+    @Test func installingANewerVersionStopsAnIdleLegacyDaemon() throws {
+        let root = NSTemporaryDirectory() + "ts-cli-" + UUID().uuidString.prefix(8)
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let paths = Paths(home: root + "/home")
+        try paths.ensure()
+        let daemon = FakeDaemon(socket: paths.socket) { message, _, send, hangUp in
+            switch message.type {
+            case "status":
+                var reply = Message(type: "status")
+                reply.status = StatusSnapshot(
+                    memoryLevel: 50, physicalMemory: 16 * Bytes.gb, reserve: 2 * Bytes.gb,
+                    limits: [:], running: [], queued: [], recent: [], daemonPid: 123,
+                    version: "legacy"
+                )
+                send(reply)
+            case "restart": send(.error("unknown message restart"))
+            case "stop":
+                send(reply("ok"))
+                hangUp()
+            default: break
+            }
+        }
+
+        CLI.retireOldDaemon(paths: paths)
+
+        #expect(daemon.types == ["status", "restart", "stop"])
+    }
+}

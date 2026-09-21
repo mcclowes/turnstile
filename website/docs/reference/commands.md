@@ -61,7 +61,8 @@ History is kept for 30 days in `~/.turnstile/state.sqlite`, on your machine.
 | `turnstile classify <command>` | Show how a command would be gated |
 | `turnstile run [--class compile\|test\|browser] -- <command>` | Gate any command, shimmed or not |
 | `turnstile disable` / `enable` | Turn gating off and on for every shell, without uninstalling |
-| `turnstile stop` | Stop the daemon. Waiting jobs run ungated |
+| `turnstile restart` | Replace the daemon. Waiting jobs requeue, and running jobs continue under the new daemon |
+| `turnstile stop` | Stop the daemon and fail open. Waiting jobs run ungated, and running jobs continue untracked |
 
 ## Setup and config
 

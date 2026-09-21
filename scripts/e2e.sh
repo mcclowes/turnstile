@@ -163,6 +163,24 @@ out="$(cd b && FAKE_SLEEP=0 swift test 2>&1)"
 check "slot survives a SIGKILLed client, then frees" 'echo "$out" | grep -q "waiting for a test slot" && echo "$out" | grep -q "fake swift done"'
 wait
 
+# Restarting the daemon keeps its work gated: a running job is adopted, and a queued one requeues.
+before=$(runs test)
+(cd a && FAKE_SLEEP=3 swift test > "$T/restart-running.out" 2>&1; echo $? > "$T/restart-running.code") &
+wait_for_job running a "swift test"
+restart_job="$(turnstile status --json | /usr/bin/python3 -c 'import json, sys; print(next(j["id"] for j in json.load(sys.stdin)["running"] if j["project"] == "a" and j["key"] == "swift test"))')"
+turnstile pause "$restart_job" > /dev/null
+wait_for_job running a "swift test" paused
+(cd b && swift test > "$T/restart-queued.out" 2>&1; echo $? > "$T/restart-queued.code") &
+wait_for_job queued b "swift test"
+old_daemon="$(turnstile status --json | /usr/bin/python3 -c 'import json, sys; print(json.load(sys.stdin)["daemonPid"])')"
+turnstile restart > "$T/restart.out" 2>&1
+wait
+new_daemon="$(turnstile status --json | /usr/bin/python3 -c 'import json, sys; print(json.load(sys.stdin)["daemonPid"])')"
+check "restart replaces the daemon" '[ "$old_daemon" != "$new_daemon" ]'
+check "restart preserves running and queued jobs" '[ $(( $(runs test) - before )) = 2 ] && [ "$(cat "$T/restart-running.code")" = 0 ] && [ "$(cat "$T/restart-queued.code")" = 0 ]'
+check "restart keeps recovered jobs gated" '! grep -Eq "running ungated|continuing untracked" "$T/restart-running.out" "$T/restart-queued.out"'
+check "restart resumes and adopts work already running" 'grep -q "adopted a swift test" "$TURNSTILE_HOME/daemon.log"'
+
 # In a terminal, the job owns the tty and Ctrl-C stops it like any foreground command.
 cat > "$T/ctrlc.py" <<'EOF'
 import os, pty, sys, time, select

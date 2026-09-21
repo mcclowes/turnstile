@@ -18,6 +18,8 @@ The daemon starts on the first gated command, listens on a Unix socket in `~/.tu
 
 It fails open. If the daemon is missing or broken, commands run ungated rather than failing. If it crashes, running jobs re-register with a fresh one and waiting jobs requeue, so limits still hold, and anything it had paused carries on.
 
+`turnstile restart` uses that recovery path deliberately: paused jobs resume, waiting jobs requeue, and running jobs register with the replacement daemon. `turnstile stop` is the escape hatch instead. It releases waiting jobs to run ungated and leaves running jobs to finish untracked.
+
 ## What gets gated
 
 Gated by default: `swift`, `xcodebuild`, `cargo`, `go`, `gradle`, `make`, `npm`, `pnpm`, `yarn`, `bun`, `npx`, `vitest`, `jest`, `playwright`, `tsc`, `xcrun`, and `corepack`. The last two are gated by the tool they run, so `xcrun swift build` counts as `swift build` and `corepack pnpm test` as `pnpm test`.

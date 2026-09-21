@@ -25,7 +25,8 @@ enum CLI {
           turnstile agents                                   print a snippet for a project's AGENTS.md or CLAUDE.md
           turnstile shims                                    rebuild the shims directory
           turnstile disable | enable                         turn gating off and on for every shell
-          turnstile stop                                     stop the daemon
+          turnstile restart                                  restart the daemon without releasing its jobs
+          turnstile stop                                     stop the daemon and release its jobs
           turnstile uninstall                                remove shims and PATH setup
           turnstile daemon                                   run the scheduler in the foreground
 
@@ -54,6 +55,7 @@ enum CLI {
         case "env": env(rest)
         case "agents": print(AgentInstructions.snippet); exit(0)
         case "shims", "rehash": rebuildShims(announce: true); exit(0)
+        case "restart": restart()
         case "stop": stop()
         case "uninstall": uninstall()
         case "daemon": daemon(rest)
@@ -139,16 +141,18 @@ enum CLI {
         }
     }
 
-    /// A daemon from an earlier version keeps running until idle; stop it now if that costs nothing.
+    /// Move jobs from an earlier daemon onto this version without releasing them ungated.
     static func retireOldDaemon(paths: Paths) {
         guard let client = Client.connect(socketPath: paths.socket),
               let status = client.roundTrip(Message(type: "status"))?.status,
               status.version != Turnstile.version else { return }
-        if status.running.isEmpty && status.queued.isEmpty {
+        if client.roundTrip(Message(type: "restart"))?.type == "ok" {
+            print("Restarting the older daemon; jobs will reconnect")
+        } else if status.running.isEmpty && status.queued.isEmpty {
             _ = client.roundTrip(Message(type: "stop"))
-            print("Stopped the old daemon; the next gated command starts the new one")
+            print("Stopped the idle older daemon; the next gated command starts this version")
         } else {
-            print("An older daemon is still running jobs; run `turnstile stop` once they finish")
+            print("The older daemon doesn't support live restart; it will keep its jobs and retire when idle")
         }
     }
 
@@ -227,7 +231,7 @@ enum CLI {
         exit(0)
     }
 
-    // MARK: status / bump / stop
+    // MARK: status / bump / restart / stop
 
     static func status(_ args: [String]) -> Never {
         let json = args.contains("--json")
@@ -332,6 +336,19 @@ enum CLI {
         }
         _ = client.roundTrip(Message(type: "stop"))
         print("daemon stopped")
+        exit(0)
+    }
+
+    static func restart() -> Never {
+        guard let client = Client.connect(socketPath: paths.socket) else {
+            print("daemon not running")
+            exit(0)
+        }
+        guard client.roundTrip(Message(type: "restart"))?.type == "ok" else {
+            warn("daemon couldn't restart")
+            exit(1)
+        }
+        print("daemon restarting; jobs will reconnect")
         exit(0)
     }
 

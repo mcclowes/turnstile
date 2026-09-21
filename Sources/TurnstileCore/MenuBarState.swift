@@ -90,11 +90,16 @@ public enum MenuBarState {
         return nil
     }
 
-    /// "579 MB of ~2 GB" once it's running, "~2 GB expected" while it waits.
+    /// "25% of ~2 GB" once it's running, "~2 GB expected" while it waits. The share isn't clamped, so a job over its estimate says so.
     public static func memoryText(for job: JobSnapshot) -> String {
-        job.state == "queued"
-            ? "~\(Bytes.format(job.estimate)) expected"
-            : "\(Bytes.format(job.footprint ?? 0)) of ~\(Bytes.format(job.estimate))"
+        guard job.state != "queued", job.estimate > 0 else { return "~\(Bytes.format(job.estimate)) expected" }
+        let percent = Int((Double(job.footprint ?? 0) / Double(job.estimate) * 100).rounded())
+        return "\(percent)% of ~\(Bytes.format(job.estimate))"
+    }
+
+    /// "52% of 16 GB": the header's one number.
+    public static func memoryUsedText(_ snapshot: StatusSnapshot) -> String {
+        "\(100 - max(0, min(100, snapshot.memoryLevel)))% of \(Bytes.format(snapshot.physicalMemory))"
     }
 
     /// How much of its estimate a running job is using, clamped to 0...1. Nil while it's queued.
@@ -106,7 +111,7 @@ public enum MenuBarState {
     /// A full bar reads as "done" unless something says otherwise.
     public static func memoryHelp(for job: JobSnapshot) -> String? {
         guard memoryFraction(for: job) != nil else { return nil }
-        return "Memory in use: \(memoryText(for: job)) estimated. The bar fills toward the estimate. It shows memory, not progress."
+        return "\(Bytes.format(job.footprint ?? 0)) in use of ~\(Bytes.format(job.estimate)) estimated. The bar fills toward the estimate. It shows memory, not progress."
     }
 
     /// Over its estimate is worth a look; well over is where the runaway killer lives.
@@ -141,6 +146,23 @@ public enum MenuBarState {
         case "failed": return entry.exitCode.map { "exit \($0)" } ?? "failed"
         default: return entry.outcome
         }
+    }
+
+    /// The outcome icon's tooltip, since the icon alone doesn't say what "?" or a bolt means.
+    public static func outcomeHelp(for entry: HistoryEntry) -> String {
+        let what: String
+        switch entry.outcome {
+        case "ok": what = "Finished fine"
+        case "failed": what = entry.exitCode.map { "Failed with exit code \($0)" } ?? "Failed"
+        case "signaled": what = "Stopped by a signal"
+        case "killed": what = "Killed by Turnstile or by you"
+        case "lost": what = "Lost: whatever started it quit before reporting how it ended, so the result is unknown"
+        case "cancelled": what = "Cancelled before it started"
+        case "joined": what = "Shared another identical run's result"
+        case "superseded": what = "Replaced by a newer identical run"
+        default: what = entry.outcome.capitalized
+        }
+        return entry.log == nil ? what : "\(what). Click to open its output."
     }
 
     public static func symbol(for action: Action) -> String {

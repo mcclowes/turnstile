@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import TurnstileCore
 
-/// The whole menu: memory at the top, jobs in the middle, the app's own switches at the bottom.
+/// The whole menu: memory at the top, jobs in the middle, Settings and Quit at the bottom.
 struct MenuPanel: View {
     @ObservedObject var monitor: Monitor
     @State private var showAllRecent: Bool
@@ -22,22 +22,23 @@ struct MenuPanel: View {
                 HealthBanner(findings: health)
                 Divider()
             }
+            if monitor.disabled {
+                gatingOff
+                Divider()
+            }
             if let snapshot = monitor.snapshot {
                 MemoryHeader(snapshot: snapshot)
                 Divider()
                 body(for: snapshot)
+                Divider()
             } else if showsIdle {
                 idle
-            }
-            if monitor.snapshot != nil || showsIdle {
                 Divider()
             }
-            gating
             if let message = monitor.message {
-                Divider()
                 banner(message)
+                Divider()
             }
-            Divider()
             footer
         }
         .frame(width: Panel.width)
@@ -74,14 +75,7 @@ struct MenuPanel: View {
     @ViewBuilder
     private func jobs(_ title: String, _ jobs: [JobSnapshot], now: Double) -> some View {
         if !jobs.isEmpty {
-            SectionHeader(title: title, count: jobs.count) {
-                if jobs.contains(where: { MenuBarState.memoryFraction(for: $0) != nil }) {
-                    Label("Memory vs. estimate", systemImage: "memorychip")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                        .help("Each bar is memory in use against what the job was expected to need. It isn't progress.")
-                }
-            }
+            SectionHeader(title: title, count: jobs.count)
             VStack(spacing: 2) {
                 ForEach(jobs, id: \.id) { job in
                     JobRow(job: job, now: now, canPromote: MenuBarState.canPromote(job, in: jobs)) { monitor.send($0, to: job.id) }
@@ -138,46 +132,24 @@ struct MenuPanel: View {
         .padding(.vertical, 22)
     }
 
-    /// Machine-wide, so it sits below the jobs rather than on any one of them.
-    private var gating: some View {
-        let on = !monitor.disabled
-        return HStack(spacing: 8) {
-            Image(systemName: on ? "shield.fill" : MenuBarState.disabledSymbol)
+    /// The switch lives in Settings; this only shows while it's off, because nothing is protected until it's back on.
+    private var gatingOff: some View {
+        HStack(spacing: 8) {
+            Image(systemName: MenuBarState.disabledSymbol)
                 .font(.system(size: 12))
-                .foregroundStyle(on ? MenuBarState.Tone.good.color : MenuBarState.Tone.danger.color)
+                .foregroundStyle(MenuBarState.Tone.danger.color)
                 .frame(width: BadgeTile.defaultSize)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Gating")
-                    .font(.system(size: 12, weight: .medium))
-                Text(on ? "Heavy commands wait their turn" : "Off: every command runs ungated")
-                    .font(.system(size: 11))
-                    .foregroundStyle(on ? Color.secondary : MenuBarState.Tone.danger.color)
-            }
+            Text("Gating is off: every command runs ungated")
+                .font(.system(size: 11))
+                .foregroundStyle(MenuBarState.Tone.danger.color)
             Spacer(minLength: 0)
-            Toggle("Gating", isOn: Binding(get: { on }, set: { monitor.setGating($0) }))
-                .toggleStyle(.switch)
-                .controlSize(.mini)
-                .labelsHidden()
-                .help(on ? "Let every command run ungated, on every shell, until you turn this back on" : "Gate heavy commands again")
+            Button("Turn on") { monitor.setGating(true) }
+                .controlSize(.small)
+                .help("Gate heavy commands again")
         }
         .padding(.horizontal, Panel.gutter)
         .padding(.vertical, 8)
-        .background(on ? Color.clear : MenuBarState.Tone.danger.color.opacity(0.08))
-    }
-
-    private var notificationsMenu: some View {
-        Menu {
-            ForEach(MenuBarState.Event.Kind.allCases, id: \.self) { kind in
-                Toggle(kind.title, isOn: Binding(get: { monitor.notifying.contains(kind) }, set: { monitor.setNotifying(kind, $0) }))
-            }
-        } label: {
-            Label("Notifications", systemImage: "bell")
-                .font(.system(size: 11))
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .foregroundStyle(.secondary)
-        .help("Choose what Turnstile tells you about")
+        .background(MenuBarState.Tone.danger.color.opacity(0.08))
     }
 
     private func banner(_ message: String) -> some View {
@@ -207,13 +179,7 @@ struct MenuPanel: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            if monitor.canLaunchAtLogin {
-                Toggle("Launch at login", isOn: Binding(get: { monitor.launchAtLogin }, set: { monitor.setLaunchAtLogin($0) }))
-                    .toggleStyle(.checkbox)
-                    .font(.system(size: 11))
-            }
             Spacer(minLength: 0)
-            if monitor.canNotify { notificationsMenu }
             SettingsLink {
                 Label("Settings", systemImage: "gearshape")
                     .font(.system(size: 11))
@@ -240,15 +206,11 @@ struct MenuPanel: View {
 /// A finished run on one line: outcome, what it was, how long, and how much memory at worst.
 struct RecentRow: View {
     var entry: HistoryEntry
+    @State private var hoveringBadge = false
 
     var body: some View {
-        let badge = MenuBarState.badge(for: entry)
         HStack(spacing: 8) {
-            Image(systemName: badge.symbol)
-                .font(.system(size: 12))
-                .foregroundStyle(badge.tone.color)
-                .frame(width: BadgeTile.defaultSize)
-                .help(entry.outcome)
+            outcome
             HStack(spacing: 5) {
                 Text(entry.project)
                     .font(.system(size: 12, weight: .medium))
@@ -261,21 +223,11 @@ struct RecentRow: View {
             .lineLimit(1)
             .help("#\(entry.id) \(entry.project) \(entry.key)")
             if let note = MenuBarState.outcomeNote(for: entry) {
+                let tone = MenuBarState.badge(for: entry).tone
                 Text(note)
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(badge.tone == .neutral ? Color.secondary : badge.tone.color)
+                    .foregroundStyle(tone == .neutral ? Color.secondary : tone.color)
                     .fixedSize()
-            }
-            // A failure's output is the thing you came to read, so it gets a button rather than only a context menu.
-            if let log = entry.log, entry.outcome != "ok" {
-                Button { RunLogActions.open(log) } label: {
-                    Image(systemName: "doc.text")
-                        .font(.system(size: 10))
-                }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.secondary)
-                .help("Open #\(entry.id)'s output")
-                .accessibilityLabel("Open log")
             }
             Spacer(minLength: 6)
             column(entry.duration.map(formatDuration) ?? "–", width: 52, help: "How long it ran")
@@ -289,6 +241,28 @@ struct RecentRow: View {
                 Button("Open log") { RunLogActions.open(log) }
             }
         }
+    }
+
+    /// Says what happened on hover; with a log, it turns into the button that opens it.
+    @ViewBuilder
+    private var outcome: some View {
+        let badge = MenuBarState.badge(for: entry)
+        let icon = Image(systemName: hoveringBadge && entry.log != nil ? "doc.text" : badge.symbol)
+            .font(.system(size: 12))
+            .foregroundStyle(badge.tone.color)
+            .frame(width: BadgeTile.defaultSize)
+            .contentShape(.rect)
+        Group {
+            if let log = entry.log {
+                Button { RunLogActions.open(log) } label: { icon }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Open log")
+            } else {
+                icon
+            }
+        }
+        .onHover { hoveringBadge = $0 }
+        .help(MenuBarState.outcomeHelp(for: entry))
     }
 
     private func column(_ text: String, width: CGFloat, help: String) -> some View {
@@ -309,23 +283,20 @@ struct MemoryHeader: View {
     private var used: UInt64 { snapshot.physicalMemory - SystemMemory.free(level: snapshot.memoryLevel, of: snapshot.physicalMemory) }
 
     var body: some View {
+        let meter = MemoryMeter(snapshot)
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("Memory")
                     .font(.system(size: 13, weight: .semibold))
                 // The tone is the only warning: amber when tight, red when jobs start pausing.
-                Text("\(Bytes.format(used)) used of \(Bytes.format(snapshot.physicalMemory))")
+                Text(MenuBarState.memoryUsedText(snapshot))
                     .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(tone == .good ? Color.secondary : tone.color)
-                    .help("\(snapshot.memoryLevel)% free")
+                    .help("\(Bytes.format(used)) used, \(snapshot.memoryLevel)% free")
                 Spacer(minLength: 0)
-                if let version = snapshot.version {
-                    Text(version)
-                        .font(.system(size: 10).monospacedDigit())
-                        .foregroundStyle(.tertiary)
-                }
+                SlotChips(meter: meter)
             }
-            MemoryMeterView(meter: MemoryMeter(snapshot))
+            MemoryMeterView(meter: meter)
         }
         .padding(.horizontal, Panel.gutter)
         .padding(.top, 14)

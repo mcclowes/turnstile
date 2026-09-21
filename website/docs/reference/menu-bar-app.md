@@ -24,4 +24,8 @@ It only watches the daemon, polling every 2 seconds, and never starts it or keep
 
 Every few minutes it also checks the install, without a shell or the daemon, and turns the icon red when nothing is gated: the CLI isn't set up (the app installed on its own, or `turnstile init` never run), the shims are missing, or `turnstile disable` is on. It turns orange when no command has gone through the shims yet, the global config is invalid, or the daemon and the app are from different releases. The menu names the problem and the command that fixes it; click the command to copy it. It can't see your shell's PATH, so `turnstile doctor` in a terminal remains the full check.
 
-Open it once and turn on "Launch at login" from its menu.
+The gating switch and notification switches are in Settings, next to the tools the shims intercept. While gating is off, the menu says so at the top with a button to turn it back on.
+
+Hover a recent run's icon to see how it ended. If it left a log, click the icon to open it.
+
+Open it once and turn on "Launch at login" in Settings.

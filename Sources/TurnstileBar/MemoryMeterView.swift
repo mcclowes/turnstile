@@ -14,8 +14,12 @@ struct MemoryMeterView: View {
         VStack(alignment: .leading, spacing: 7) {
             bar
             legend
-            if !meter.slots.isEmpty || meter.ghost != nil {
-                footnote
+            if let verdict = Self.verdict(meter) {
+                Text(verdict)
+                    .font(.system(size: 10))
+                    .foregroundStyle(meter.blocker == nil ? Color.secondary : MenuBarState.Tone.warning.color)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
         }
         .animation(.easeInOut(duration: 0.3), value: meter)
@@ -100,16 +104,28 @@ struct MemoryMeterView: View {
         }
     }
 
-    /// Why the head of the queue waits, and the class slots that decide it when memory doesn't.
-    private var footnote: some View {
+    /// Why the head of the queue waits.
+    static func verdict(_ meter: MemoryMeter) -> String? {
+        guard let ghost = meter.ghost else { return nil }
+        switch meter.blocker {
+        case .memory: return "Next needs ~\(Bytes.format(ghost.estimate)), only \(Bytes.format(meter.spare)) spare"
+        case let .slot(cls): return "Next waits for a \(cls.rawValue) slot, not memory"
+        case nil: return "Next fits"
+        }
+    }
+
+    static func help(for segment: MemoryMeter.Segment) -> String {
+        let more = segment.committed > 0 ? ", ~\(Bytes.format(segment.committed)) more expected" : ""
+        return "#\(segment.id) \(segment.label): \(Bytes.format(segment.used)) in use\(more)\(segment.paused ? ", paused" : "")"
+    }
+}
+
+/// Slots in use per class, the other thing besides memory that decides what runs.
+struct SlotChips: View {
+    var meter: MemoryMeter
+
+    var body: some View {
         HStack(spacing: 6) {
-            if let text = MemoryMeterView.verdict(meter) {
-                Text(text)
-                    .foregroundStyle(meter.blocker == nil ? Color.secondary : MenuBarState.Tone.warning.color)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            Spacer(minLength: 0)
             ForEach(meter.slots, id: \.resourceClass) { slot in
                 let blocking = meter.blocker == .slot(slot.resourceClass)
                 HStack(spacing: 3) {
@@ -125,19 +141,5 @@ struct MemoryMeterView: View {
             }
         }
         .font(.system(size: 10))
-    }
-
-    static func verdict(_ meter: MemoryMeter) -> String? {
-        guard let ghost = meter.ghost else { return nil }
-        switch meter.blocker {
-        case .memory: return "Next needs ~\(Bytes.format(ghost.estimate)), only \(Bytes.format(meter.spare)) spare"
-        case let .slot(cls): return "Next waits for a \(cls.rawValue) slot, not memory"
-        case nil: return "Next fits"
-        }
-    }
-
-    static func help(for segment: MemoryMeter.Segment) -> String {
-        let more = segment.committed > 0 ? ", ~\(Bytes.format(segment.committed)) more expected" : ""
-        return "#\(segment.id) \(segment.label): \(Bytes.format(segment.used)) in use\(more)\(segment.paused ? ", paused" : "")"
     }
 }

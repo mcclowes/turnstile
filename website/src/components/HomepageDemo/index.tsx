@@ -202,7 +202,7 @@ export default function HomepageDemo(): React.JSX.Element {
             </div>}
           </div>
           <div className={styles.divider} />
-          <div className={styles.footer}><span>✓</span><span>Launch at login</span><span className={styles.footerSpacer} /><span>⚙</span><span>Settings</span><span>⏻</span><span>Quit</span></div>
+          <div className={styles.footer}><span className={styles.footerSpacer} /><span>⚙</span><span>Settings</span><span>⏻</span><span>Quit</span></div>
         </div>
 
         <div className={styles.terminalBackdrop} aria-hidden="true"><span>~/Development/atlas-web</span><strong>$ npm run build</strong><span>turnstile: waiting for memory…</span></div>

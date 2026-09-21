@@ -96,13 +96,9 @@ struct JobRow: View {
     }
 
     private var timing: some View {
-        HStack(spacing: 5) {
-            Text("#\(job.id)")
-                .foregroundStyle(.tertiary)
-            Text(elapsed)
-                .foregroundStyle(.secondary)
-        }
-        .font(.system(size: 11).monospacedDigit())
+        Text(elapsed)
+            .foregroundStyle(.secondary)
+            .font(.system(size: 11).monospacedDigit())
         .lineLimit(1)
         .help(queued ? "Waiting for \(elapsed)" : "Running for \(elapsed)")
     }

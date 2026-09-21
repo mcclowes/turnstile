@@ -59,11 +59,12 @@ struct MenuBarStateTests {
         running.footprint = Bytes.gb
         #expect(MenuBarState.memoryFraction(for: running) == 0.25)
         #expect(MenuBarState.footprintTone(for: running) == .good)
-        #expect(MenuBarState.memoryText(for: running) == "1 GB of ~4 GB")
+        #expect(MenuBarState.memoryText(for: running) == "25% of ~4 GB")
 
         running.footprint = 6 * Bytes.gb
         #expect(MenuBarState.memoryFraction(for: running) == 1)
         #expect(MenuBarState.footprintTone(for: running) == .warning)
+        #expect(MenuBarState.memoryText(for: running) == "150% of ~4 GB")
 
         var queued = job(2, state: "queued")
         queued.estimate = 2 * Bytes.gb
@@ -92,7 +93,7 @@ struct MenuBarStateTests {
         running.estimate = 4 * Bytes.gb
         running.footprint = Bytes.gb
         let help = MenuBarState.memoryHelp(for: running)
-        #expect(help?.contains("1 GB") == true)
+        #expect(help?.contains("1 GB in use") == true)
         #expect(help?.contains("~4 GB") == true)
         #expect(help?.contains("not progress") == true)
         #expect(MenuBarState.memoryHelp(for: job(2, state: "queued")) == nil)
@@ -103,6 +104,21 @@ struct MenuBarStateTests {
         #expect(MenuBarState.visibleRecent(entries, expanded: false).map(\.id) == [1, 2])
         #expect(MenuBarState.visibleRecent(entries, expanded: true).count == 5)
         #expect(MenuBarState.visibleRecent(Array(entries.prefix(1)), expanded: false).count == 1)
+    }
+
+    @Test func memoryHeaderReadsAsAShareOfTheMachine() {
+        #expect(MenuBarState.memoryUsedText(snapshot(level: 48)) == "52% of 16 GB")
+        #expect(MenuBarState.memoryUsedText(snapshot(level: 100)) == "0% of 16 GB")
+    }
+
+    @Test func outcomeIconExplainsItself() {
+        #expect(MenuBarState.outcomeHelp(for: entry(1, "ok")) == "Finished fine")
+        #expect(MenuBarState.outcomeHelp(for: entry(1, "lost")).hasPrefix("Lost:"))
+        var failed = entry(1, "failed")
+        failed.exitCode = 2
+        #expect(MenuBarState.outcomeHelp(for: failed) == "Failed with exit code 2")
+        failed.log = "/tmp/1.log"
+        #expect(MenuBarState.outcomeHelp(for: failed) == "Failed with exit code 2. Click to open its output.")
     }
 
     @Test func recentOnlyNamesOutcomesThatWereNotFine() {

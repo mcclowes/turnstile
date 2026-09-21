@@ -23,7 +23,7 @@ struct TurnstileBarApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            ShimSettingsView()
+            SettingsView(monitor: monitor)
         }
         .windowResizability(.contentSize)
     }

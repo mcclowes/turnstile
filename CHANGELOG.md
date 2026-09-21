@@ -2,6 +2,14 @@
 
 Notable changes to turnstile. Versions follow [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+### Changed
+
+- The menu bar panel shows less. Memory reads as a share of the machine ("52% of 16 GB"), and a running job's memory as a share of its estimate. The slot counts sit beside the memory figure instead of the version. Running jobs drop their number, and the "Memory vs. estimate" label is gone; hover the bar for the detail.
+- A recent run's icon explains how it ended on hover, and opens its log when clicked, replacing the separate log button.
+- The gating switch, notification switches, and "Launch at login" have moved from the panel to a new General tab in Settings. While gating is off, the panel shows a banner with a button to turn it back on.
+
 ## 0.5.0
 
 ### Added

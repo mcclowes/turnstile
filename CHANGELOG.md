@@ -11,6 +11,7 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 - The menu bar app counts down to when a waiting job should start, and its elapsed times tick between polls. Status snapshots carry the expected start as `startsAt`. Right-click a job to open its folder (#44).
 - The menu bar panel is wider and easier to scan. Commands get their own line, rows only name a state their section doesn't (paused, held), and waiting reasons get up to three lines. The two most recent runs are always visible, with the rest a click away. Queued jobs show a "Move to front" button, other controls appear in place on hover without shifting the row, and memory bars say they measure memory against the estimate, not progress (#57).
 - `turnstile restart` replaces the daemon without releasing its queued and running jobs. Installing a newer version uses the same recovery path when the existing daemon supports it.
+- Releases are built, signed, and notarized by a GitHub Actions workflow when a version is tagged, with build provenance attestations for the CLI and the app. Check one with `gh attestation verify "$(which turnstile)" --repo mcclowes/turnstile` (#24).
 
 ### Fixed
 

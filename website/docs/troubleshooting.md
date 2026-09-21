@@ -38,4 +38,4 @@ When a gated command can't reach the daemon it runs anyway, and records the run 
 
 ## Logs
 
-The daemon logs to `~/.turnstile/daemon.log`. Output from runs without a terminal is kept in `~/.turnstile/logs` for a day.
+The daemon logs to `~/.turnstile/daemon.log`. Output from runs without a terminal is kept in `~/.turnstile/logs` for a day, or a week if the run failed. Read it with `turnstile logs <job>`, or right-click the job in the menu bar app.

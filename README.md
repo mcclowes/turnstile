@@ -55,6 +55,7 @@ More in [how it works](https://turnstile.marginalutility.dev/how-it-works), [sch
 | --- | --- |
 | `turnstile status [--watch]` | Running and queued jobs, memory, and recent runs |
 | `turnstile top` | Interactive queue: bump, pause, hold, or kill a job |
+| `turnstile logs <job> [-f]` | Output from a run with no terminal, such as an agent's; `-f` follows it until the run ends |
 | `turnstile history [--here]` | What each command is estimated to cost, what it really peaked at, and how long jobs waited |
 | `turnstile bump <job>` | Move a job to the front |
 | `turnstile doctor` | Check the install and daemon, with a fix for anything wrong |
@@ -65,7 +66,7 @@ The full list is in the [command reference](https://turnstile.marginalutility.de
 
 ## Privacy
 
-turnstile keeps its history (commands, working directories, memory peaks, and run times), its daemon log, and a day of output from runs without a terminal in `~/.turnstile`, on your machine. It sends nothing anywhere.
+turnstile keeps its history (commands, working directories, memory peaks, and run times), its daemon log, and output from runs without a terminal (a day, or a week for failed runs) in `~/.turnstile`, on your machine. It sends nothing anywhere.
 
 ## Contributing
 

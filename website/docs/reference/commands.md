@@ -14,6 +14,7 @@ Jobs can be named by queue number, pid, or name.
 | --- | --- |
 | `turnstile status [--json] [--watch]` | Running and queued jobs, memory, and recent runs. `--watch` redraws every second |
 | `turnstile top` | Interactive view of the queue. Select a job with ↑↓ or `j`/`k`, then `b` bump, `p` pause/resume, `h` hold/release, `x` kill, `q` quit |
+| `turnstile logs <job> [-f]` | Output captured from a run with no terminal, such as an agent's, by job number. `-f` follows it until the run ends |
 | `turnstile history [--days 30] [--here] [--limit 20] [--json]` | What each command costs and how long jobs waited. `--here` narrows it to this project |
 
 ![turnstile status with two running jobs and recent runs](/img/screenshots/status.webp)

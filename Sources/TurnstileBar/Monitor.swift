@@ -9,6 +9,8 @@ final class Monitor: ObservableObject {
     @Published private(set) var message: String?
     @Published private(set) var launchAtLogin = false
     @Published private(set) var evidence: Health.Evidence?
+    /// Read on every poll, so a `turnstile disable` in a shell shows within seconds.
+    @Published private(set) var disabled = false
 
     private let paths = Paths()
     private let queue = DispatchQueue(label: "turnstile.monitor")
@@ -32,8 +34,9 @@ final class Monitor: ObservableObject {
     }
 
     /// A fixed snapshot for rendering the panel: no polling, no notifications, no daemon.
-    init(fixture: StatusSnapshot?) {
+    init(fixture: StatusSnapshot?, disabled: Bool = false) {
         snapshot = fixture
+        self.disabled = disabled
         evidence = nil
     }
 
@@ -52,7 +55,11 @@ final class Monitor: ObservableObject {
     func poll() {
         queue.async { [paths] in
             let status = Client.connect(socketPath: paths.socket)?.roundTrip(Message(type: "status"), timeout: 2)?.status
-            DispatchQueue.main.async { self.update(status) }
+            let disabled = paths.isDisabled
+            DispatchQueue.main.async {
+                self.disabled = disabled
+                self.update(status)
+            }
         }
     }
 
@@ -73,6 +80,16 @@ final class Monitor: ObservableObject {
                 self.poll()
             }
         }
+    }
+
+    /// A flag file the shims read, so it works whether or not the daemon is running.
+    func setGating(_ enabled: Bool) {
+        do {
+            try paths.setDisabled(!enabled)
+        } catch {
+            message = "Couldn't turn gating \(enabled ? "on" : "off"): \(error.localizedDescription)"
+        }
+        disabled = paths.isDisabled
     }
 
     func clearMessage() {

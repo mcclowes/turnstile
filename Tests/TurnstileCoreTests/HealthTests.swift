@@ -3,7 +3,7 @@ import Testing
 @testable import TurnstileCore
 
 struct HealthTests {
-    let healthy = Health.Evidence(cliInstalled: true, shimsInstalled: true, disabled: false, configError: nil, lastGated: 100)
+    let healthy = Health.Evidence(cliInstalled: true, shimsInstalled: true, configError: nil, lastGated: 100)
 
     func snapshot(version: String?) -> StatusSnapshot {
         StatusSnapshot(memoryLevel: 40, physicalMemory: 16 * Bytes.gb, reserve: 0, limits: [:], running: [], queued: [], recent: [], daemonPid: 1, version: version)
@@ -31,12 +31,6 @@ struct HealthTests {
         noShims.shimsInstalled = false
         #expect(Health.findings(noShims, snapshot: nil).first?.fix == "turnstile shims")
         #expect(Health.findings(noShims, snapshot: nil).first?.tone == .danger)
-
-        var disabled = healthy
-        disabled.disabled = true
-        #expect(Health.findings(disabled, snapshot: nil) == [
-            .init(tone: .danger, text: "Gating is off, so every command runs ungated", fix: "turnstile enable"),
-        ])
     }
 
     @Test func weakerSignalsWarn() {
@@ -65,15 +59,15 @@ struct HealthTests {
 
     @Test func dangerComesFirst() {
         var evidence = healthy
-        evidence.lastGated = nil
-        evidence.disabled = true
+        evidence.configError = "~/.config/turnstile/config.json"
+        evidence.shimsInstalled = false
         #expect(Health.findings(evidence, snapshot: nil).map(\.tone) == [.danger, .warning])
     }
 
     @Test func brokenGatingOverridesTheIcon() {
-        var disabled = healthy
-        disabled.disabled = true
-        let findings = Health.findings(disabled, snapshot: nil)
+        var noShims = healthy
+        noShims.shimsInstalled = false
+        let findings = Health.findings(noShims, snapshot: nil)
         let busy = snapshot(version: Turnstile.version)
         #expect(MenuBarState.indicator(busy, health: findings) == .init(symbol: Health.brokenSymbol, count: nil, tone: .danger))
         #expect(MenuBarState.indicator(nil, health: []) == MenuBarState.indicator(nil))
@@ -83,6 +77,19 @@ struct HealthTests {
         #expect(MenuBarState.indicator(nil, health: Health.findings(neverGated, snapshot: nil)).tone == .warning)
     }
 
+    /// The disabled flag has its own icon; only a broken install, which the toggle can't fix, outranks it.
+    @Test func gatingOffKeepsItsIconUnlessTheInstallIsBroken() {
+        var neverGated = healthy
+        neverGated.lastGated = nil
+        let off = MenuBarState.indicator(nil, disabled: true)
+        #expect(MenuBarState.indicator(nil, health: [], disabled: true) == off)
+        #expect(MenuBarState.indicator(nil, health: Health.findings(neverGated, snapshot: nil), disabled: true) == off)
+
+        var noShims = healthy
+        noShims.shimsInstalled = false
+        #expect(MenuBarState.indicator(nil, health: Health.findings(noShims, snapshot: nil), disabled: true).symbol == Health.brokenSymbol)
+    }
+
     @Test func gathersEvidenceWithoutCreatingAnything() throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent("turnstile-health-\(UUID().uuidString)").path
         defer { try? FileManager.default.removeItem(atPath: home) }
@@ -90,21 +97,20 @@ struct HealthTests {
         let environment = ["HOME": home, "TURNSTILE_CONFIG_DIR": home + "/config"]
 
         let empty = Health.gather(paths: paths, environment: environment)
-        #expect(empty == .init(cliInstalled: false, shimsInstalled: false, disabled: false, configError: nil, lastGated: nil))
+        #expect(empty == .init(cliInstalled: false, shimsInstalled: false, configError: nil, lastGated: nil))
         #expect(!FileManager.default.fileExists(atPath: home))
 
         try paths.ensure()
         try FileManager.default.createDirectory(atPath: paths.bin, withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: paths.bin + "/turnstile", contents: Data("#!/bin/sh\n".utf8), attributes: [.posixPermissions: 0o755])
         try FileManager.default.createSymbolicLink(atPath: paths.shims + "/swift", withDestinationPath: paths.bin + "/turnstile")
-        FileManager.default.createFile(atPath: paths.disabledFlag, contents: nil)
         try FileManager.default.createDirectory(atPath: home + "/config", withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: home + "/config/config.json", contents: Data("{ nope".utf8))
         let store = try Store(path: paths.database)
         _ = store.insertJob(state: "queued", resourceClass: .compile, key: "swift build", root: "/a", cwd: "/a", argv: ["swift", "build"], agent: true, clientPid: 1, estimate: 0, now: 42)
 
         let full = Health.gather(paths: paths, environment: environment)
-        #expect(full.cliInstalled && full.shimsInstalled && full.disabled)
+        #expect(full.cliInstalled && full.shimsInstalled)
         #expect(full.configError == home + "/config/config.json")
         #expect(full.lastGated == 42)
     }

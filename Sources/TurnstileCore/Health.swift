@@ -9,16 +9,14 @@ public enum Health {
         public var cliInstalled: Bool
         /// At least one shim links to the installed CLI.
         public var shimsInstalled: Bool
-        public var disabled: Bool
         /// The global config file, when it doesn't decode and is ignored.
         public var configError: String?
         /// When a shim last registered a command with the daemon. History older than 30 days is pruned.
         public var lastGated: Double?
 
-        public init(cliInstalled: Bool, shimsInstalled: Bool, disabled: Bool, configError: String?, lastGated: Double?) {
+        public init(cliInstalled: Bool, shimsInstalled: Bool, configError: String?, lastGated: Double?) {
             self.cliInstalled = cliInstalled
             self.shimsInstalled = shimsInstalled
-            self.disabled = disabled
             self.configError = configError
             self.lastGated = lastGated
         }
@@ -47,13 +45,12 @@ public enum Health {
         return Evidence(
             cliInstalled: FileManager.default.isExecutableFile(atPath: cli),
             shimsInstalled: shims.contains { Resolver.canonical(paths.shims + "/" + $0) == target },
-            disabled: paths.isDisabled,
             configError: configBroken ? configPath : nil,
             lastGated: FileManager.default.fileExists(atPath: paths.database) ? Store.lastQueued(path: paths.database) : nil
         )
     }
 
-    /// Most serious first. Empty when all is well.
+    /// Most serious first. Empty when all is well. The disabled flag isn't here: the menu's toggle and icon own it.
     public static func findings(_ evidence: Evidence, snapshot: StatusSnapshot?, appVersion: String = Turnstile.version) -> [Finding] {
         guard evidence.cliInstalled else {
             return [Finding(
@@ -64,9 +61,6 @@ public enum Health {
         var findings: [Finding] = []
         if !evidence.shimsInstalled {
             findings.append(Finding(tone: .danger, text: "Nothing is gated: the shims are missing", fix: "turnstile shims"))
-        }
-        if evidence.disabled {
-            findings.append(Finding(tone: .danger, text: "Gating is off, so every command runs ungated", fix: "turnstile enable"))
         }
         if evidence.lastGated == nil && evidence.shimsInstalled {
             findings.append(Finding(
@@ -90,9 +84,9 @@ public enum Health {
 }
 
 extension MenuBarState {
-    /// The status icon, overridden while the install is broken. Memory trouble still beats a mere warning.
-    public static func indicator(_ snapshot: StatusSnapshot?, health: [Health.Finding]) -> Indicator {
-        let base = indicator(snapshot)
+    /// The status icon, overridden while the install is broken. Memory trouble and gating off still beat a mere warning.
+    public static func indicator(_ snapshot: StatusSnapshot?, health: [Health.Finding], disabled: Bool = false) -> Indicator {
+        let base = indicator(snapshot, disabled: disabled)
         if health.contains(where: { $0.tone == .danger }) {
             return Indicator(symbol: Health.brokenSymbol, count: base.count, tone: .danger)
         }

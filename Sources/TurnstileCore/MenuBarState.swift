@@ -6,6 +6,7 @@ public enum MenuBarState {
     public static let busySymbol = "square.stack.3d.up"
     public static let pausedSymbol = "pause.circle"
     public static let pressureSymbol = "exclamationmark.triangle"
+    public static let disabledSymbol = "shield.slash"
     /// Below this, the icon warns even if nothing has been paused yet.
     public static let lowMemoryPercent = 15
     /// Below this, memory is worth watching but nothing is wrong yet.
@@ -41,9 +42,11 @@ public enum MenuBarState {
         }
     }
 
-    public static func indicator(_ snapshot: StatusSnapshot?) -> Indicator {
+    /// With gating off nothing new is gated, which matters more than anything the daemon says.
+    public static func indicator(_ snapshot: StatusSnapshot?, disabled: Bool = false) -> Indicator {
+        let count = snapshot.flatMap { $0.queued.isEmpty ? nil : $0.queued.count }
+        if disabled { return Indicator(symbol: disabledSymbol, count: count, tone: .danger) }
         guard let snapshot else { return Indicator(symbol: idleSymbol, count: nil) }
-        let count = snapshot.queued.isEmpty ? nil : snapshot.queued.count
         if snapshot.memoryLevel < lowMemoryPercent || snapshot.running.contains(where: { $0.pausedBy == "memory" }) {
             return Indicator(symbol: pressureSymbol, count: count, tone: .danger)
         }

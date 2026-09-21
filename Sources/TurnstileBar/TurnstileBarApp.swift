@@ -16,7 +16,7 @@ struct TurnstileBarApp: App {
         MenuBarExtra {
             MenuPanel(monitor: monitor)
         } label: {
-            let indicator = MenuBarState.indicator(monitor.snapshot, health: monitor.health)
+            let indicator = MenuBarState.indicator(monitor.snapshot, health: monitor.health, disabled: monitor.disabled)
             Image(nsImage: MenuBarIcon.image(indicator))
             if let count = indicator.count { Text("\(count)") }
         }

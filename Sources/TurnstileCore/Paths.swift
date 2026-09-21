@@ -32,10 +32,28 @@ public struct Paths: Sendable {
     public var daemonLog: String { home + "/daemon.log" }
     public var ungatedLog: String { home + "/ungated.log" }
     public var lock: String { home + "/daemon.lock" }
-    /// While this file exists every shim passes straight through (`turnstile disable`).
+    /// While this file exists every shim passes straight through (`turnstile disable`, or the menu bar toggle).
     public var disabledFlag: String { home + "/disabled" }
 
     public var isDisabled: Bool { FileManager.default.fileExists(atPath: disabledFlag) }
+
+    /// When gating was turned off, or nil while it's on.
+    public var disabledSince: Date? {
+        (try? FileManager.default.attributesOfItem(atPath: disabledFlag))?[.modificationDate] as? Date
+    }
+
+    public func setDisabled(_ disabled: Bool) throws {
+        if !disabled {
+            guard isDisabled else { return }
+            try FileManager.default.removeItem(atPath: disabledFlag)
+            return
+        }
+        guard !isDisabled else { return }
+        try ensure()
+        guard FileManager.default.createFile(atPath: disabledFlag, contents: Data()) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: disabledFlag])
+        }
+    }
 
     public func ensure() throws {
         for dir in [home, shims, logs] {

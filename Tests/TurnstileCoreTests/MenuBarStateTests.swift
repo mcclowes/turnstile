@@ -26,6 +26,12 @@ struct MenuBarStateTests {
         #expect(MenuBarState.indicator(snapshot(running: [job(1, pausedBy: "memory")])).symbol == MenuBarState.pressureSymbol)
     }
 
+    @Test func gatingOffBeatsEverythingElseOnTheIcon() {
+        let trouble = snapshot(level: 10, running: [job(1, pausedBy: "memory")], queued: [job(2, state: "queued")])
+        #expect(MenuBarState.indicator(trouble, disabled: true) == .init(symbol: MenuBarState.disabledSymbol, count: 1, tone: .danger))
+        #expect(MenuBarState.indicator(nil, disabled: true) == .init(symbol: MenuBarState.disabledSymbol, count: nil, tone: .danger))
+    }
+
     @Test func iconOnlyTakesColourWhenSomethingWantsAttention() {
         #expect(MenuBarState.indicator(nil).tone == .neutral)
         #expect(MenuBarState.indicator(snapshot(running: [job(1)])).tone == .neutral)

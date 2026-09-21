@@ -157,15 +157,13 @@ enum CLI {
     }
 
     static func setEnabled(_ enabled: Bool) -> Never {
-        let paths = self.paths
-        if enabled {
-            try? FileManager.default.removeItem(atPath: paths.disabledFlag)
-            print("turnstile is on: heavy commands are gated again")
-        } else {
-            try? paths.ensure()
-            FileManager.default.createFile(atPath: paths.disabledFlag, contents: Data())
-            print("turnstile is off: every command runs ungated until `turnstile enable`")
+        do {
+            try paths.setDisabled(!enabled)
+        } catch {
+            warn("can't change \(paths.disabledFlag): \(error)")
+            exit(1)
         }
+        print(enabled ? "turnstile is on: heavy commands are gated again" : "turnstile is off: every command runs ungated until `turnstile enable`")
         exit(0)
     }
 

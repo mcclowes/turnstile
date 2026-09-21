@@ -105,8 +105,9 @@ enum Doctor {
 
     static func switches(paths: Paths, environment: [String: String]) -> [Finding] {
         var findings: [Finding] = []
-        if paths.isDisabled {
-            findings.append(Finding(level: .problem, topic: "enabled", text: "turned off with `turnstile disable`; every command runs ungated", fix: "turnstile enable"))
+        if let since = paths.disabledSince {
+            let ago = since.timeIntervalSinceNow > -60 ? "just now" : RelativeDateTimeFormatter().localizedString(for: since, relativeTo: Date())
+            findings.append(Finding(level: .problem, topic: "enabled", text: "gating was turned off \(ago); every command runs ungated", fix: "turnstile enable, or the menu bar toggle"))
         }
         if environment["TURNSTILE_DISABLE"] == "1" {
             findings.append(Finding(level: .note, topic: "enabled", text: "TURNSTILE_DISABLE=1 in this shell; commands here run ungated"))

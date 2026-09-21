@@ -28,7 +28,7 @@ public struct CommandSummary: Codable, Equatable, Sendable {
     public var project: String
     public var key: String
     public var runs: Int
-    /// What the next run of this command will be admitted against: the worst peak of its last five runs,
+    /// What the next run of this command will be admitted against: the worst peak of its last twenty runs,
     /// which is the figure the scheduler itself uses. Nil until one of them recorded a peak.
     public var estimate: UInt64?
     /// The worst peak anywhere in the window, which is what a run can still surprise the machine with.
@@ -87,7 +87,7 @@ public struct HistorySummary: Codable, Equatable, Sendable {
     }
 
     /// Groups by project and command, the same pair the scheduler estimates from, and works each group out
-    /// the way `Store.usualPeak` and `Store.usualDuration` do, so the table is what admission will actually use.
+    /// the way `Store.highWaterPeak` and `Store.usualDuration` do, so the table is what admission will actually use.
     /// Ordered by the memory a command needs, since that's what holds a queue up.
     public static func summarize(_ rows: [HistoryRow], days: Int, limit: Int) -> HistorySummary {
         var outcomes: [String: Int] = [:]
@@ -111,7 +111,7 @@ public struct HistorySummary: Codable, Equatable, Sendable {
                 project: projectName(group[0].root),
                 key: group[0].key,
                 runs: group.count,
-                estimate: peaks.filter { $0.outcome == "ok" || $0.outcome == "failed" }.prefix(5).compactMap(\.peak).max(),
+                estimate: peaks.filter { $0.outcome == "ok" || $0.outcome == "failed" }.prefix(20).compactMap(\.peak).max(),
                 worstPeak: peaks.compactMap(\.peak).max(),
                 usualDuration: median(times.prefix(5).compactMap(\.duration))
             )

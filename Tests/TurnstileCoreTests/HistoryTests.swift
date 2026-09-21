@@ -34,12 +34,15 @@ struct HistoryTests {
         #expect(summary.commands.dropFirst().map(\.project) == ["web", "web"])
     }
 
-    /// The same window the scheduler uses: the worst peak of the last five runs, not of every run kept.
-    @Test func theEstimateFollowsTheLastFiveRuns() throws {
+    /// The same window the scheduler uses: the worst peak of the last twenty runs, so a cold build
+    /// isn't forgotten after a few incremental ones.
+    @Test func theEstimateRemembersColdRuns() throws {
         var rows = [row(peak: 9 * Bytes.gb, finishedAt: 0)]
         rows += (1...5).map { row(peak: Bytes.gb, finishedAt: Double($0)) }
-        let command = try #require(HistorySummary.summarize(rows, days: 30, limit: 20).commands.first)
+        #expect(try #require(HistorySummary.summarize(rows, days: 30, limit: 20).commands.first).estimate == 9 * Bytes.gb)
 
+        rows += (6...20).map { row(peak: Bytes.gb, finishedAt: Double($0)) }
+        let command = try #require(HistorySummary.summarize(rows, days: 30, limit: 20).commands.first)
         #expect(command.estimate == Bytes.gb)
         #expect(command.worstPeak == 9 * Bytes.gb)
     }
@@ -164,7 +167,7 @@ struct HistoryTests {
         }
         let summary = HistorySummary.summarize(store.history(since: 0, root: nil), days: 30, limit: 20)
 
-        #expect(summary.commands[0].estimate == store.usualPeak(key: "swift build", root: "/code/api"))
+        #expect(summary.commands[0].estimate == store.highWaterPeak(key: "swift build", root: "/code/api", now: 10))
         #expect(summary.commands[0].usualDuration == store.usualDuration(key: "swift build", root: "/code/api"))
     }
 }

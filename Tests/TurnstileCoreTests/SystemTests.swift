@@ -139,7 +139,7 @@ struct StoreTests {
         #expect(store.memory(of: id)?.minLevel == 40)
     }
 
-    @Test func learnsUsualPeakPerProject() throws {
+    @Test func learnsPeaksPerProject() throws {
         let path = FileManager.default.temporaryDirectory.appendingPathComponent("store-\(UUID().uuidString).sqlite").path
         defer { try? FileManager.default.removeItem(atPath: path) }
         let store = try Store(path: path)
@@ -148,20 +148,20 @@ struct StoreTests {
             store.markStarted(id, childPid: 2, now: time)
             store.markFinished(id, outcome: outcome, exitCode: 0, signal: nil, peak: peak, now: time + 1)
         }
-        #expect(store.usualPeak(key: "swift test", root: "/a") == nil)
+        #expect(store.highWaterPeak(key: "swift test", root: "/a", now: 10) == nil)
         record(root: "/b", peak: 3 * Bytes.gb, at: 1)
-        #expect(store.usualPeak(key: "swift test", root: "/a") == nil)
+        #expect(store.highWaterPeak(key: "swift test", root: "/a", now: 10) == nil)
         record(root: "/a", peak: 1 * Bytes.gb, at: 2)
         record(root: "/a", peak: 2 * Bytes.gb, at: 3)
         record(root: "/a", peak: 9 * Bytes.gb, outcome: "killed", at: 4)
-        #expect(store.usualPeak(key: "swift test", root: "/a") == 2 * Bytes.gb)
+        #expect(store.highWaterPeak(key: "swift test", root: "/a", now: 10) == 2 * Bytes.gb)
         #expect(store.recent(limit: 10).count == 4)
         #expect(store.recent(limit: 10).first?.outcome == "killed")
     }
 
     /// Peaks are bimodal: incremental runs are tiny and cold ones are huge. A five-run window forgets
-    /// the cold runs, so the ceiling watches a much longer one.
-    @Test func theHighWaterPeakOutlivesTheUsualOne() throws {
+    /// the cold runs, so the estimate and ceiling watch a much longer one.
+    @Test func theHighWaterPeakRemembersColdRuns() throws {
         let path = FileManager.default.temporaryDirectory.appendingPathComponent("store-\(UUID().uuidString).sqlite").path
         defer { try? FileManager.default.removeItem(atPath: path) }
         let store = try Store(path: path)
@@ -174,7 +174,6 @@ struct StoreTests {
 
         record(peak: 2 * Bytes.gb, at: now - 3 * 86400)
         for hour in 1...10 { record(peak: 80 * Bytes.mb, at: now - Double(hour) * 3600) }
-        #expect(store.usualPeak(key: "swift test", root: "/a") == 80 * Bytes.mb)
         #expect(store.highWaterPeak(key: "swift test", root: "/a", now: now) == 2 * Bytes.gb)
 
         // Old enough to be irrelevant, and far enough back to be off the end of the window.

@@ -143,17 +143,9 @@ public final class Store {
         run("UPDATE jobs SET state = 'finished', outcome = 'lost', finished_at = ? WHERE state != 'finished'", [now])
     }
 
-    /// Usual peak for a command: the highest of its last five completed runs in this project.
-    public func usualPeak(key: String, root: String) -> UInt64? {
-        scalar("""
-            SELECT MAX(peak) FROM (SELECT peak FROM jobs WHERE key = ? AND root = ? AND outcome IN ('ok', 'failed') AND peak > 0
-            ORDER BY finished_at DESC LIMIT 5)
-            """, [key, root]).map(UInt64.init)
-    }
-
-    /// What the runaway ceiling is built from: the highest peak among this command's last twenty runs in
-    /// this project, ignoring anything older than a month. Peaks are bimodal — a cold compile dwarfs an
-    /// incremental one — so the short window `usualPeak` uses would forget every cold run.
+    /// What admission and the runaway ceiling are built from: the highest peak among this command's last
+    /// twenty runs in this project, ignoring anything older than a month. Peaks are bimodal — a cold compile
+    /// dwarfs an incremental one — and a short window forgets every cold run, admitting two 2 GB builds at 45 MB each.
     public func highWaterPeak(key: String, root: String, now: Double) -> UInt64? {
         scalar("""
             SELECT MAX(peak) FROM (SELECT peak FROM jobs WHERE key = ? AND root = ? AND outcome IN ('ok', 'failed')

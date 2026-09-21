@@ -37,7 +37,7 @@ merged: 18 joined a run already going, 4 replaced by a newer request
 outcomes: 11 failed, 1 killed
 ```
 
-`estimate` is what the next run will be admitted against: the worst peak of that command's last five runs in that project, which is the figure the scheduler itself uses. `worst peak` is the worst anywhere in the window, so a gap between the two means a run once cost much more than turnstile now expects. `usual time` is the median of the last five successful runs, and is what backfilling decides on.
+`estimate` is what the next run will be admitted against: the worst peak of that command's last twenty runs in that project from the past month, which is the figure the scheduler itself uses. It deliberately remembers cold builds, so a run of cheap incremental builds doesn't let two expensive ones start side by side. `worst peak` is the worst anywhere in the window, so a gap between the two means a run once cost much more than turnstile now expects. `usual time` is the median of the last five successful runs, and is what backfilling decides on.
 
 Commands are grouped by project and command, the pair the scheduler learns from, and ordered by worst peak — the number that decides how long a job waits for memory. Runs that merged into another are counted under `merged` but left out of the costs, since they never ran on their own.
 

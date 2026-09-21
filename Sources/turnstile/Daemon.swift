@@ -408,12 +408,11 @@ final class Daemon {
     }
 
     private func memoryCost(of request: Message, key: String, root: String) -> Cost {
-        // The estimate follows recent runs, so a slot is sized for what the command usually needs;
-        // the ceiling follows the high-water mark, so an occasional cold run isn't mistaken for a runaway.
-        let usual = store.usualPeak(key: key, root: root)
+        // Sized for a cold run, not the usual incremental one: over-reserving costs a short wait,
+        // under-reserving lets builds pile in and thrash swap for the rest of their run.
         let highWater = store.highWaterPeak(key: key, root: root, now: Daemon.now())
         if let memory = request.memory { return Cost(estimate: memory, source: "config", highWaterPeak: highWater) }
-        if let usual { return Cost(estimate: usual, highWaterPeak: highWater) }
+        if let highWater { return Cost(estimate: highWater, highWaterPeak: highWater) }
         if let typical = store.typicalPeak(key: key, excluding: root) {
             return Cost(estimate: typical, source: "other projects", highWaterPeak: highWater)
         }

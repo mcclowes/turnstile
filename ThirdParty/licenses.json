@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "dependencies": [],
+  "systemLibraries": [
+    {
+      "name": "sqlite3",
+      "licenses": ["blessing"],
+      "reviewNote": "Linked from the macOS SDK and loaded from the OS at runtime; turnstile doesn't redistribute it. SQLite is public domain."
+    }
+  ]
+}

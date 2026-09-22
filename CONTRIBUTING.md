@@ -32,6 +32,8 @@ The code is split into three targets:
 
 The docs site lives in `website/` (`npm install && npm start`).
 
+turnstile has no package dependencies. Adding one, or a new `.linkedLibrary`, needs a reviewed license record in `ThirdParty/`; `node scripts/license-check.mjs` fails CI until it has one. [ThirdParty/README.md](ThirdParty/README.md) has the steps.
+
 ## Pull requests
 
 - Keep each PR to one change, with tests. A bug fix should come with a test that fails without it.

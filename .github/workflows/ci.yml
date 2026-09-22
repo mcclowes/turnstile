@@ -14,6 +14,10 @@ jobs:
       # Warns without failing until the codebase has been formatted once (#26); then add --strict.
       - name: swift format lint
         run: swift format lint --recursive --parallel Sources Tests Package.swift
+      - name: Dependency licenses
+        run: |
+          node --test scripts/license-check-tests.mjs
+          node scripts/license-check.mjs
 
   test:
     runs-on: macos-26

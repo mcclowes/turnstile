@@ -46,6 +46,8 @@ jobs:
           fi
           ./scripts/publish.sh --check
 
+      - name: Dependency licenses
+        run: node scripts/license-check.mjs
       - name: Unit tests
         run: swift test
       - name: End-to-end tests

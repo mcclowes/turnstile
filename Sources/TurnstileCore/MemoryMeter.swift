@@ -41,7 +41,7 @@ public struct MemoryMeter: Equatable, Sendable {
 
     /// Why the head of the queue isn't starting, when the meter can say.
     public enum Blocker: Equatable, Sendable {
-        /// A job paused for memory resumes before anything new starts.
+        /// A job paused for memory resumes before this starts.
         case paused
         case memory
         case slot(ResourceClass)
@@ -97,8 +97,9 @@ public struct MemoryMeter: Equatable, Sendable {
         // With nothing running the scheduler starts the head regardless, since waiting can't free memory.
         let fits = running.isEmpty || Int64(clamping: head.estimate) <= headroom
         ghost = Ghost(id: head.id, label: head.label, estimate: head.estimate, fits: fits)
-        // Same order as the scheduler: a paused job, then slots, then memory.
-        if snapshot.running.contains(where: { $0.pausedBy == "memory" }) {
+        // Whether the head may start ahead of a paused job turns on run times the meter doesn't have, so it takes the
+        // scheduler's word. The scheduler checks slots before memory, so a full class is the reason even when memory is short too.
+        if head.behindPaused == true {
             blocker = .paused
         } else if slots.first(where: { $0.resourceClass == head.resourceClass })?.full == true {
             blocker = .slot(head.resourceClass)

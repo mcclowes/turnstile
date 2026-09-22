@@ -108,10 +108,12 @@ public struct JobSnapshot: Codable, Equatable, Sendable {
     public var startsAt: Double?
     /// Where the run's output is captured. Nil when it has a terminal, before it starts, and from older daemons.
     public var log: String?
+    /// Queued behind a job paused for memory. Nil from older daemons.
+    public var behindPaused: Bool?
 
     public var label: String { "\(project) \(key)" }
 
-    public init(id: Int64, state: String, resourceClass: ResourceClass, project: String, key: String, cwd: String, agent: Bool, estimate: UInt64, footprint: UInt64?, peak: UInt64?, paused: Bool, clientPid: Int32, childPid: Int32?, queuedAt: Double, startedAt: Double?, waiting: String?, joiners: Int, held: Bool? = nil, pausedBy: String? = nil, estimateSource: String? = nil, tree: [Int32]? = nil, escapees: [Int32]? = nil, startsAt: Double? = nil, log: String? = nil) {
+    public init(id: Int64, state: String, resourceClass: ResourceClass, project: String, key: String, cwd: String, agent: Bool, estimate: UInt64, footprint: UInt64?, peak: UInt64?, paused: Bool, clientPid: Int32, childPid: Int32?, queuedAt: Double, startedAt: Double?, waiting: String?, joiners: Int, held: Bool? = nil, pausedBy: String? = nil, estimateSource: String? = nil, tree: [Int32]? = nil, escapees: [Int32]? = nil, startsAt: Double? = nil, log: String? = nil, behindPaused: Bool? = nil) {
         self.id = id
         self.state = state
         self.resourceClass = resourceClass
@@ -136,6 +138,7 @@ public struct JobSnapshot: Codable, Equatable, Sendable {
         self.escapees = escapees
         self.startsAt = startsAt
         self.log = log
+        self.behindPaused = behindPaused
     }
 }
 

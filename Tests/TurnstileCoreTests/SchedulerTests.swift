@@ -222,24 +222,76 @@ struct SchedulerTests {
         #expect(decision.waiting[1] == .held)
     }
 
+    func pausedJob(_ id: Int64, since: Double, gb estimate: UInt64 = 1) -> RunningJob {
+        RunningJob(id: id, resourceClass: .compile, estimate: estimate * gb, footprint: estimate * gb / 2, label: "p", pausedForMemorySince: since)
+    }
+
     /// Memory recovers the moment a job is paused, but that room is the paused job's to resume into.
-    /// Starting a new job there just fills it, and the pause then lands on the newcomer.
-    @Test func nothingIsAdmittedWhileAJobIsPausedForMemory() {
-        let running = [
-            RunningJob(id: 8, resourceClass: .compile, estimate: 4 * gb, footprint: 4 * gb, label: "r"),
-            RunningJob(id: 9, resourceClass: .compile, estimate: gb / 2, footprint: gb / 4, label: "p", pausedForMemory: true),
-        ]
-        let queue = [queued(1, .test, gb: 2), queued(2, held: true)]
-        let decision = Scheduler.decide(queue: queue, running: running, freeMemory: 10 * gb, policy: policy)
+    /// A big job filling it would just take the next pause itself.
+    @Test func aBigJobWaitsForAJobPausedForMemory() {
+        var backfill = policy
+        backfill.backfillMax = gb
+        let running = [RunningJob(id: 8, resourceClass: .compile, estimate: 4 * gb, footprint: 4 * gb, label: "r"), pausedJob(9, since: 100)]
+        let decision = Scheduler.decide(queue: [queued(1, .test, gb: 2), queued(2, held: true)], running: running, freeMemory: 10 * gb, policy: backfill, now: 110)
         #expect(decision.admit.isEmpty)
-        #expect(decision.waiting[1] == .resuming(paused: ["p"]))
+        #expect(decision.waiting[1] == .resuming(paused: "p"))
         #expect(decision.waiting[2] == .held)
-        #expect(Scheduler.message(for: .resuming(paused: ["p"])) == "waiting for p to resume first, it was paused for memory")
+        #expect(Scheduler.message(for: .resuming(paused: "p")) == "waiting for p to resume first, it was paused for memory")
+    }
+
+    @Test func aSmallJobThatFitsMayStartAheadOfAPausedJob() {
+        var backfill = policy
+        backfill.backfillMax = gb
+        let decision = Scheduler.decide(queue: [queued(1, .test, gb: 1)], running: [pausedJob(9, since: 100)], freeMemory: 10 * gb, policy: backfill, now: 110)
+        #expect(decision.admit == [1])
+        #expect(decision.skipped[1] == "p")
+    }
+
+    @Test func aJobThatFinishesInTimeMayStartAheadOfAPausedJob() {
+        var slow = queued(1, .test, gb: 3)
+        slow.duration = 20
+        var paused = pausedJob(9, since: 100)
+        paused.resumesIn = 30
+        #expect(Scheduler.decide(queue: [slow], running: [paused], freeMemory: 10 * gb, policy: policy, now: 110).admit == [1])
+        slow.duration = 40
+        #expect(Scheduler.decide(queue: [slow], running: [paused], freeMemory: 10 * gb, policy: policy, now: 110).admit.isEmpty)
+    }
+
+    /// Without this, small jobs keep the pressure up and a paused job's calm never comes.
+    @Test func nothingStartsAheadOfAJobPausedTooLong() {
+        var backfill = policy
+        backfill.backfillMax = gb
+        let decision = Scheduler.decide(queue: [queued(1, .test, gb: 1)], running: [pausedJob(9, since: 100)], freeMemory: 10 * gb, policy: backfill, now: 100 + backfill.pausedBackfillAge)
+        #expect(decision.admit.isEmpty)
+        #expect(decision.waiting[1] == .resuming(paused: "p"))
+        #expect(backfill.pausedBackfillAge < backfill.backfillAge)
+    }
+
+    @Test func theLongestPausedJobIsTheOneThatHoldsUpTheQueue() {
+        var backfill = policy
+        backfill.backfillMax = gb
+        var old = pausedJob(8, since: 10)
+        old.label = "old"
+        let decision = Scheduler.decide(queue: [queued(1, .test, gb: 1)], running: [pausedJob(9, since: 100), old], freeMemory: 10 * gb, policy: backfill, now: 110)
+        #expect(decision.waiting[1] == .resuming(paused: "old"))
     }
 
     @Test func aJobPausedByAPersonDoesntHoldUpTheQueue() {
         let running = [RunningJob(id: 9, resourceClass: .compile, estimate: gb, footprint: gb, label: "p")]
         let decision = Scheduler.decide(queue: [queued(1, .test)], running: running, freeMemory: 10 * gb, policy: policy)
         #expect(decision.admit == [1])
+    }
+
+    /// The bug behind #2059: pressure read normal for ten seconds mid-swap, and a 2.5 GB build started into it.
+    @Test func nothingStartsUntilMemoryHasBeenCalmForAWhile() {
+        let running = [RunningJob(id: 9, resourceClass: .compile, estimate: 2 * gb, footprint: 2 * gb, label: "r")]
+        let early = Scheduler.decide(queue: [queued(1)], running: running, freeMemory: 12 * gb, policy: policy, calmFor: 5)
+        #expect(early.admit.isEmpty)
+        #expect(early.waiting[1] == .settling(running: ["r"], eta: policy.settle - 5))
+        #expect(Scheduler.message(for: .settling(running: ["r"], eta: 25)) == "waiting for memory to settle after swapping, starts in under a minute (running: r)")
+        let settled = Scheduler.decide(queue: [queued(1)], running: running, freeMemory: 12 * gb, policy: policy, calmFor: policy.settle)
+        #expect(settled.admit == [1])
+        let idle = Scheduler.decide(queue: [queued(1)], running: [], freeMemory: 12 * gb, policy: policy, calmFor: 0)
+        #expect(idle.admit == [1])
     }
 }

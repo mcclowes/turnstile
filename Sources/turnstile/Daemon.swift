@@ -93,6 +93,8 @@ final class Daemon {
         var pausedByUser = false
         /// Times memory pressure has paused it; see `Pressure.resumeDelay`.
         var pressurePauses = 0
+        /// When memory first paused it, which is how long queued jobs may keep starting ahead of it.
+        var firstPressurePauseTick: Double?
         /// Held by a person: stays queued until released.
         var held = false
         /// Killed by a person, so callers are told not to retry.
@@ -106,6 +108,7 @@ final class Daemon {
         var lastWait: String?
         var lastWaitSentAt: Double = 0
         var startsAt: Double?
+        var behindPaused = false
         var tree: [pid_t] = []
         /// Unique ids of every process seen in the tree, to recognise children that escape to launchd.
         var lineage: Set<UInt64> = []
@@ -586,17 +589,20 @@ final class Daemon {
         }
         let running = jobs.values.filter { $0.state != .queued }
         let clock = Daemon.clock()
+        let calmFor = clock - lastPressuredAt
         let decision = Scheduler.decide(
             queue: queued.map { QueuedJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, agent: $0.agent, bumpedAt: $0.bumpedAt, queuedAt: $0.queuedTick, label: $0.label, held: $0.held, duration: $0.usualDuration) },
             running: running.map {
                 RunningJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, footprint: $0.footprint, label: $0.label,
                            usualDuration: $0.paused ? nil : $0.usualDuration, elapsed: $0.ranFor(now: clock) ?? 0,
-                           pausedForMemory: $0.paused && !$0.pausedByUser)
+                           pausedForMemorySince: $0.paused && !$0.pausedByUser ? $0.firstPressurePauseTick ?? clock : nil,
+                           resumesIn: max(0, Pressure.resumeDelay(pressurePauses: $0.pressurePauses) - calmFor))
             },
             freeMemory: SystemMemory.free(level: memoryLevel),
             policy: policy,
             now: clock,
-            pressure: memoryPressure
+            pressure: memoryPressure,
+            calmFor: calmFor
         )
         let now = Daemon.now()
         for id in decision.admit {
@@ -606,6 +612,7 @@ final class Daemon {
         for (id, reason) in decision.waiting {
             guard let job = jobs[id] else { continue }
             job.startsAt = reason.eta.map { now + $0 }
+            if case .resuming = reason { job.behindPaused = true } else { job.behindPaused = false }
             tellWaiting(job, reason == .held ? "held; `turnstile release #\(id)` lets it run" : Scheduler.message(for: reason))
         }
     }
@@ -826,6 +833,7 @@ final class Daemon {
             // A job that may not be paused still gets the grace period before it's killed.
             guard job.pausable, !job.paused else { return }
             job.paused = true
+            if job.firstPressurePauseTick == nil { job.firstPressurePauseTick = now }
             ProcessTree.signal(job.tree, SIGSTOP)
             lastPressureAction = now
             log("#\(job.id) \(job.project) \(job.key): paused at \(Bytes.format(job.footprint)), over its \(Bytes.format(job.ceiling)) ceiling, at \(memoryLevel)% free")
@@ -866,6 +874,7 @@ final class Daemon {
             guard let job = jobs[id] else { return }
             job.paused = true
             job.pressurePauses += 1
+            if job.firstPressurePauseTick == nil { job.firstPressurePauseTick = now }
             ProcessTree.signal(job.tree, SIGSTOP)
             lastPressureAction = now
             let calm = Int(Pressure.resumeDelay(pressurePauses: job.pressurePauses))
@@ -1025,7 +1034,8 @@ final class Daemon {
                 tree: job.state == .queued ? nil : job.tree,
                 escapees: job.escapees.isEmpty ? nil : job.escapees.sorted(),
                 startsAt: job.state == .queued ? job.startsAt : nil,
-                log: job.log
+                log: job.log,
+                behindPaused: job.state == .queued && job.behindPaused ? true : nil
             )
         }
         var limits: [String: Int] = [:]

@@ -74,25 +74,30 @@ struct HoverTip: ViewModifier {
                 try? await Task.sleep(for: .milliseconds(400))
                 if !Task.isCancelled { shown = true }
             }
+            // Hangs the tip from a zero-size point at the content's bottom-trailing corner so it can only
+            // grow downward. An alignment guide was ignored here and let it grow up out of the panel.
             .overlay(alignment: .bottomTrailing) {
-                if shown {
-                    Text(text)
-                        .font(.system(size: 11))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                        .frame(width: width, alignment: .leading)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Color(nsColor: .separatorColor)))
-                        .shadow(color: .black.opacity(0.2), radius: 6, y: 2)
-                        // Hangs the tip 6pt below the content rather than over it.
-                        .alignmentGuide(.bottom) { $0[.top] - 6 }
-                        .allowsHitTesting(false)
-                        .transition(.opacity)
-                }
+                Color.clear.frame(width: 0, height: 0).overlay(alignment: .topTrailing) { tip }
             }
             .animation(.easeOut(duration: 0.12), value: shown)
             .accessibilityHint(text)
+    }
+
+    @ViewBuilder private var tip: some View {
+        if shown {
+            Text(text)
+                .font(.system(size: 11))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .frame(width: width, alignment: .leading)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Color(nsColor: .separatorColor)))
+                .shadow(color: .black.opacity(0.2), radius: 6, y: 2)
+                .padding(.top, 6)
+                .allowsHitTesting(false)
+                .transition(.opacity)
+        }
     }
 }
 

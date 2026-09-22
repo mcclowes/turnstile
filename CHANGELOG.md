@@ -2,11 +2,21 @@
 
 Notable changes to turnstile. Versions follow [semantic versioning](https://semver.org/).
 
-## Unreleased
+## 0.7.0
 
 ### Added
 
 - A Limits tab in Settings for slots per class, memory to keep free, pausing under memory pressure, runaway limits, and build parallelism. It edits only those keys in the global config, and "Open config file" reaches the rest. Clicking the slot chips in the menu bar opens it.
+
+### Changed
+
+- Browser jobs get 3 slots by default instead of 1, since they're generally light.
+- The menu bar count includes running jobs as well as queued ones, so 2 running and 1 waiting reads as 3, not 1.
+- The menu bar icon no longer changes when the daemon exits while idle, which looked like a fault.
+
+### Fixed
+
+- Tooltips in the menu bar panel hang below their anchor, so the panel edge no longer clips them.
 
 ## 0.6.0
 

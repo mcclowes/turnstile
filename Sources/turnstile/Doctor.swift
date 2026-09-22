@@ -158,11 +158,7 @@ enum Doctor {
         let environment = ProcessInfo.processInfo.environment
         let paths = Paths(environment: environment)
         let tools = CLI.shimNames(config: Supervisor.loadConfig(environment: environment).machine)
-        // A bare environment, as a harness that starts its own shell has.
-        var bare = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": homeDirectory(environment)]
-        for key in ["USER", "LOGNAME", "TMPDIR", "LANG", "TERM", "SHELL", "TURNSTILE_HOME"] {
-            if let value = environment[key] { bare[key] = value }
-        }
+        let bare = ShellCheck.bareEnvironment(from: environment)
         var findings: [Finding] = []
         for probe in ShellCheck.probes {
             guard let output = ShellCheck.ask(probe, tools: tools, environment: bare) else {

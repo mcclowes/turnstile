@@ -22,6 +22,28 @@ struct ShellCheckTests {
         #expect(verdict.missing == ["cargo"])
     }
 
+    @Test func locatesEachToolAndWhatItsShimForwardsTo() throws {
+        let bin = NSTemporaryDirectory() + "bin-" + UUID().uuidString.prefix(8)
+        try FileManager.default.createDirectory(atPath: bin, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: bin) }
+        FileManager.default.createFile(atPath: bin + "/swift", contents: Data("#!/bin/sh\n".utf8), attributes: [.posixPermissions: 0o755])
+        let output = """
+            Last login: yesterday
+            /PATH\t/shims:\(bin)
+            swift\t/shims/swift
+            go\t/shims/go
+            npm\t/opt/homebrew/bin/npm
+            cargo\t
+            """
+        let found = ShellCheck.locations(output: output, shimsDir: "/shims")
+        #expect(found["swift"] == .shimmed(real: bin + "/swift"))
+        #expect(found["go"] == .shimmed(real: nil))
+        #expect(found["npm"] == .elsewhere("/opt/homebrew/bin/npm"))
+        #expect(found["cargo"] == .missing)
+        #expect(found["/PATH"] == nil)
+        #expect(ShellCheck.verdict(output: output, shimsDir: "/shims").missing == ["cargo"])
+    }
+
     @Test func aShellThatCantBeAskedCountsAsNothingShimmed() {
         let verdict = ShellCheck.verdict(output: "", shimsDir: "/shims")
         #expect(verdict.shimmed.isEmpty)

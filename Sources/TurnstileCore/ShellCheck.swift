@@ -30,27 +30,68 @@ public enum ShellCheck {
         public var missing: [String] = []
     }
 
+    public enum Location: Equatable, Sendable {
+        /// The shim wins; `real` is what it forwards to, nil when the tool isn't installed.
+        case shimmed(real: String?)
+        case elsewhere(String)
+        case missing
+    }
+
+    /// Tool names can't contain "/", so this key can't collide with one.
+    private static let pathKey = "/PATH"
+
     public static func script(tools: [String]) -> String {
         let names = tools.map { "'" + $0.replacingOccurrences(of: "'", with: "") + "'" }.joined(separator: " ")
-        return "for tool in \(names); do printf '%s\\t%s\\n' \"$tool\" \"$(command -v \"$tool\" 2>/dev/null)\"; done"
+        return "printf '%s\\t%s\\n' '\(pathKey)' \"$PATH\"; "
+            + "for tool in \(names); do printf '%s\\t%s\\n' \"$tool\" \"$(command -v \"$tool\" 2>/dev/null)\"; done"
+    }
+
+    public static func locations(output: String, shimsDir: String) -> [String: Location] {
+        let shims = Resolver.canonical(shimsDir)
+        let answers = self.answers(output)
+        let path = answers.first { $0.0 == pathKey }?.1 ?? ""
+        var found: [String: Location] = [:]
+        for (tool, location) in answers where tool != pathKey {
+            if location.isEmpty {
+                found[tool] = .missing
+            } else if Resolver.canonical((location as NSString).deletingLastPathComponent) == shims {
+                found[tool] = .shimmed(real: Resolver.realBinary(tool, path: path, shimsDir: shimsDir, selfPath: nil))
+            } else {
+                found[tool] = .elsewhere(location)
+            }
+        }
+        return found
     }
 
     public static func verdict(output: String, shimsDir: String) -> Verdict {
-        let shims = Resolver.canonical(shimsDir)
         var verdict = Verdict()
-        for line in output.split(separator: "\n") {
-            let fields = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
-            guard fields.count == 2 else { continue }
-            let (tool, path) = (fields[0], fields[1])
-            if path.isEmpty {
-                verdict.missing.append(tool)
-            } else if Resolver.canonical((path as NSString).deletingLastPathComponent) == shims {
-                verdict.shimmed.append(tool)
-            } else {
-                verdict.shadowed.append("\(tool) (\(path))")
+        let found = locations(output: output, shimsDir: shimsDir)
+        for (tool, _) in answers(output) {
+            switch found[tool] {
+            case .missing: verdict.missing.append(tool)
+            case .shimmed: verdict.shimmed.append(tool)
+            case .elsewhere(let path): verdict.shadowed.append("\(tool) (\(path))")
+            case nil: continue
             }
         }
         return verdict
+    }
+
+    /// Startup files can print to stdout, so only tab-separated pairs count.
+    private static func answers(_ output: String) -> [(String, String)] {
+        output.split(separator: "\n").compactMap { line in
+            let fields = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+            return fields.count == 2 ? (fields[0], fields[1]) : nil
+        }
+    }
+
+    /// A bare environment, as a harness that starts its own shell has; startup files build PATH from there.
+    public static func bareEnvironment(from environment: [String: String]) -> [String: String] {
+        var bare = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": homeDirectory(environment)]
+        for key in ["USER", "LOGNAME", "TMPDIR", "LANG", "TERM", "SHELL", "TURNSTILE_HOME"] {
+            if let value = environment[key] { bare[key] = value }
+        }
+        return bare
     }
 
     /// Runs the probe with a bare environment, as a harness that starts its own shell would.

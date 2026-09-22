@@ -14,16 +14,17 @@ struct LimitSettingsTests {
         #expect(settings.pause)
         #expect(settings.inject)
         #expect(settings.reserveBytes == 2 * Bytes.gb)
-        #expect(settings.slots(for: .browser, cpuCount: 16) == 3)
-        #expect(settings.slots(for: .compile, cpuCount: 16) == 4)
+        #expect(settings.slots(for: .browser) == 3)
+        #expect(settings.slots(for: .compile) == 3)
+        #expect(settings.slots(for: .test) == 3)
     }
 
     @Test func readsMachineAndThrottleValues() throws {
-        let data = Data(#"{"concurrency":{"test":3},"reserve":"4GB","throttle":{"pause":false,"inject":false,"killMultiplier":5,"maxMemory":"8GB"}}"#.utf8)
+        let data = Data(#"{"concurrency":{"test":5},"reserve":"4GB","throttle":{"pause":false,"inject":false,"killMultiplier":5,"maxMemory":"8GB"}}"#.utf8)
         let settings = LimitSettings(file: try ConfigFile.decode(data))
 
-        #expect(settings.concurrency == [.test: 3])
-        #expect(settings.slots(for: .test, cpuCount: 16) == 3)
+        #expect(settings.concurrency == [.test: 5])
+        #expect(settings.slots(for: .test) == 5)
         #expect(settings.reserve == 4 * Bytes.gb)
         #expect(!settings.pause)
         #expect(!settings.inject)

@@ -569,7 +569,7 @@ final class Daemon {
     var policy: SchedulerPolicy {
         var limits: [ResourceClass: Int] = [:]
         for cls in ResourceClass.allCases {
-            limits[cls] = config.machine.concurrencyLimit(for: cls, cpuCount: cpuCount)
+            limits[cls] = config.machine.concurrencyLimit(for: cls)
         }
         return SchedulerPolicy(classLimits: limits, reserve: config.machine.reserveBytes, backfillMax: SchedulerPolicy.backfillMax(physicalMemory: physical))
     }

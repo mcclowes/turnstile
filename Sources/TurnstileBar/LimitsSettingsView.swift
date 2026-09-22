@@ -18,7 +18,7 @@ final class LimitsSettingsModel: ObservableObject {
 
     /// A value equal to the default is stored as the default, so the file only records real choices.
     func setSlots(_ value: Int, for cls: ResourceClass) {
-        update { $0.concurrency[cls] = value == MachineConfig().concurrencyLimit(for: cls, cpuCount: cpuCount) ? nil : value }
+        update { $0.concurrency[cls] = value == MachineConfig().concurrencyLimit(for: cls) ? nil : value }
     }
 
     func setReserve(_ bytes: UInt64) {
@@ -82,7 +82,7 @@ struct LimitsSettingsView: View {
         Form {
             Section {
                 ForEach(ResourceClass.allCases, id: \.self) { cls in
-                    let slots = model.settings.slots(for: cls, cpuCount: model.cpuCount)
+                    let slots = model.settings.slots(for: cls)
                     Stepper(value: Binding(get: { slots }, set: { model.setSlots($0, for: cls) }), in: 1...max(8, model.cpuCount)) {
                         Label {
                             Text("\(cls.rawValue.capitalized): \(slots) at once")

@@ -40,7 +40,7 @@ Global file only.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `concurrency` | a quarter of your cores, 1 to 4, for compile and test; 3 for browser | Max jobs per class at once |
+| `concurrency` | 3 per class | Max jobs per class at once |
 | `reserve` | `"2GB"` | Memory to keep free for everything else |
 | `pauseBelow` | `8` | Pause the newest pausable agent job when free memory drops below this percent |
 | `resumeAbove` | `20` | Resume paused jobs once free memory is back above this percent |

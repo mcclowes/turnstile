@@ -23,8 +23,8 @@ public struct LimitSettings: Equatable, Sendable {
         maxMemory = file.throttle?.maxMemory
     }
 
-    public func slots(for cls: ResourceClass, cpuCount: Int) -> Int {
-        concurrency[cls].map { max(1, $0) } ?? MachineConfig().concurrencyLimit(for: cls, cpuCount: cpuCount)
+    public func slots(for cls: ResourceClass) -> Int {
+        concurrency[cls].map { max(1, $0) } ?? MachineConfig().concurrencyLimit(for: cls)
     }
 
     public var reserveBytes: UInt64 { reserve ?? MachineConfig().reserveBytes }

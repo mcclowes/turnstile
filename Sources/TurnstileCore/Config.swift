@@ -137,12 +137,8 @@ public struct MachineConfig: Decodable, Equatable, Sendable {
         agentEnv = try c.decodeIfPresent([String].self, forKey: .agentEnv)
     }
 
-    public func concurrencyLimit(for cls: ResourceClass, cpuCount: Int) -> Int {
-        if let limit = concurrency?[cls.rawValue] { return max(1, limit) }
-        switch cls {
-        case .compile, .test: return max(1, min(4, cpuCount / 4))
-        case .browser: return 3
-        }
+    public func concurrencyLimit(for cls: ResourceClass) -> Int {
+        concurrency?[cls.rawValue].map { max(1, $0) } ?? 3
     }
 
     public var reserveBytes: UInt64 { reserve ?? 2 * Bytes.gb }

@@ -79,13 +79,12 @@ enum ConfigCommand {
         }
         let globalPath = ConfigLoader.globalPath(environment: environment)
         let machine = config.machine
-        let cpus = SystemMemory.cpuCount
         var lines: [String] = []
         lines.append("global:  \(tilde(globalPath))\(FileManager.default.fileExists(atPath: globalPath) ? "" : " (not found, using defaults)")")
         lines.append("project: \(config.projectRoot.map { tilde($0 + "/" + ConfigLoader.projectFileName) } ?? "none")")
         lines.append("")
         lines.append("machine:")
-        let slots = ResourceClass.allCases.map { "\($0.rawValue) \(machine.concurrencyLimit(for: $0, cpuCount: cpus))" }
+        let slots = ResourceClass.allCases.map { "\($0.rawValue) \(machine.concurrencyLimit(for: $0))" }
         lines.append("  concurrency   \(slots.joined(separator: ", "))")
         lines.append("  reserve       keep \(Bytes.format(machine.reserveBytes)) free for everything else")
         lines.append("  pressure      pause agent jobs below \(machine.pauseBelowPercent)% free, resume above \(machine.resumeAbovePercent)%")

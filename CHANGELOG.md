@@ -4,6 +4,10 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ## Unreleased
 
+### Changed
+
+- Compile and test jobs get 3 slots by default, matching browser, instead of a quarter of your cores.
+
 ## 0.7.0
 
 ### Added

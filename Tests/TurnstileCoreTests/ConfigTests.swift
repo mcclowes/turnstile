@@ -38,10 +38,10 @@ struct ConfigTests {
     }
 
     @Test func decodesMachineSettings() throws {
-        let json = #"{"concurrency": {"test": 3}, "reserve": "4GB", "shims": {"add": ["bazel"], "remove": ["make"]}}"#
+        let json = #"{"concurrency": {"test": 5}, "reserve": "4GB", "shims": {"add": ["bazel"], "remove": ["make"]}}"#
         let machine = try ConfigFile.decode(Data(json.utf8)).machine
-        #expect(machine.concurrencyLimit(for: .test, cpuCount: 10) == 3)
-        #expect(machine.concurrencyLimit(for: .compile, cpuCount: 10) == 2)
+        #expect(machine.concurrencyLimit(for: .test) == 5)
+        #expect(machine.concurrencyLimit(for: .compile) == 3)
         #expect(machine.reserveBytes == 4 * Bytes.gb)
         #expect(machine.shims?.add == ["bazel"])
     }

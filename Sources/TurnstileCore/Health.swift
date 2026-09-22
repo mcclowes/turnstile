@@ -95,9 +95,10 @@ public enum Health {
         if let snapshot, snapshot.version != appVersion {
             let daemon = snapshot.version ?? "0.1"
             let behind = daemon.compare(appVersion, options: .numeric) == .orderedAscending
+            // `turnstile` on PATH is the shim, which may run a stale copy; init relinks it to Homebrew and retires the old daemon.
             findings.append(Finding(
                 tone: .warning, text: "The daemon is turnstile \(daemon) but this app is \(appVersion)",
-                fix: behind ? "brew upgrade turnstile && turnstile restart" : "brew upgrade turnstile-app"
+                fix: behind ? "brew upgrade turnstile && $(brew --prefix)/bin/turnstile init" : "brew upgrade turnstile-app"
             ))
         }
         return findings

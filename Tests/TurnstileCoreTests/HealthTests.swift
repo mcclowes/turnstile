@@ -48,7 +48,7 @@ struct HealthTests {
         let older = Health.findings(healthy, snapshot: snapshot(version: "0.3.9"), appVersion: "0.4.0")
         #expect(older.count == 1)
         #expect(older[0].text.contains("0.3.9") && older[0].text.contains("0.4.0"))
-        #expect(older[0].fix == "brew upgrade turnstile && turnstile restart")
+        #expect(older[0].fix == "brew upgrade turnstile && $(brew --prefix)/bin/turnstile init")
         #expect(older[0].runnable)
 
         let newer = Health.findings(healthy, snapshot: snapshot(version: "0.10.0"), appVersion: "0.9.0")

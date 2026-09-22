@@ -4,6 +4,10 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ## Unreleased
 
+### Fixed
+
+- The version-skew fix now relinks the installed binary, so it no longer restarts a stale daemon when `~/.turnstile/bin` holds a copy.
+
 ## 0.8.0
 
 ### Added

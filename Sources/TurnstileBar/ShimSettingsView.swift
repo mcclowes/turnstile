@@ -184,6 +184,8 @@ struct ShimSettingsView: View {
                 }
                 .width(20)
             }
+            .tableStyle(.bordered(alternatesRowBackgrounds: true))
+            .scrollIndicators(.visible)
 
             HStack {
                 TextField("Add a tool, e.g. bazel", text: $model.newTool)

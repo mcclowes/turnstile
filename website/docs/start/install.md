@@ -20,9 +20,10 @@ Name the formula alongside the app. Homebrew only trusts third-party formulae yo
 
 ## Release binary
 
-Download the universal binary from [releases](https://github.com/mcclowes/turnstile/releases), then run:
+Download the universal `turnstile-<version>-macos.tar.gz` from [releases](https://github.com/mcclowes/turnstile/releases), then run:
 
 ```sh
+tar -xzf turnstile-*-macos.tar.gz
 ./turnstile init
 ```
 

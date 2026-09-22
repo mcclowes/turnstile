@@ -32,7 +32,7 @@ git tag -a v0.5.0 -m "turnstile 0.5.0"
 git push origin v0.5.0
 ```
 
-The [release workflow](https://github.com/mcclowes/turnstile/actions/workflows/release.yml) tests, builds the universal CLI tarball and the notarized `Turnstile.app`, attests their build provenance, publishes both to a release here and on [mcclowes/homebrew-turnstile](https://github.com/mcclowes/homebrew-turnstile), with notes from the changelog, and updates the tap's formula and cask. Running the workflow by hand builds, signs, and notarizes without publishing, to check the secrets.
+The [release workflow](https://github.com/mcclowes/turnstile/actions/workflows/release.yml) checks dependency licenses, tests, builds the universal CLI tarball and the notarized `Turnstile.app`, attests their build provenance, publishes both to a release here and on [mcclowes/homebrew-turnstile](https://github.com/mcclowes/homebrew-turnstile), with notes from the changelog, and updates the tap's formula and cask. Running the workflow by hand builds, signs, and notarizes without publishing, to check the secrets.
 
 To check a download came from this repo's workflow:
 

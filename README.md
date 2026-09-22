@@ -34,10 +34,10 @@ You can also download the universal binary from [releases](https://github.com/mc
 
 - **Shims** named `swift`, `cargo`, `npm`, and so on sit first on PATH. Quick commands like `swift --version` or `npm install` go straight to the real tool in a few milliseconds.
 - **A daemon** starts on the first gated command and exits after 30 idle minutes. There's nothing to launch or keep running.
-- **Admission** is per class (compile, test, and browser each get their own slots) and by memory. Each command's peak and run time are learned from its last few runs in that project.
+- **Admission** is per class (compile, test, and browser each get their own slots) and by memory. Each command's peak and run time are learned from its recent runs in that project.
 - **People go first.** Agent commands run at lower priority and queue behind the ones you type.
 - **Duplicate runs merge.** The same command on identical working-tree contents joins the run in progress.
-- **Pressure relief.** When memory runs low, turnstile lowers each tool's parallelism, then pauses the newest agent job if it gets critical.
+- **Pressure relief.** When memory runs low, turnstile lowers each tool's parallelism, then pauses the newest agent compile if it gets critical.
 - **It fails open.** If the daemon is missing or broken, commands run ungated rather than failing.
 
 Gated by default: `swift`, `xcodebuild`, `cargo`, `go`, `gradle`, `make`, `npm`, `pnpm`, `yarn`, `bun`, `npx`, `vitest`, `jest`, `playwright`, `tsc`, `xcrun`, and `corepack`. The last two are gated by the tool they run, so `xcrun swift build` counts as `swift build` and `corepack pnpm test` as `pnpm test`. Package scripts are classified by name: `test`, `test:unit`, and `ci` are tests; `e2e` and `playwright` are browser runs; `build`, `lint`, and `typecheck` are compiles; `dev`, `start`, and `watch` pass through. Run `turnstile classify <command>` to see what any command would do.

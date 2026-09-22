@@ -26,7 +26,7 @@ By default it leaves parallelism alone until free memory drops under 25%, then h
 
 ## Pause the newest agent job
 
-If free memory drops below `pauseBelow` (8% by default), or the machine is swapping whatever the level says, the newest agent job is paused with SIGSTOP. It resumes once free memory is back above `resumeAbove` (20%) and swap has been quiet for 30 seconds. Each time pressure pauses the same job, that wait doubles, up to 8 minutes, so a machine that stays over-committed lets the running job finish instead of stopping and starting the other one every few seconds. Your own jobs are never paused, and a project can opt out with `"throttle": {"pause": false}`.
+If free memory drops below `pauseBelow` (8% by default), or the machine is swapping whatever the level says, the newest agent compile job is paused with SIGSTOP. It resumes once free memory is back above `resumeAbove` (20%) and swap has been quiet for 30 seconds. Each time pressure pauses the same job, that wait doubles, up to 8 minutes, so a machine that stays over-committed lets the running job finish instead of stopping and starting the other one every few seconds. Your own jobs are never paused. Test and browser runners aren't paused by default either, since their timeouts keep counting through a pause. A project can change that with `"throttle": {"pause": true}`, or opt out entirely with `"throttle": {"pause": false}`.
 
 One job always keeps running, so work still progresses and the pauses can't deadlock.
 
@@ -37,7 +37,7 @@ A job past its ceiling is a runaway *candidate*, not something to kill outright.
 What happens next depends on the machine, because memory a job isn't taking from anyone costs nothing:
 
 - **Plenty free.** The job keeps running. It's told once that it's using more than usual, and the daemon log records it.
-- **Free memory under `pauseBelow`.** The job is paused with SIGSTOP, like any job paused for memory, and resumes once memory recovers.
-- **Still under `pauseBelow` 15 seconds later.** Pausing didn't help, so the job is killed: SIGTERM, then SIGKILL after 5 seconds. The reason says it was turnstile's memory guard and that retrying won't help unless the run needs less memory.
+- **Free memory under `pauseBelow`, or the machine swapping.** The job is paused with SIGSTOP if it's one that can be paused, like any job paused for memory, and resumes once memory recovers.
+- **Still under pressure 15 seconds later.** Pausing didn't help, so the job is killed: SIGTERM, then SIGKILL after 5 seconds. The reason says it was turnstile's memory guard and that retrying won't help unless the run needs less memory.
 
 `maxMemory` is the exception. It's an explicit limit someone asked for, so a job tree above it is killed straight away, whatever the machine is doing.

@@ -22,7 +22,7 @@ To teach turnstile about another harness, add its variable to [`agentEnv`](../re
 
 - **Priority.** Compiles run at background priority (`taskpolicy -b`). Tests and browser runs get the gentler utility clamp (`taskpolicy -c utility`), since background priority can starve them into timeouts.
 - **Queue order.** Agent jobs queue behind commands you type.
-- **Pausing.** Under critical memory pressure, the newest agent job is paused. Your own jobs never are.
+- **Pausing.** Under critical memory pressure, the newest agent compile is paused. Agent tests and browser runs aren't, unless [`throttle.pause`](../reference/configuration.md#commands-scripts-and-throttling) is `true`, and your own jobs never are.
 - **Visible waits.** A queued job prints why it's waiting and repeats itself every 30 seconds, so an agent never mistakes a queue for a hang.
 - **Clear cancellation.** A job killed with `turnstile kill` exits `125` and prints `cancelled by you, don't retry`, so an agent doesn't treat it as a flaky failure.
 

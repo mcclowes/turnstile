@@ -6,11 +6,11 @@ slug: /scheduling
 
 # Scheduling
 
-A job starts when its class has a free slot and its expected peak memory fits in free memory, minus a [reserve](../reference/configuration.md#machine-settings) for everything else. Nothing starts at all while the machine is [swapping](pressure.md), since free memory means nothing in that state.
+A job starts when its class has a free slot and its expected peak memory fits in free memory, minus a [reserve](../reference/configuration.md#machine-settings) for everything else and whatever running jobs are still expected to grow into. Nothing starts while the machine is [swapping](pressure.md) unless nothing is running, since free memory means nothing in that state.
 
 ## Learned peaks
 
-Expected peaks are learned from each command's last few runs in that project, with release and debug builds kept apart. A command new to a project starts from its median peak in other projects.
+A command's expected peak is the highest of its last twenty runs in that project over the past month, with release and debug builds kept apart. It's the high-water mark rather than an average, because a cold compile can be tens of times an incremental one. A command new to a project starts from its median peak in other projects.
 
 ## Learned run times
 

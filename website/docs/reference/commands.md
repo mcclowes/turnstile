@@ -50,7 +50,7 @@ History is kept for 30 days in `~/.turnstile/state.sqlite`, on your machine.
 
 | Command | What it does |
 | --- | --- |
-| `turnstile bump <job>` | Move a job to the front, or raise a running compile to normal priority |
+| `turnstile bump <job>` | Move a job to the front, or raise a running compile to normal priority. A running job you bump is resumed if it was paused |
 | `turnstile kill <job>` | Drop a queued job, or stop a running one (SIGTERM, then SIGKILL after 5s). Anyone who joined the run is stopped too |
 | `turnstile pause <job>` / `resume <job>` | Stop a running job's processes with SIGSTOP, and carry on. A job you paused stays paused until you resume it |
 | `turnstile hold <job>` / `release <job>` | Keep a queued job from starting, and let it go |
@@ -69,14 +69,17 @@ History is kept for 30 days in `~/.turnstile/state.sqlite`, on your machine.
 
 | Command | What it does |
 | --- | --- |
-| `turnstile init [--no-rc]` | Install the binary and shims, and add them to PATH |
-| `turnstile env` | Print the shell setup, for `eval "$(turnstile env)"` |
+| `turnstile init [--shell zsh\|bash\|fish] [--no-rc]` | Install the binary and shims, and add them to PATH. `--shell` picks the startup files, instead of reading `$SHELL` |
+| `turnstile env [--shell zsh\|bash\|fish]` | Print the shell setup, for `eval "$(turnstile env)"` |
 | `turnstile shims` | Rebuild the shims after changing `shims.add` or `shims.remove` |
 | `turnstile doctor` | Check the install, PATH order, config, and daemon, with a fix for anything wrong |
 | `turnstile doctor --shells` | Also check the other shells an agent might start, and the newest Claude Code shell snapshot |
 | `turnstile agents` | Print a snippet for a project's `AGENTS.md` or `CLAUDE.md`, telling agents how to start builds |
-| `turnstile config` | Show the settings in effect here, and where each came from |
-| `turnstile config init` | Write a starter config file |
+| `turnstile config [show]` | Show the settings in effect here, and where each came from |
+| `turnstile config path [--project]` | Print the global config's path (or this project's) |
+| `turnstile config init [--project]` | Write a starter config file, global or for this project |
 | `turnstile config check` | Validate the config files, catching typos |
-| `turnstile config edit [--project]` | Open the global config (or this project's) in `$EDITOR`, then validate it |
-| `turnstile uninstall` | Remove the shims and PATH setup. History is kept |
+| `turnstile config edit [--project]` | Open the global config (or this project's) in `$VISUAL` or `$EDITOR`, then validate it |
+| `turnstile uninstall` | Remove the shims and PATH setup, and stop the daemon. History is kept |
+| `turnstile daemon [--idle-exit <seconds>]` | Run the scheduler in the foreground. You don't normally need this: the first gated command starts it, and it exits after 30 idle minutes |
+| `turnstile --version` | Print the version |

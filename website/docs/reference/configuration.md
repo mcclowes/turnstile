@@ -42,7 +42,7 @@ Global file only.
 | --- | --- | --- |
 | `concurrency` | a quarter of your cores, 1 to 4, for compile and test; 3 for browser | Max jobs per class at once |
 | `reserve` | `"2GB"` | Memory to keep free for everything else |
-| `pauseBelow` | `8` | Pause the newest agent job when free memory drops below this percent |
+| `pauseBelow` | `8` | Pause the newest pausable agent job when free memory drops below this percent |
 | `resumeAbove` | `20` | Resume paused jobs once free memory is back above this percent |
 | `killFloor` | `25` | Floor under the runaway ceiling, as a percent of RAM. Nothing below it is ever a runaway |
 | `shims.add` / `shims.remove` | | Extra tools to gate, or built-in ones to drop. Run `turnstile shims` after changing |
@@ -82,7 +82,7 @@ Either file.
 | `nodeHeap` | auto | Node's `--max-old-space-size`. Auto caps it at 2 GB under 15% free |
 | `maxMemory` | none | Hard ceiling. A job tree above it is killed on the spot, whatever the machine is doing |
 | `killMultiplier` | `3` | Treat a job as a runaway past this multiple of its high-water peak, never below `killFloor` (25% of RAM). With no history, 75% of RAM. A runaway is left alone while memory is plentiful, paused when it isn't, and killed only if the pause doesn't help |
-| `pause` | `true` | Allow this project's agent jobs to be paused under pressure |
+| `pause` | compile only | Allow this project's agent jobs to be paused under pressure. By default only compiles are, since test and browser runners have deadlines that keep running while paused. `true` lets tests and browser runs be paused too, and `false` never pauses any |
 
 ## Sizes
 

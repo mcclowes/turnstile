@@ -28,6 +28,7 @@ echo "run $$ $*" >> "$FAKE_RUNS"
 [ -n "${FAKE_LATE_OUTPUT:-}" ] && { (sleep 3; echo "late output") & exit 0; }
 # A build server: a short-lived client starts it in its own session, then exits, leaving it to launchd.
 [ -n "${FAKE_SERVER_MB:-}" ] && { bash -c '/usr/bin/python3 -c "import os, time; os.setsid(); time.sleep(2.5); b = bytearray(${FAKE_SERVER_MB} * 1024 * 1024); [b.__setitem__(i, 1) for i in range(0, len(b), 4096)]; time.sleep(30)" turnstile-e2e-server > /dev/null 2>&1 & sleep 1.5'; sleep 10; exit 0; }
+[ -n "${FAKE_WAIT_FILE:-}" ] && while [ -e "$FAKE_WAIT_FILE" ]; do sleep 0.05; done
 sleep "${FAKE_SLEEP:-0}"
 echo "fake swift done" >&2
 exit "${FAKE_EXIT:-0}"
@@ -151,16 +152,23 @@ wait $job; code=$?
 check "SIGTERM is forwarded" '[ $code = 143 ]'
 
 # If the supervisor is SIGKILLed, the slot is held until its job exits, then freed.
+orphan_gate="$T/orphan-gate"
+: > "$orphan_gate"
 cd a
-FAKE_SLEEP=3 swift test > /dev/null 2>&1 &
+FAKE_WAIT_FILE="$orphan_gate" swift test > /dev/null 2>&1 &
 sup=$!
 cd ..
 wait_for_job running a "swift test"
 kill -KILL $sup
 wait $sup 2> /dev/null
 wait_for_job running a "swift test"
-out="$(cd b && FAKE_SLEEP=0 swift test 2>&1)"
-check "slot survives a SIGKILLed client, then frees" 'echo "$out" | grep -q "waiting for a test slot" && echo "$out" | grep -q "fake swift done"'
+(cd b && swift test > "$T/orphan-wait.out" 2>&1) &
+contender=$!
+queued=0
+wait_for_job queued b "swift test" || queued=$?
+rm "$orphan_gate"
+wait $contender
+check "slot survives a SIGKILLed client, then frees" '[ "$queued" = 0 ] && grep -q "fake swift done" "$T/orphan-wait.out"'
 wait
 
 # Restarting the daemon keeps its work gated: a running job is adopted, and a queued one requeues.

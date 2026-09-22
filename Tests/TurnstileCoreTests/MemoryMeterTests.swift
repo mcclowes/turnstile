@@ -102,6 +102,15 @@ struct MemoryMeterTests {
         #expect(meter.blocker == .slot(.compile))
     }
 
+    @Test func aJobPausedForMemoryIsWhatTheNextWaitsOn() {
+        var paused = job(1, state: "paused", estimate: gb, footprint: gb)
+        paused.pausedBy = "memory"
+        let meter = MemoryMeter(snapshot(level: 75, running: [paused], queued: [job(2, state: "queued", estimate: gb)]))
+        #expect(meter.blocker == .paused)
+        paused.pausedBy = "you"
+        #expect(MemoryMeter(snapshot(level: 75, running: [paused], queued: [job(2, state: "queued", estimate: gb)])).blocker == .slot(.compile))
+    }
+
     @Test func slotCountsComeFromTheLimits() {
         let meter = MemoryMeter(snapshot(running: [job(1, estimate: gb, footprint: gb)], queued: [job(2, state: "queued", estimate: gb), job(3, .test, state: "queued", estimate: gb)]))
         #expect(meter.slots == [

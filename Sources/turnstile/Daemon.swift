@@ -590,7 +590,8 @@ final class Daemon {
             queue: queued.map { QueuedJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, agent: $0.agent, bumpedAt: $0.bumpedAt, queuedAt: $0.queuedTick, label: $0.label, held: $0.held, duration: $0.usualDuration) },
             running: running.map {
                 RunningJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, footprint: $0.footprint, label: $0.label,
-                           usualDuration: $0.paused ? nil : $0.usualDuration, elapsed: $0.ranFor(now: clock) ?? 0)
+                           usualDuration: $0.paused ? nil : $0.usualDuration, elapsed: $0.ranFor(now: clock) ?? 0,
+                           pausedForMemory: $0.paused && !$0.pausedByUser)
             },
             freeMemory: SystemMemory.free(level: memoryLevel),
             policy: policy,

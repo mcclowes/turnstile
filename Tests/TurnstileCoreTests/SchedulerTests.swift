@@ -221,4 +221,25 @@ struct SchedulerTests {
         let decision = Scheduler.decide(queue: [queued(1, held: true)], running: running, freeMemory: 12 * gb, policy: policy, pressure: .swapping)
         #expect(decision.waiting[1] == .held)
     }
+
+    /// Memory recovers the moment a job is paused, but that room is the paused job's to resume into.
+    /// Starting a new job there just fills it, and the pause then lands on the newcomer.
+    @Test func nothingIsAdmittedWhileAJobIsPausedForMemory() {
+        let running = [
+            RunningJob(id: 8, resourceClass: .compile, estimate: 4 * gb, footprint: 4 * gb, label: "r"),
+            RunningJob(id: 9, resourceClass: .compile, estimate: gb / 2, footprint: gb / 4, label: "p", pausedForMemory: true),
+        ]
+        let queue = [queued(1, .test, gb: 2), queued(2, held: true)]
+        let decision = Scheduler.decide(queue: queue, running: running, freeMemory: 10 * gb, policy: policy)
+        #expect(decision.admit.isEmpty)
+        #expect(decision.waiting[1] == .resuming(paused: ["p"]))
+        #expect(decision.waiting[2] == .held)
+        #expect(Scheduler.message(for: .resuming(paused: ["p"])) == "waiting for p to resume first, it was paused for memory")
+    }
+
+    @Test func aJobPausedByAPersonDoesntHoldUpTheQueue() {
+        let running = [RunningJob(id: 9, resourceClass: .compile, estimate: gb, footprint: gb, label: "p")]
+        let decision = Scheduler.decide(queue: [queued(1, .test)], running: running, freeMemory: 10 * gb, policy: policy)
+        #expect(decision.admit == [1])
+    }
 }

@@ -37,8 +37,10 @@ public struct RunningJob: Equatable, Sendable {
     public var usualDuration: Double?
     /// Seconds it has spent running, not counting time paused.
     public var elapsed: Double
+    /// Stopped by the daemon to relieve memory, rather than by a person.
+    public var pausedForMemory: Bool
 
-    public init(id: Int64, resourceClass: ResourceClass, estimate: UInt64, footprint: UInt64 = 0, label: String = "", usualDuration: Double? = nil, elapsed: Double = 0) {
+    public init(id: Int64, resourceClass: ResourceClass, estimate: UInt64, footprint: UInt64 = 0, label: String = "", usualDuration: Double? = nil, elapsed: Double = 0, pausedForMemory: Bool = false) {
         self.id = id
         self.resourceClass = resourceClass
         self.estimate = estimate
@@ -46,6 +48,7 @@ public struct RunningJob: Equatable, Sendable {
         self.label = label
         self.usualDuration = usualDuration
         self.elapsed = elapsed
+        self.pausedForMemory = pausedForMemory
     }
 
     /// Memory the job is still expected to claim.
@@ -90,6 +93,8 @@ public enum WaitReason: Equatable, Sendable {
     case memory(need: UInt64, free: UInt64, running: [String], eta: Double? = nil)
     /// The machine is swapping, so free memory means nothing; nothing new starts until it settles.
     case swapping(running: [String])
+    /// A job was paused for memory; it gets the room back before anything new starts.
+    case resuming(paused: [String])
     /// Someone held it; it waits until released.
     case held
 
@@ -97,7 +102,7 @@ public enum WaitReason: Equatable, Sendable {
     public var eta: Double? {
         switch self {
         case let .slots(_, _, eta), let .memory(_, _, _, eta): return eta
-        case .queue, .swapping, .held: return nil
+        case .queue, .swapping, .resuming, .held: return nil
         }
     }
 }
@@ -133,6 +138,9 @@ public enum Scheduler {
     /// `backfillAge`. With nothing running, the head of the queue always starts, since waiting can't
     /// free memory. Held jobs are skipped entirely.
     ///
+    /// While a job is paused for memory, nothing starts: pausing frees room at once, and a new job
+    /// filling it would leave the paused one nowhere to resume into.
+    ///
     /// While the machine is swapping, nothing starts at all: `freeMemory` comes from a level the kernel
     /// is holding up by paging out, so it describes the stand-off rather than room for another job.
     public static func decide(queue: [QueuedJob], running: [RunningJob], freeMemory: UInt64, policy: SchedulerPolicy, now: Double = 0, pressure: EffectiveMemoryPressure = .normal) -> SchedulerDecision {
@@ -145,6 +153,12 @@ public enum Scheduler {
         if pressure > .normal, !running.isEmpty {
             let labels = running.map(\.label)
             for job in queue { waiting[job.id] = job.held ? .held : .swapping(running: labels) }
+            return SchedulerDecision(admit: [], waiting: waiting)
+        }
+
+        let paused = running.filter(\.pausedForMemory).map(\.label)
+        if !paused.isEmpty {
+            for job in queue { waiting[job.id] = job.held ? .held : .resuming(paused: paused) }
             return SchedulerDecision(admit: [], waiting: waiting)
         }
 
@@ -249,6 +263,8 @@ public enum Scheduler {
             return "waiting for memory, needs ~\(Bytes.format(need)), ~\(Bytes.format(free)) spare\(startsIn(eta)) (running: \(summary(running)))"
         case let .swapping(running):
             return "waiting, the machine is swapping (running: \(summary(running)))"
+        case let .resuming(paused):
+            return "waiting for \(summary(paused)) to resume first, \(paused.count == 1 ? "it was" : "they were") paused for memory"
         case .held:
             return "held; waiting until someone releases it"
         }

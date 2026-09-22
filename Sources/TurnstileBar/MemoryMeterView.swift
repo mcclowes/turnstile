@@ -127,6 +127,7 @@ struct MemoryMeterView: View {
     static func verdict(_ meter: MemoryMeter) -> String? {
         guard let ghost = meter.ghost else { return nil }
         switch meter.blocker {
+        case .paused: return "Next waits for the paused job to resume"
         case .memory: return "Next needs ~\(Bytes.format(ghost.estimate)), only \(Bytes.format(meter.spare)) spare"
         case let .slot(cls): return "Next waits for a \(cls.rawValue) slot, not memory"
         case nil: return "Next fits"

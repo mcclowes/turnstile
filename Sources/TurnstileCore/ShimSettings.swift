@@ -15,25 +15,13 @@ public struct ShimSettings: Equatable, Sendable {
     }
 
     public func updatingConfig(_ data: Data) throws -> Data {
-        var root: [String: Any]
-        if data.allSatisfy({ $0 == 0x20 || $0 == 0x0A || $0 == 0x0D || $0 == 0x09 }) {
-            root = [:]
-        } else {
-            guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                throw CocoaError(.propertyListReadCorrupt)
-            }
-            root = object
-        }
-
         let removed = Classifier.defaultShims.filter { !enabledDefaults.contains($0) }
         var shims: [String: Any] = [:]
         if !normalizedCustom.isEmpty { shims["add"] = normalizedCustom }
         if !removed.isEmpty { shims["remove"] = removed }
-        if shims.isEmpty { root.removeValue(forKey: "shims") } else { root["shims"] = shims }
-
-        var encoded = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
-        encoded.append(0x0A)
-        return encoded
+        return try ConfigJSON.edit(data) { root in
+            root["shims"] = shims.isEmpty ? nil : shims
+        }
     }
 
     public static func normalize(_ name: String) -> String? {

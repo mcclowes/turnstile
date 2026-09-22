@@ -90,13 +90,16 @@ public enum Throttle {
 
 /// Pause and kill decisions for running jobs.
 public enum Pressure {
+    /// A job past this multiple of its usual peak is a runaway candidate, unless `killMultiplier` says otherwise.
+    public static let defaultKillMultiplier: Double = 3
+
     /// Ceiling above which a job is a runaway candidate. `highWaterPeak` is the command's high-water
     /// mark rather than its recent average: a cold compile can be tens of times an incremental one, and
     /// a ceiling that forgets the cold runs turns the next one into a "runaway".
     /// The floor is a share of the machine, since a fixed one is far too small on a big Mac.
     public static func ceiling(highWaterPeak: UInt64?, physicalMemory: UInt64, floorPercent: Int, config: ThrottleConfig) -> UInt64 {
         if let max = config.maxMemory { return max }
-        let multiplier = config.killMultiplier ?? 3
+        let multiplier = config.killMultiplier ?? defaultKillMultiplier
         guard let peak = highWaterPeak else { return physicalMemory / 4 * 3 }
         let floor = physicalMemory * UInt64(Swift.max(0, Swift.min(100, floorPercent))) / 100
         return Swift.max(UInt64(Double(peak) * multiplier), floor)

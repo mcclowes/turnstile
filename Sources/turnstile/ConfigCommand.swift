@@ -101,7 +101,7 @@ enum ConfigCommand {
         if let hard = throttle.maxMemory {
             lines.append("  kill above    \(Bytes.format(hard)), whatever the machine is doing")
         } else {
-            lines.append("  runaway above \(formatMultiplier(throttle.killMultiplier ?? 3))× a command's high-water peak, "
+            lines.append("  runaway above \(formatMultiplier(throttle.killMultiplier ?? Pressure.defaultKillMultiplier))× a command's high-water peak, "
                 + "at least \(machine.killFloorPercent)% of RAM (75% before there's history)")
             lines.append("  kill above    only under \(machine.pauseBelowPercent)% free, and only after a pause doesn't help")
         }

@@ -7,13 +7,18 @@
     "build": "docusaurus build",
     "serve": "docusaurus serve",
     "clear": "docusaurus clear",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "spell-check": "cspell \"docs/**/*.md\""
   },
   "dependencies": {
     "@docusaurus/core": "3.10.2",
     "@docusaurus/preset-classic": "3.10.2",
+    "@docusaurus/theme-mermaid": "3.10.2",
     "@mdx-js/react": "^3.0.0",
+    "@mermaid-js/layout-elk": "^0.1.9",
     "clsx": "^2.0.0",
+    "plugin-image-zoom": "^1.2.0",
     "prism-react-renderer": "^2.3.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
@@ -22,13 +27,17 @@
     "@docusaurus/module-type-aliases": "3.10.2",
     "@docusaurus/tsconfig": "3.10.2",
     "@docusaurus/types": "3.10.2",
-    "typescript": "^5.7.0"
+    "cspell": "^10.3.3",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.11"
   },
   "engines": {
     "node": ">=20.0"
   },
   "overrides": {
     "serialize-javascript": "^7.1.1",
-    "uuid": "^11.1.1"
+    "uuid": "^11.1.1",
+    "lodash-es": "^4.18.0",
+    "mermaid": "^11.17.2"
   }
 }

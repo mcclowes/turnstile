@@ -1,6 +1,8 @@
 import type {Config} from '@docusaurus/types';
 import type {Options, ThemeConfig} from '@docusaurus/preset-classic';
 import {themes as prismThemes} from 'prism-react-renderer';
+import markdownExport from './plugins/markdown-export';
+import sidebars from './sidebars';
 
 const github = 'https://github.com/mcclowes/turnstile';
 
@@ -13,7 +15,10 @@ const config: Config = {
   trailingSlash: false,
   onBrokenLinks: 'throw',
   onBrokenAnchors: 'throw',
-  markdown: {hooks: {onBrokenMarkdownLinks: 'throw'}},
+  onDuplicateRoutes: 'throw',
+  markdown: {mermaid: true, hooks: {onBrokenMarkdownLinks: 'throw'}},
+  themes: ['@docusaurus/theme-mermaid'],
+  plugins: ['plugin-image-zoom', [markdownExport, {docsDir: 'docs', sidebars}]],
   organizationName: 'mcclowes',
   projectName: 'turnstile',
   headTags: [{tagName: 'link', attributes: {rel: 'apple-touch-icon', href: '/img/apple-touch-icon.png'}}],
@@ -25,14 +30,19 @@ const config: Config = {
           routeBasePath: '/',
           sidebarPath: './sidebars.ts',
           editUrl: `${github}/edit/main/website/`,
+          showLastUpdateTime: true,
         },
         blog: false,
+        sitemap: {lastmod: 'date'},
         theme: {customCss: './src/css/custom.css'},
       } satisfies Options,
     ],
   ],
   themeConfig: {
     colorMode: {respectPrefersColorScheme: true},
+    tableOfContents: {minHeadingLevel: 2, maxHeadingLevel: 3},
+    mermaid: {theme: {light: 'neutral', dark: 'dark'}},
+    zoomSelector: '.markdown img',
     navbar: {
       title: 'turnstile',
       logo: {alt: '', src: 'img/icon.svg'},
@@ -66,6 +76,7 @@ const config: Config = {
           items: [
             {label: 'GitHub', href: github},
             {label: 'Homebrew tap', href: 'https://github.com/mcclowes/homebrew-turnstile'},
+            {label: 'llms.txt', href: 'pathname:///llms.txt'},
           ],
         },
       ],

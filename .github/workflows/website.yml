@@ -22,6 +22,8 @@ jobs:
         working-directory: website
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # last-updated dates come from git history
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -29,4 +31,11 @@ jobs:
           cache-dependency-path: website/package-lock.json
       - run: npm ci
       - run: npm run typecheck
+      - run: npm test
+      - run: npm run spell-check
       - run: npm run build
+      - name: Check links
+        uses: lycheeverse/lychee-action@8646ba30535128ac92d33dfc9133794bfdd9b411 # v2
+        with:
+          args: --no-progress --config website/lychee.toml --root-dir "${{ github.workspace }}/website/build" website/build
+          fail: true

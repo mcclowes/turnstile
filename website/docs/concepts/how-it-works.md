@@ -6,6 +6,18 @@ slug: /how-it-works
 
 # How it works
 
+```mermaid
+flowchart LR
+  cmd["npm run build"] --> shim{"Shim: heavy?"}
+  shim -- no --> real["Real tool runs now"]
+  shim -- yes --> daemon["Daemon"]
+  daemon --> fits{"Free slot and memory?"}
+  fits -- yes --> run["Runs, same output and exit code"]
+  fits -- no --> queue["Waits in the queue"]
+  queue --> fits
+  daemon -. missing or broken .-> real
+```
+
 ## Shims
 
 `~/.turnstile/shims` holds symlinks named `swift`, `cargo`, `npm`, and so on, all pointing at one binary. Each works out whether the command is heavy. Quick ones (`swift --version`, `npm install`, `cargo fmt`) `exec` the real tool in a few milliseconds without touching the daemon.

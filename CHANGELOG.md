@@ -4,9 +4,23 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ## Unreleased
 
+## 0.8.0
+
+### Added
+
+- The Tools tab shows every supported tool in a table with its live gated status and real binary path.
+- Health fixes can be copied or run in Terminal directly from the menu bar app.
+- Every docs page is available as raw Markdown, alongside `llms.txt`, `llms-full.txt`, Mermaid diagrams, and an Open with AI menu.
+
 ### Changed
 
 - Compile and test jobs get 3 slots by default, matching browser, instead of a quarter of your cores.
+- The menu bar ties each running job to its memory-bar segment by color, labels the next job, and puts memory estimates beside job footprints.
+
+### Fixed
+
+- A job paused under memory pressure gets first claim on recovered memory, while small jobs can still pass it briefly when they'll finish before its calm period ends.
+- New work waits until memory has stayed calm for 30 seconds, avoiding false recoveries during swap churn.
 
 ## 0.7.0
 

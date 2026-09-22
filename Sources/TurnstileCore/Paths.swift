@@ -1,7 +1,7 @@
 import Foundation
 
 public enum Turnstile {
-    public static let version = "0.7.0"
+    public static let version = "0.8.0"
     /// Exit code for a run someone killed on purpose, so agents know not to retry it.
     public static let cancelledExitCode: Int32 = 125
     public static let cancelledText = "cancelled by you, don't retry"

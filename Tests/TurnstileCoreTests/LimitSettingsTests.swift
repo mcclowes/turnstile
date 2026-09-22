@@ -14,7 +14,7 @@ struct LimitSettingsTests {
         #expect(settings.pause)
         #expect(settings.inject)
         #expect(settings.reserveBytes == 2 * Bytes.gb)
-        #expect(settings.slots(for: .browser, cpuCount: 16) == 1)
+        #expect(settings.slots(for: .browser, cpuCount: 16) == 3)
         #expect(settings.slots(for: .compile, cpuCount: 16) == 4)
     }
 

@@ -141,7 +141,7 @@ public struct MachineConfig: Decodable, Equatable, Sendable {
         if let limit = concurrency?[cls.rawValue] { return max(1, limit) }
         switch cls {
         case .compile, .test: return max(1, min(4, cpuCount / 4))
-        case .browser: return 1
+        case .browser: return 3
         }
     }
 

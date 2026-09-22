@@ -2,8 +2,10 @@ import Foundation
 
 /// What the menu bar app shows and notifies about, derived from successive status snapshots.
 public enum MenuBarState {
-    public static let idleSymbol = "square.stack.3d.up.slash"
-    public static let busySymbol = "square.stack.3d.up"
+    /// The menu bar icon whether or not the daemon is up; it sleeps when idle, which isn't news.
+    public static let iconSymbol = "square.stack.3d.up"
+    /// The empty panel's illustration.
+    public static let emptySymbol = "square.stack.3d.up.slash"
     public static let pausedSymbol = "pause.circle"
     public static let pressureSymbol = "exclamationmark.triangle"
     public static let disabledSymbol = "shield.slash"
@@ -47,14 +49,14 @@ public enum MenuBarState {
         let inFlight = snapshot.map { $0.running.count + $0.queued.count } ?? 0
         let count = inFlight > 0 ? inFlight : nil
         if disabled { return Indicator(symbol: disabledSymbol, count: count, tone: .danger) }
-        guard let snapshot else { return Indicator(symbol: idleSymbol, count: nil) }
+        guard let snapshot else { return Indicator(symbol: iconSymbol, count: nil) }
         if snapshot.memoryLevel < lowMemoryPercent || snapshot.running.contains(where: { $0.pausedBy == "memory" }) {
             return Indicator(symbol: pressureSymbol, count: count, tone: .danger)
         }
         if snapshot.running.contains(where: \.paused) {
             return Indicator(symbol: pausedSymbol, count: count, tone: .warning)
         }
-        return Indicator(symbol: busySymbol, count: count, tone: .neutral)
+        return Indicator(symbol: iconSymbol, count: count, tone: .neutral)
     }
 
     public static func memoryTone(_ level: Int) -> Tone {

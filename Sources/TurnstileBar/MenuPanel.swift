@@ -121,7 +121,7 @@ struct MenuPanel: View {
 
     private var idle: some View {
         VStack(spacing: 5) {
-            Image(systemName: MenuBarState.idleSymbol)
+            Image(systemName: MenuBarState.emptySymbol)
                 .font(.system(size: 22, weight: .light))
                 .foregroundStyle(.tertiary)
                 .padding(.bottom, 2)

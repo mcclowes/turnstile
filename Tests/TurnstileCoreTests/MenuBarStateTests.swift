@@ -19,10 +19,10 @@ struct MenuBarStateTests {
     }
 
     @Test func iconShowsJobsInFlightAndTrouble() {
-        #expect(MenuBarState.indicator(nil) == .init(symbol: MenuBarState.idleSymbol, count: nil))
+        #expect(MenuBarState.indicator(nil) == .init(symbol: MenuBarState.iconSymbol, count: nil))
         #expect(MenuBarState.indicator(snapshot()).count == nil)
         #expect(MenuBarState.indicator(snapshot(running: [job(1)])).count == 1)
-        #expect(MenuBarState.indicator(snapshot(running: [job(1)], queued: [job(2, state: "queued"), job(3, state: "queued")])) == .init(symbol: MenuBarState.busySymbol, count: 3))
+        #expect(MenuBarState.indicator(snapshot(running: [job(1)], queued: [job(2, state: "queued"), job(3, state: "queued")])) == .init(symbol: MenuBarState.iconSymbol, count: 3))
         #expect(MenuBarState.indicator(snapshot(running: [job(1, pausedBy: "you")])).symbol == MenuBarState.pausedSymbol)
         #expect(MenuBarState.indicator(snapshot(level: 10, running: [job(1)])).symbol == MenuBarState.pressureSymbol)
         #expect(MenuBarState.indicator(snapshot(running: [job(1, pausedBy: "memory")])).symbol == MenuBarState.pressureSymbol)

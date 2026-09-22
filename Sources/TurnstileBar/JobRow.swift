@@ -5,6 +5,8 @@ import TurnstileCore
 struct JobRow: View {
     var job: JobSnapshot
     var now: Double
+    /// Its colour in the memory bar, while running.
+    var hue: Int? = nil
     /// False for the head of the queue, where moving to the front does nothing.
     var canPromote = true
     var send: (String) -> Void
@@ -83,31 +85,38 @@ struct JobRow: View {
     }
 
     /// Timing when idle, controls on hover, in one fixed-width slot so the text beside it never moves.
+    /// Timing sits flush right unless the promote button is showing there.
     private var trailing: some View {
-        HStack(spacing: 2) {
-            ZStack(alignment: .trailing) {
-                timing.opacity(hovering ? 0 : 1)
+        ZStack(alignment: .trailing) {
+            timing
+                .padding(.trailing, promoteVisible ? Panel.actionSize + 2 : 0)
+                .opacity(hovering ? 0 : 1)
+            HStack(spacing: 2) {
                 secondaryActions.opacity(hovering ? 1 : 0)
+                promoteButton
             }
-            .frame(width: Panel.actionsWidth, alignment: .trailing)
-            promoteButton
         }
+        .frame(width: Panel.actionsWidth + 2 + Panel.actionSize, alignment: .trailing)
         .animation(.easeOut(duration: 0.12), value: hovering)
     }
 
+    /// "1.2 GB · 9m17s" while running, so the absolute size sits beside the share its bar shows.
     private var timing: some View {
-        Text(elapsed)
+        let footprint = queued ? nil : job.footprint.map { Bytes.format($0) }
+        return Text([footprint, elapsed].compactMap { $0 }.joined(separator: " · "))
             .foregroundStyle(.secondary)
             .font(.system(size: 11).monospacedDigit())
-        .lineLimit(1)
-        .help(queued ? "Waiting for \(elapsed)" : "Running for \(elapsed)")
+            .lineLimit(1)
+            .help((footprint.map { "\($0) in use. " } ?? "") + (queued ? "Waiting for \(elapsed)" : "Running for \(elapsed)"))
     }
+
+    private var promoteVisible: Bool { canPromote && (queued || hovering) }
 
     /// Move to front is the one control a queued job always shows: it's the thing you came to do.
     @ViewBuilder
     private var promoteButton: some View {
         let bump = actions[0]
-        let visible = canPromote && (queued || hovering)
+        let visible = promoteVisible
         iconButton(bump, symbol: MenuBarState.symbol(for: bump), tint: queued ? .accentColor : Color(nsColor: .secondaryLabelColor)) {
             send(bump.message)
         }
@@ -164,9 +173,7 @@ struct JobRow: View {
     private var detail: some View {
         if let fraction = MenuBarState.memoryFraction(for: job) {
             HStack(spacing: 6) {
-                Image(systemName: "memorychip")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
+                memoryKey
                 MemoryBar(fraction: fraction, tone: MenuBarState.footprintTone(for: job))
                 Text(MenuBarState.memoryText(for: job))
                     .font(.system(size: 10, weight: .medium).monospacedDigit())
@@ -194,6 +201,21 @@ struct JobRow: View {
                     .fixedSize()
                     .help(MenuBarState.memoryText(for: job))
             }
+        }
+    }
+
+    /// The job's dot from the memory bar's legend, tying the row to its segment.
+    @ViewBuilder
+    private var memoryKey: some View {
+        if let hue {
+            Circle().fill(MemoryMeterView.color(hue: hue))
+                .frame(width: 7, height: 7)
+                .frame(width: 11)
+                .help("This job's colour in the memory bar")
+        } else {
+            Image(systemName: "memorychip")
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
         }
     }
 

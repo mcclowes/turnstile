@@ -56,11 +56,12 @@ struct MenuPanel: View {
                     empty
                 }
                 // Ticks between polls, so elapsed times and countdowns don't freeze.
+                let hues = Dictionary(uniqueKeysWithValues: MemoryMeter(snapshot).segments.map { ($0.id, $0.hue) })
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     let now = context.date.timeIntervalSince1970
                     VStack(alignment: .leading, spacing: 0) {
-                        jobs("Running", snapshot.running, now: now)
-                        jobs("Queued", snapshot.queued, now: now)
+                        jobs("Running", snapshot.running, now: now, hues: hues)
+                        jobs("Queued", snapshot.queued, now: now, hues: hues)
                     }
                 }
             }
@@ -76,12 +77,12 @@ struct MenuPanel: View {
     }
 
     @ViewBuilder
-    private func jobs(_ title: String, _ jobs: [JobSnapshot], now: Double) -> some View {
+    private func jobs(_ title: String, _ jobs: [JobSnapshot], now: Double, hues: [Int64: Int]) -> some View {
         if !jobs.isEmpty {
             SectionHeader(title: title, count: jobs.count)
             VStack(spacing: 2) {
                 ForEach(jobs, id: \.id) { job in
-                    JobRow(job: job, now: now, canPromote: MenuBarState.canPromote(job, in: jobs)) { monitor.send($0, to: job.id) }
+                    JobRow(job: job, now: now, hue: hues[job.id], canPromote: MenuBarState.canPromote(job, in: jobs)) { monitor.send($0, to: job.id) }
                 }
             }
         }

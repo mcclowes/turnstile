@@ -6,9 +6,10 @@ struct MemoryMeterView: View {
     var meter: MemoryMeter
 
     static let barHeight: CGFloat = 12
-    private static let palette: [Color] = [.blue, .purple, .teal, .indigo, .pink, .mint]
+    /// Ordered so that neighbouring hues, which collisions fall through to, still read as different.
+    private static let palette: [Color] = [.blue, .pink, .teal, .purple, .brown, .indigo]
 
-    static func color(for id: Int64) -> Color { palette[Int(id % Int64(palette.count))] }
+    static func color(hue: Int) -> Color { palette[hue % palette.count] }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -36,7 +37,7 @@ struct MemoryMeterView: View {
                         .frame(width: x(meter.other))
                         .help("Other apps and the system: \(Bytes.format(meter.other))")
                     ForEach(meter.segments, id: \.id) { segment in
-                        let color = Self.color(for: segment.id)
+                        let color = Self.color(hue: segment.hue)
                         HStack(spacing: 0) {
                             Rectangle().fill(color.opacity(segment.paused ? 0.5 : 1)).frame(width: x(segment.used))
                             Rectangle().fill(color.opacity(0.3)).frame(width: x(segment.committed))
@@ -54,8 +55,7 @@ struct MemoryMeterView: View {
                         .background(RoundedRectangle(cornerRadius: 3).fill(tone.color.opacity(0.12)))
                         .frame(width: max(4, min(x(ghost.estimate), geometry.size.width - start)))
                         .offset(x: start)
-                        .help("Next in the queue: #\(ghost.id) \(ghost.label), needs ~\(Bytes.format(ghost.estimate)). "
-                            + (ghost.fits ? "It fits." : "It doesn't fit in the \(Bytes.format(meter.spare)) spare."))
+                        .help(Self.help(for: ghost, spare: meter.spare))
                 }
                 Rectangle()
                     .fill(Color.primary)
@@ -68,18 +68,18 @@ struct MemoryMeterView: View {
         .padding(.vertical, 3)
     }
 
-    /// Who holds the memory, biggest first, readable without hovering.
+    /// What each part of the bar is, readable without hovering. Jobs are named in their rows, which carry the same dot.
     private var legend: some View {
-        let jobs = meter.segments.sorted { $0.width > $1.width }.prefix(2)
-        return HStack(spacing: 10) {
-            key(Color.secondary.opacity(0.45), "Other", meter.other)
+        HStack(spacing: 10) {
+            key(Circle().fill(Color.secondary.opacity(0.45)), "Other", Bytes.format(meter.other))
                 .help("Other apps and the system: \(Bytes.format(meter.other))")
-            ForEach(Array(jobs), id: \.id) { segment in
-                key(Self.color(for: segment.id), segment.project, segment.used)
-                    .help(Self.help(for: segment))
+            if !meter.segments.isEmpty {
+                key(jobsSwatch, jobsName, Bytes.format(meter.segments.reduce(0) { $0 + $1.used }))
+                    .help(meter.segments.map { Self.help(for: $0) }.joined(separator: "\n"))
             }
-            if meter.segments.count > jobs.count {
-                Text("+\(meter.segments.count - jobs.count)").foregroundStyle(.secondary).fixedSize()
+            if let ghost = meter.ghost {
+                key(ghostSwatch(ghost), "Next", "~\(Bytes.format(ghost.estimate))")
+                    .help(Self.help(for: ghost, spare: meter.spare))
             }
             Spacer(minLength: 0)
             Text("\(Bytes.format(meter.spare)) spare")
@@ -91,13 +91,32 @@ struct MemoryMeterView: View {
         .font(.system(size: 10))
     }
 
-    private func key(_ color: Color, _ name: String, _ bytes: UInt64) -> some View {
+    private var jobsName: String {
+        meter.segments.count == 1 ? meter.segments[0].project : "\(meter.segments.count) jobs"
+    }
+
+    /// One slice per running job, in the colours the bar uses.
+    private var jobsSwatch: some View {
+        HStack(spacing: 0) {
+            ForEach(meter.segments, id: \.id) { Rectangle().fill(Self.color(hue: $0.hue)) }
+        }
+        .clipShape(Circle())
+    }
+
+    private func ghostSwatch(_ ghost: MemoryMeter.Ghost) -> some View {
+        let color = (ghost.fits ? MenuBarState.Tone.good : .warning).color
+        return RoundedRectangle(cornerRadius: 2)
+            .strokeBorder(color, style: StrokeStyle(lineWidth: 1, dash: [2, 1]))
+            .background(RoundedRectangle(cornerRadius: 2).fill(color.opacity(0.12)))
+    }
+
+    private func key(_ swatch: some View, _ name: String, _ amount: String) -> some View {
         HStack(spacing: 4) {
-            Circle().fill(color).frame(width: 7, height: 7)
+            swatch.frame(width: 7, height: 7)
             Text(name)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            Text(Bytes.format(bytes))
+            Text(amount)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
                 .fixedSize()
@@ -112,6 +131,11 @@ struct MemoryMeterView: View {
         case let .slot(cls): return "Next waits for a \(cls.rawValue) slot, not memory"
         case nil: return "Next fits"
         }
+    }
+
+    static func help(for ghost: MemoryMeter.Ghost, spare: UInt64) -> String {
+        "Next in the queue: #\(ghost.id) \(ghost.label), needs ~\(Bytes.format(ghost.estimate)). "
+            + (ghost.fits ? "It fits." : "It doesn't fit in the \(Bytes.format(spare)) spare.")
     }
 
     static func help(for segment: MemoryMeter.Segment) -> String {

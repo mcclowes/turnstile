@@ -38,6 +38,18 @@ struct MemoryMeterTests {
         #expect(meter.segments[1].used == 2 * gb && meter.segments[1].committed == 0)
     }
 
+    @Test func runningJobsNeverShareAHue() {
+        // 548 and 554 both pick hue 2 by id.
+        let meter = MemoryMeter(snapshot(running: [job(548, estimate: gb, footprint: gb), job(554, .test, estimate: gb, footprint: gb)]))
+        #expect(meter.segments.map(\.hue) == [2, 3])
+    }
+
+    @Test func aJobKeepsItsHueWhenAnEarlierOneFinishes() {
+        let alone = MemoryMeter(snapshot(running: [job(7, estimate: gb, footprint: gb)]))
+        let together = MemoryMeter(snapshot(running: [job(3, estimate: gb, footprint: gb), job(7, .test, estimate: gb, footprint: gb)]))
+        #expect(alone.segments[0].hue == together.segments[1].hue)
+    }
+
     @Test func aJustAdmittedJobHoldsItsEstimateSoTheBarDoesntJump() {
         let before = MemoryMeter(snapshot(running: [job(1, estimate: 3 * gb, footprint: 0)]))
         let after = MemoryMeter(snapshot(running: [job(1, estimate: 3 * gb, footprint: 2 * gb)]))

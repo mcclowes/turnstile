@@ -15,6 +15,8 @@ public struct MemoryMeter: Equatable, Sendable {
         /// Estimated growth the scheduler already counts as taken.
         public var committed: UInt64
         public var paused: Bool
+        /// Palette slot, distinct from every other running job's so neighbours never merge into one block.
+        public var hue: Int = 0
 
         /// Footprint plus what it's still expected to claim, so a job just admitted doesn't start at zero and jump.
         public var width: UInt64 { used + committed }
@@ -52,6 +54,8 @@ public struct MemoryMeter: Equatable, Sendable {
     public var blocker: Blocker?
     public var slots: [Slot]
 
+    public static let hueCount = 6
+
     /// Where the reserve starts: new jobs must fit to the left of it.
     public var reserveAt: UInt64 { span - reserve }
     /// Where the ghost starts.
@@ -70,6 +74,7 @@ public struct MemoryMeter: Equatable, Sendable {
         segments = zip(snapshot.running, running).map { job, scheduled in
             Segment(id: job.id, project: job.project, label: job.label, resourceClass: job.resourceClass, used: scheduled.footprint, committed: scheduled.pendingGrowth, paused: job.paused)
         }
+        segments = Self.assigningHues(segments)
         spare = UInt64(max(0, headroom))
         reserve = snapshot.reserve
         span = max(snapshot.physicalMemory, other + segments.reduce(0) { $0 + $1.width } + spare + reserve)
@@ -96,5 +101,18 @@ public struct MemoryMeter: Equatable, Sendable {
         } else {
             blocker = fits ? nil : .memory
         }
+    }
+
+    /// Each job keeps the hue its id picks unless another running job already has it, so colours don't shuffle as jobs finish.
+    static func assigningHues(_ segments: [Segment]) -> [Segment] {
+        var taken = Set<Int>()
+        var hues: [Int64: Int] = [:]
+        for id in segments.map(\.id).sorted() {
+            let preferred = Int(id % Int64(hueCount))
+            let hue = (0..<hueCount).lazy.map { (preferred + $0) % hueCount }.first { !taken.contains($0) } ?? preferred
+            taken.insert(hue)
+            hues[id] = hue
+        }
+        return segments.map { var segment = $0; segment.hue = hues[$0.id] ?? 0; return segment }
     }
 }

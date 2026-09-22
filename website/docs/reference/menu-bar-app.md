@@ -6,7 +6,7 @@ slug: /menu-bar-app
 
 # Menu bar app
 
-![The turnstile menu, showing free memory, two running jobs, and six queued jobs](/img/screenshots/menu-queued.webp)
+![The turnstile menu, showing the memory bar, three running jobs with two paused for memory, one queued job waiting for a compile slot, and recent runs](/img/screenshots/menu-queued.webp)
 
 turnstile works in the background, so there's also a menu bar app for when no terminal is open on it. The icon shows how many jobs are running or queued, and turns into a warning when memory is low or a job has been paused for it. Each job in the menu has bump, pause or hold, and kill, and right-clicking one opens its folder or, for a run with no terminal, its log. Pause queue, at the bottom of the menu, starts nothing new until you resume it, while running jobs carry on.
 

@@ -1,15 +1,28 @@
 import SwiftUI
 import TurnstileCore
 
+enum SettingsTab: String {
+    case general, limits, tools
+
+    /// Shared with the menu panel, so a slot chip can open Settings on Limits.
+    static let storageKey = "settingsTab"
+}
+
 struct SettingsView: View {
     @ObservedObject var monitor: Monitor
+    @AppStorage(SettingsTab.storageKey) private var tab = SettingsTab.general
 
     var body: some View {
-        TabView {
+        TabView(selection: $tab) {
             GeneralSettingsView(monitor: monitor)
                 .tabItem { Label("General", systemImage: "gearshape") }
+                .tag(SettingsTab.general)
+            LimitsSettingsView()
+                .tabItem { Label("Limits", systemImage: "gauge.with.dots.needle.50percent") }
+                .tag(SettingsTab.limits)
             ShimSettingsView()
                 .tabItem { Label("Tools", systemImage: "hammer") }
+                .tag(SettingsTab.tools)
         }
     }
 }

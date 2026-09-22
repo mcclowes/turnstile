@@ -2,6 +2,12 @@
 
 Notable changes to turnstile. Versions follow [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- A Limits tab in Settings for slots per class, memory to keep free, pausing under memory pressure, runaway limits, and build parallelism. It edits only those keys in the global config, and "Open config file" reaches the rest. Clicking the slot chips in the menu bar opens it.
+
 ## 0.6.0
 
 ### Added

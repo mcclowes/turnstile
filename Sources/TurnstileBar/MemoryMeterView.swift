@@ -123,6 +123,8 @@ struct MemoryMeterView: View {
 /// Slots in use per class, the other thing besides memory that decides what runs.
 struct SlotChips: View {
     var meter: MemoryMeter
+    @Environment(\.openSettings) private var openSettings
+    @AppStorage(SettingsTab.storageKey) private var settingsTab = SettingsTab.general
 
     var body: some View {
         HStack(spacing: 6) {
@@ -141,6 +143,12 @@ struct SlotChips: View {
             }
         }
         .font(.system(size: 10))
+        .contentShape(.rect)
+        .onTapGesture {
+            settingsTab = .limits
+            NSApplication.shared.activate()
+            openSettings()
+        }
     }
 
     static func help(for slot: MemoryMeter.Slot, blocking: Bool) -> String {
@@ -148,6 +156,6 @@ struct SlotChips: View {
         let limit = slot.limit == 1 ? "1 \(name) job runs" : "\(slot.limit) \(name) jobs run"
         let queued = slot.queued > 0 ? ", \(slot.queued) waiting" : ""
         let waiting = blocking ? " The next job is waiting on this, not memory." : ""
-        return "\(name.capitalized) slots: \(slot.running) of \(slot.limit) in use\(queued). At most \(limit) at once, however much memory is spare.\(waiting)"
+        return "\(name.capitalized) slots: \(slot.running) of \(slot.limit) in use\(queued). At most \(limit) at once, however much memory is spare.\(waiting) Click to change."
     }
 }

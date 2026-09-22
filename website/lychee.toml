@@ -2,6 +2,10 @@ accept = [200, 204, 206, 301, 302, 304, 307, 308, 429, 999]
 host_request_interval = "200ms"
 fallback_extensions = ["html"]
 
+# Canonical and sitemap URLs point at the previous deployment; root-relative links check the same routes locally.
 # Edit links point at files on main, which a PR may be adding.
-exclude = ["^https://github\\.com/mcclowes/turnstile/edit/"]
+exclude = [
+  "^https://turnstile\\.marginalutility\\.dev/",
+  "^https://github\\.com/mcclowes/turnstile/edit/",
+]
 exclude_path = ["website/build/assets"]

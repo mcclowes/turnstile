@@ -48,13 +48,27 @@ struct HealthTests {
         let older = Health.findings(healthy, snapshot: snapshot(version: "0.3.9"), appVersion: "0.4.0")
         #expect(older.count == 1)
         #expect(older[0].text.contains("0.3.9") && older[0].text.contains("0.4.0"))
-        #expect(older[0].fix?.contains("brew upgrade turnstile") == true)
+        #expect(older[0].fix == "brew upgrade turnstile && turnstile restart")
+        #expect(older[0].runnable)
 
         let newer = Health.findings(healthy, snapshot: snapshot(version: "0.10.0"), appVersion: "0.9.0")
         #expect(newer.first?.fix?.contains("turnstile-app") == true)
 
         // Daemons older than 0.2 don't report a version.
         #expect(Health.findings(healthy, snapshot: snapshot(version: nil), appVersion: "0.4.0").count == 1)
+    }
+
+    @Test func adviceIsNotRunnable() {
+        var neverGated = healthy
+        neverGated.lastGated = nil
+        #expect(Health.findings(neverGated, snapshot: nil).first?.runnable == false)
+    }
+
+    @Test func terminalScriptRunsTheCommandInALoginShell() {
+        let script = Health.terminalScript(for: "echo 'hi' && turnstile restart")
+        #expect(script.hasPrefix("#!/bin/zsh -l\n"))
+        #expect(script.contains("\necho 'hi' && turnstile restart\n"))
+        #expect(script.contains(#"print -r -- '$ echo '\''hi'\'' && turnstile restart'"#))
     }
 
     @Test func dangerComesFirst() {

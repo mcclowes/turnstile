@@ -27,12 +27,32 @@ public enum Health {
         public var tone: MenuBarState.Tone
         public var text: String
         public var fix: String?
+        /// `fix` is a shell command the app can run in Terminal, not just advice to read.
+        public var runnable: Bool
 
-        public init(tone: MenuBarState.Tone, text: String, fix: String?) {
+        public init(tone: MenuBarState.Tone, text: String, fix: String?, runnable: Bool = true) {
             self.tone = tone
             self.text = text
             self.fix = fix
+            self.runnable = runnable && fix != nil
         }
+    }
+
+    /// A `.command` file that Terminal runs in a login shell, so Homebrew is on PATH.
+    public static func terminalScript(for command: String) -> String {
+        """
+        #!/bin/zsh -l
+        clear
+        print -r -- \(shellQuoted("$ " + command))
+        \(command)
+        print "\\nDone. You can close this window."
+        rm -f -- "$0"
+
+        """
+    }
+
+    static func shellQuoted(_ text: String) -> String {
+        "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     /// Filesystem checks and one read-only query. Cheap, and never creates files or starts the daemon.
@@ -65,7 +85,8 @@ public enum Health {
         if evidence.lastGated == nil && evidence.shimsInstalled {
             findings.append(Finding(
                 tone: .warning, text: "No command has gone through the shims yet",
-                fix: "open a new shell so the shims are on PATH, then run: turnstile doctor"
+                fix: "open a new shell so the shims are on PATH, then run: turnstile doctor",
+                runnable: false
             ))
         }
         if let path = evidence.configError {
@@ -76,7 +97,7 @@ public enum Health {
             let behind = daemon.compare(appVersion, options: .numeric) == .orderedAscending
             findings.append(Finding(
                 tone: .warning, text: "The daemon is turnstile \(daemon) but this app is \(appVersion)",
-                fix: behind ? "brew upgrade turnstile, then turnstile restart" : "brew upgrade turnstile-app"
+                fix: behind ? "brew upgrade turnstile && turnstile restart" : "brew upgrade turnstile-app"
             ))
         }
         return findings

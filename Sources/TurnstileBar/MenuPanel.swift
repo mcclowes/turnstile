@@ -344,7 +344,7 @@ struct HealthBanner: View {
                             .font(.system(size: 11, weight: .medium))
                             .fixedSize(horizontal: false, vertical: true)
                         if let fix = finding.fix {
-                            fixButton(fix)
+                            fixRow(fix, runnable: finding.runnable)
                         }
                     }
                     Spacer(minLength: 0)
@@ -356,23 +356,42 @@ struct HealthBanner: View {
         .background((findings.first?.tone.color ?? .clear).opacity(0.08))
     }
 
-    private func fixButton(_ fix: String) -> some View {
-        Button {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(fix, forType: .string)
-        } label: {
-            HStack(spacing: 4) {
-                Text(fix)
-                    .font(.system(size: 10).monospaced())
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                Image(systemName: "doc.on.doc")
-                    .font(.system(size: 9))
+    private func fixRow(_ fix: String, runnable: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(fix)
+                .font(.system(size: 10).monospaced())
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .textSelection(.enabled)
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(fix, forType: .string)
+            } label: {
+                Image(systemName: "doc.on.doc").font(.system(size: 9))
             }
-            .foregroundStyle(.secondary)
-            .contentShape(.rect)
+            .help("Copy to paste into a terminal")
+            if runnable {
+                Button {
+                    runInTerminal(fix)
+                } label: {
+                    Image(systemName: "play.fill").font(.system(size: 9))
+                }
+                .help("Run in Terminal")
+            }
         }
         .buttonStyle(.borderless)
-        .help("Copy to paste into a terminal")
+        .foregroundStyle(.secondary)
+    }
+
+    private func runInTerminal(_ command: String) {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("turnstile-fix-\(UUID().uuidString).command")
+        do {
+            try Health.terminalScript(for: command).write(to: url, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
+        } catch {
+            return
+        }
+        let terminal = URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
+        NSWorkspace.shared.open([url], withApplicationAt: terminal, configuration: NSWorkspace.OpenConfiguration())
     }
 }

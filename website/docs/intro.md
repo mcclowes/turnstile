@@ -36,6 +36,28 @@ There's no project setup. Once it's installed, every repo, agent, and terminal o
 
 `turnstile status` gives the same queue a more detailed view, including current memory use, learned estimates, and recent runs.
 
+### Caught in the wild
+
+A real intercept. `npm publish` isn't gated, but its `prepublishOnly` hook runs `npm run build`, which is. That nested build waited for a slot behind two Swift builds, then ran as normal:
+
+```
+$ npm publish --access public
+
+> docusaurus-plugin-share-selection@0.1.0 prepublishOnly
+> npm run build && npm test && npm run check:exports
+
+turnstile: waiting for a compile slot (running: turnstile swift build -c release, ~865 MB; saggar-desktop-fix546 swift build, ~2.4 GB; +1 more)
+turnstile: starting after 27s
+
+> docusaurus-plugin-share-selection@0.1.0 build
+> tsup
+
+CLI Building entry: {"index":"src/index.ts"}
+...
+```
+
+Nobody had to tell the publish script about turnstile. It caught the heavy step wherever it ran.
+
 ## Where to go next
 
 - [Install](./start/install.md) turnstile and check it's wired up.

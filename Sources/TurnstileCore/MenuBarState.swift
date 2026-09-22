@@ -30,7 +30,7 @@ public enum MenuBarState {
 
     public struct Indicator: Equatable, Sendable {
         public var symbol: String
-        /// Queued jobs, when there are any.
+        /// Running plus queued jobs, when there are any. Past the slot count, the excess is the queue.
         public var count: Int?
         /// Only coloured when something wants you to look.
         public var tone: Tone
@@ -44,7 +44,8 @@ public enum MenuBarState {
 
     /// With gating off nothing new is gated, which matters more than anything the daemon says.
     public static func indicator(_ snapshot: StatusSnapshot?, disabled: Bool = false) -> Indicator {
-        let count = snapshot.flatMap { $0.queued.isEmpty ? nil : $0.queued.count }
+        let inFlight = snapshot.map { $0.running.count + $0.queued.count } ?? 0
+        let count = inFlight > 0 ? inFlight : nil
         if disabled { return Indicator(symbol: disabledSymbol, count: count, tone: .danger) }
         guard let snapshot else { return Indicator(symbol: idleSymbol, count: nil) }
         if snapshot.memoryLevel < lowMemoryPercent || snapshot.running.contains(where: { $0.pausedBy == "memory" }) {

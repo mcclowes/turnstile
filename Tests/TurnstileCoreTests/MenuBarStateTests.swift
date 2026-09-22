@@ -18,9 +18,11 @@ struct MenuBarStateTests {
         StatusSnapshot(memoryLevel: level, physicalMemory: 16 * Bytes.gb, reserve: 0, limits: [:], running: running, queued: queued, recent: recent, daemonPid: 1)
     }
 
-    @Test func iconShowsQueueDepthAndTrouble() {
+    @Test func iconShowsJobsInFlightAndTrouble() {
         #expect(MenuBarState.indicator(nil) == .init(symbol: MenuBarState.idleSymbol, count: nil))
-        #expect(MenuBarState.indicator(snapshot(running: [job(1)], queued: [job(2, state: "queued"), job(3, state: "queued")])) == .init(symbol: MenuBarState.busySymbol, count: 2))
+        #expect(MenuBarState.indicator(snapshot()).count == nil)
+        #expect(MenuBarState.indicator(snapshot(running: [job(1)])).count == 1)
+        #expect(MenuBarState.indicator(snapshot(running: [job(1)], queued: [job(2, state: "queued"), job(3, state: "queued")])) == .init(symbol: MenuBarState.busySymbol, count: 3))
         #expect(MenuBarState.indicator(snapshot(running: [job(1, pausedBy: "you")])).symbol == MenuBarState.pausedSymbol)
         #expect(MenuBarState.indicator(snapshot(level: 10, running: [job(1)])).symbol == MenuBarState.pressureSymbol)
         #expect(MenuBarState.indicator(snapshot(running: [job(1, pausedBy: "memory")])).symbol == MenuBarState.pressureSymbol)
@@ -28,7 +30,7 @@ struct MenuBarStateTests {
 
     @Test func gatingOffBeatsEverythingElseOnTheIcon() {
         let trouble = snapshot(level: 10, running: [job(1, pausedBy: "memory")], queued: [job(2, state: "queued")])
-        #expect(MenuBarState.indicator(trouble, disabled: true) == .init(symbol: MenuBarState.disabledSymbol, count: 1, tone: .danger))
+        #expect(MenuBarState.indicator(trouble, disabled: true) == .init(symbol: MenuBarState.disabledSymbol, count: 2, tone: .danger))
         #expect(MenuBarState.indicator(nil, disabled: true) == .init(symbol: MenuBarState.disabledSymbol, count: nil, tone: .danger))
     }
 

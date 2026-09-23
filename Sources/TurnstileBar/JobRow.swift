@@ -124,6 +124,7 @@ struct JobRow: View {
         .background(queued && visible ? Color.accentColor.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
         .opacity(visible ? 1 : 0)
         .disabled(!visible)
+        .pointerStyle(visible ? .link : nil)
     }
 
     private var secondaryActions: some View {
@@ -147,6 +148,7 @@ struct JobRow: View {
             }
             .font(.system(size: 10, weight: .semibold))
             .buttonStyle(.borderless)
+            .pointerStyle(.link)
             .foregroundStyle(.red)
             .frame(height: Panel.actionSize)
             .help("Click again to \(action.title.lowercased()) #\(job.id)")
@@ -163,6 +165,7 @@ struct JobRow: View {
                 .contentShape(.rect)
         }
         .buttonStyle(.borderless)
+        .pointerStyle(.link)
         .foregroundStyle(tint)
         .help("\(action.title): \(action.help)")
         .accessibilityLabel(action.title)

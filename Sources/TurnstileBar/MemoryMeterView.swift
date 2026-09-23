@@ -169,6 +169,7 @@ struct SlotChips: View {
         }
         .font(.system(size: 10))
         .contentShape(.rect)
+        .pointerStyle(.link)
         .onTapGesture {
             settingsTab = .limits
             NSApplication.shared.activate()

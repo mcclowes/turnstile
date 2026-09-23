@@ -97,6 +97,7 @@ struct MenuPanel: View {
                     withAnimation(.snappy(duration: 0.15)) { showAllRecent.toggle() }
                 }
                 .buttonStyle(.borderless)
+                .pointerStyle(.link)
                 .font(.system(size: 10, weight: .medium))
             }
         }
@@ -149,6 +150,7 @@ struct MenuPanel: View {
             Spacer(minLength: 0)
             Button("Turn on") { monitor.setMode(.gated) }
                 .controlSize(.small)
+                .pointerStyle(.link)
                 .help("Gate heavy commands again")
         }
         .padding(.horizontal, Panel.gutter)
@@ -173,6 +175,7 @@ struct MenuPanel: View {
                     .contentShape(.rect)
             }
             .buttonStyle(.borderless)
+            .pointerStyle(.link)
             .foregroundStyle(.secondary)
             .help("Dismiss")
         }
@@ -195,6 +198,7 @@ struct MenuPanel: View {
                     .contentShape(.rect)
             }
             .buttonStyle(.borderless)
+            .pointerStyle(.link)
             .foregroundStyle(.secondary)
             Button {
                 NSApplication.shared.terminate(nil)
@@ -204,6 +208,7 @@ struct MenuPanel: View {
                     .contentShape(.rect)
             }
             .buttonStyle(.borderless)
+            .pointerStyle(.link)
             .foregroundStyle(.secondary)
             .keyboardShortcut("q")
         }
@@ -232,6 +237,7 @@ struct MenuPanel: View {
                 .font(.system(size: 11))
         }
         .menuStyle(.borderlessButton)
+        .pointerStyle(.link)
         .fixedSize()
         .foregroundStyle(tint)
         .tint(tint)
@@ -292,6 +298,7 @@ struct RecentRow: View {
             if let log = entry.log {
                 Button { RunLogActions.open(log) } label: { icon }
                     .buttonStyle(.borderless)
+                    .pointerStyle(.link)
                     .accessibilityLabel("Open log")
             } else {
                 icon
@@ -397,6 +404,7 @@ struct HealthBanner: View {
             }
         }
         .buttonStyle(.borderless)
+        .pointerStyle(.link)
         .foregroundStyle(.secondary)
     }
 

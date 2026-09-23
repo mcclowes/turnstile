@@ -179,6 +179,7 @@ struct ShimSettingsView: View {
                         Button("Remove", systemImage: "minus.circle") { model.removeCustom(row.name) }
                             .labelStyle(.iconOnly)
                             .buttonStyle(.borderless)
+                            .pointerStyle(.link)
                             .help("Stop intercepting \(row.name)")
                     }
                 }

@@ -33,13 +33,6 @@ struct GeneralSettingsView: View {
 
     var body: some View {
         Form {
-            Section {
-                Toggle(isOn: Binding(get: { !monitor.disabled }, set: { monitor.setGating($0) })) {
-                    Text("Gate heavy commands")
-                    Text("Builds and tests wait until there's memory and a free slot. Off lets every command run ungated, on every shell, until you turn it back on.")
-                }
-            }
-
             if monitor.canNotify {
                 Section("Notify me when") {
                     ForEach(MenuBarState.Event.Kind.allCases, id: \.self) { kind in

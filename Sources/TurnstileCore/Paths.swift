@@ -55,6 +55,17 @@ public struct Paths: Sendable {
         try setFlag(queuePausedFlag, paused)
     }
 
+    /// The two flags seen as one switch. Ungated wins, since the shims skip the daemon before its pause applies.
+    public var mode: GatingMode {
+        if isDisabled { return .ungated }
+        return isQueuePaused ? .paused : .gated
+    }
+
+    public func setMode(_ mode: GatingMode) throws {
+        try setDisabled(mode == .ungated)
+        try setQueuePaused(mode == .paused)
+    }
+
     /// Leaves an existing flag untouched, so its modification date says when it was first set.
     private func setFlag(_ path: String, _ on: Bool) throws {
         let exists = FileManager.default.fileExists(atPath: path)
@@ -72,6 +83,40 @@ public struct Paths: Sendable {
     public func ensure() throws {
         for dir in [home, shims, logs] {
             try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        }
+    }
+}
+
+/// How heavy commands are let through, as the menu offers it.
+public enum GatingMode: String, CaseIterable, Sendable {
+    /// Wait for memory and a free slot.
+    case gated
+    /// Running jobs finish; nothing new starts.
+    case paused
+    /// Every command runs straight away.
+    case ungated
+
+    public var title: String {
+        switch self {
+        case .gated: "Gated"
+        case .paused: "Finish running"
+        case .ungated: "Ungated"
+        }
+    }
+
+    public var detail: String {
+        switch self {
+        case .gated: "Wait for memory and a free slot"
+        case .paused: "Running jobs finish; nothing new starts"
+        case .ungated: "Every command runs straight away, in every shell"
+        }
+    }
+
+    public var symbol: String {
+        switch self {
+        case .gated: "shield"
+        case .paused: "pause.fill"
+        case .ungated: MenuBarState.disabledSymbol
         }
     }
 }

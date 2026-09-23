@@ -15,6 +15,7 @@ enum PanelFixtures {
         var snapshot: StatusSnapshot?
         var hovered: Int64? = nil
         var disabled = false
+        var queuePaused = false
     }
 
     private static var windows: [NSWindow] = []
@@ -31,11 +32,12 @@ enum PanelFixtures {
             Fixture(name: "disconnected", snapshot: nil),
             Fixture(name: "gating-off", snapshot: busy(queued: 0), disabled: true),
             Fixture(name: "gating-off-idle", snapshot: nil, disabled: true),
+            Fixture(name: "finish-running", snapshot: busy(), queuePaused: true),
         ]
         var pending: [(NSWindow, URL)] = []
         for fixture in fixtures {
             for (appearance, suffix) in [(NSAppearance.Name.aqua, "light"), (.darkAqua, "dark")] {
-                let panel = MenuPanel(monitor: Monitor(fixture: fixture.snapshot, disabled: fixture.disabled), expandRecent: fixture.name == "recent-expanded")
+                let panel = MenuPanel(monitor: Monitor(fixture: fixture.snapshot, disabled: fixture.disabled, queuePaused: fixture.queuePaused), expandRecent: fixture.name == "recent-expanded")
                     .environment(\.previewHoveredJob, fixture.hovered)
                     .background(.background)
                 let window = NSWindow(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: false)

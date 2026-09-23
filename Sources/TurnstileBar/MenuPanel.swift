@@ -136,7 +136,7 @@ struct MenuPanel: View {
         .padding(.vertical, 22)
     }
 
-    /// The switch lives in Settings; this only shows while it's off, because nothing is protected until it's back on.
+    /// Louder than the footer's mode picker, because nothing is protected until it's back on.
     private var gatingOff: some View {
         HStack(spacing: 8) {
             Image(systemName: MenuBarState.disabledSymbol)
@@ -147,7 +147,7 @@ struct MenuPanel: View {
                 .font(.system(size: 11))
                 .foregroundStyle(MenuBarState.Tone.danger.color)
             Spacer(minLength: 0)
-            Button("Turn on") { monitor.setGating(true) }
+            Button("Turn on") { monitor.setMode(.gated) }
                 .controlSize(.small)
                 .help("Gate heavy commands again")
         }
@@ -183,7 +183,7 @@ struct MenuPanel: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            pauseQueue
+            modePicker
             Spacer(minLength: 0)
             Button {
                 // An accessory app isn't active, so SettingsLink alone opens nothing visible.
@@ -211,19 +211,31 @@ struct MenuPanel: View {
         .padding(.vertical, 8)
     }
 
-    /// Stops new admissions only; a single running job is paused from its own row.
-    private var pauseQueue: some View {
-        let paused = monitor.queuePaused
-        return Button {
-            monitor.setQueuePaused(!paused)
-        } label: {
-            Label(paused ? "Resume queue" : "Pause queue", systemImage: paused ? "play.fill" : "pause.fill")
-                .font(.system(size: 11))
-                .contentShape(.rect)
+    /// A single running job is paused from its own row, not here.
+    private var modePicker: some View {
+        let mode = monitor.mode
+        let tint: Color = switch mode {
+        case .gated: .secondary
+        case .paused: MenuBarState.Tone.warning.color
+        case .ungated: MenuBarState.Tone.danger.color
         }
-        .buttonStyle(.borderless)
-        .foregroundStyle(paused ? MenuBarState.Tone.warning.color : Color.secondary)
-        .help(paused ? "Let queued commands start again" : "Start nothing new; running commands carry on")
+        return Menu {
+            Picker("Mode", selection: Binding(get: { monitor.mode }, set: { monitor.setMode($0) })) {
+                ForEach(GatingMode.allCases, id: \.self) { mode in
+                    Label(mode.title, systemImage: mode.symbol).tag(mode)
+                }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            Label(mode.title, systemImage: mode.symbol)
+                .font(.system(size: 11))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .foregroundStyle(tint)
+        .tint(tint)
+        .help(mode.detail)
     }
 }
 

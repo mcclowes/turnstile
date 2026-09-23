@@ -94,23 +94,19 @@ final class Monitor: NSObject, ObservableObject, UNUserNotificationCenterDelegat
         }
     }
 
-    /// A flag file the shims read, so it works whether or not the daemon is running.
-    func setGating(_ enabled: Bool) {
-        do {
-            try paths.setDisabled(!enabled)
-        } catch {
-            message = "Couldn't turn gating \(enabled ? "on" : "off"): \(error.localizedDescription)"
-        }
-        disabled = paths.isDisabled
+    var mode: GatingMode {
+        if disabled { return .ungated }
+        return queuePaused ? .paused : .gated
     }
 
-    /// Running jobs carry on; the daemon picks the change up on its next tick.
-    func setQueuePaused(_ paused: Bool) {
+    /// Flag files, so the shims see it without the daemon and the daemon picks it up on its next tick.
+    func setMode(_ mode: GatingMode) {
         do {
-            try paths.setQueuePaused(paused)
+            try paths.setMode(mode)
         } catch {
-            message = "Couldn't \(paused ? "pause" : "resume") the queue: \(error.localizedDescription)"
+            message = "Couldn't switch to \(mode.title.lowercased()): \(error.localizedDescription)"
         }
+        disabled = paths.isDisabled
         queuePaused = paths.isQueuePaused
     }
 

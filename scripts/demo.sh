@@ -140,6 +140,9 @@ start() {
   write_tools
   write_repos
   write_agents
+  # Where init would install the CLI; without it the menu bar app says nothing is gated.
+  mkdir -p "$T/home/bin"
+  ln -s "$BIN" "$T/home/bin/turnstile"
   "$BIN" shims > /dev/null
 
   nohup "$BIN" daemon --idle-exit 86400 >> "$T/home/daemon.log" 2>&1 &

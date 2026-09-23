@@ -55,15 +55,26 @@ public struct Paths: Sendable {
         try setFlag(queuePausedFlag, paused)
     }
 
-    /// The two flags seen as one switch. Ungated wins, since the shims skip the daemon before its pause applies.
+    /// While this file exists the daemon stops every running job and admits nothing new.
+    public var pausedFlag: String { home + "/paused" }
+
+    public var isPaused: Bool { FileManager.default.fileExists(atPath: pausedFlag) }
+
+    public func setPaused(_ paused: Bool) throws {
+        try setFlag(pausedFlag, paused)
+    }
+
+    /// The flags seen as one switch; the strongest wins. Disabled beats all, since the shims skip the daemon.
     public var mode: GatingMode {
-        if isDisabled { return .ungated }
-        return isQueuePaused ? .paused : .gated
+        if isDisabled { return .disabled }
+        if isPaused { return .paused }
+        return isQueuePaused ? .holding : .gating
     }
 
     public func setMode(_ mode: GatingMode) throws {
-        try setDisabled(mode == .ungated)
-        try setQueuePaused(mode == .paused)
+        try setDisabled(mode == .disabled)
+        try setPaused(mode == .paused)
+        try setQueuePaused(mode == .holding)
     }
 
     /// Leaves an existing flag untouched, so its modification date says when it was first set.
@@ -87,36 +98,50 @@ public struct Paths: Sendable {
     }
 }
 
-/// How heavy commands are let through, as the menu offers it.
+/// How heavy commands are let through. The menu shows the state and offers the others as actions.
 public enum GatingMode: String, CaseIterable, Sendable {
     /// Wait for memory and a free slot.
-    case gated
+    case gating
     /// Running jobs finish; nothing new starts.
+    case holding
+    /// Running jobs stop; nothing new starts.
     case paused
     /// Every command runs straight away.
-    case ungated
+    case disabled
 
-    public var title: String {
+    public var state: String {
         switch self {
-        case .gated: "Gated"
-        case .paused: "Finish running"
-        case .ungated: "Ungated"
+        case .gating: "Gating"
+        case .holding: "Holding"
+        case .paused: "Paused"
+        case .disabled: "Disabled"
+        }
+    }
+
+    public var action: String {
+        switch self {
+        case .gating: "Enable"
+        case .holding: "Hold new"
+        case .paused: "Pause all"
+        case .disabled: "Disable"
         }
     }
 
     public var detail: String {
         switch self {
-        case .gated: "Wait for memory and a free slot"
-        case .paused: "Running jobs finish; nothing new starts"
-        case .ungated: "Every command runs straight away, in every shell"
+        case .gating: "Commands wait for memory and a free slot"
+        case .holding: "Running jobs finish; nothing new starts"
+        case .paused: "Running jobs are stopped; nothing new starts"
+        case .disabled: "Every command runs ungated, in every shell"
         }
     }
 
     public var symbol: String {
         switch self {
-        case .gated: "shield"
+        case .gating: "shield"
+        case .holding: "hand.raised.fill"
         case .paused: "pause.fill"
-        case .ungated: MenuBarState.disabledSymbol
+        case .disabled: MenuBarState.disabledSymbol
         }
     }
 }

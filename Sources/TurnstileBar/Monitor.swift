@@ -13,6 +13,7 @@ final class Monitor: NSObject, ObservableObject, UNUserNotificationCenterDelegat
     @Published private(set) var disabled = false
     /// A flag file like `disabled`, so it holds across daemon restarts.
     @Published private(set) var queuePaused = false
+    @Published private(set) var pausedAll = false
     @Published private(set) var notifying = Set(MenuBarState.Event.Kind.allCases.filter { Monitor.isOn($0) })
 
     private let paths = Paths()
@@ -42,11 +43,12 @@ final class Monitor: NSObject, ObservableObject, UNUserNotificationCenterDelegat
     }
 
     /// A fixed snapshot for rendering the panel: no polling, no notifications, no daemon.
-    init(fixture: StatusSnapshot?, disabled: Bool = false, queuePaused: Bool = false) {
+    init(fixture: StatusSnapshot?, disabled: Bool = false, queuePaused: Bool = false, pausedAll: Bool = false) {
         super.init()
         snapshot = fixture
         self.disabled = disabled
         self.queuePaused = queuePaused
+        self.pausedAll = pausedAll
         evidence = nil
     }
 
@@ -67,9 +69,11 @@ final class Monitor: NSObject, ObservableObject, UNUserNotificationCenterDelegat
             let status = Client.connect(socketPath: paths.socket)?.roundTrip(Message(type: "status"), timeout: 2)?.status
             let disabled = paths.isDisabled
             let queuePaused = paths.isQueuePaused
+            let pausedAll = paths.isPaused
             DispatchQueue.main.async {
                 self.disabled = disabled
                 self.queuePaused = queuePaused
+                self.pausedAll = pausedAll
                 self.update(status)
             }
         }
@@ -94,9 +98,11 @@ final class Monitor: NSObject, ObservableObject, UNUserNotificationCenterDelegat
         }
     }
 
+    /// Same precedence as `Paths.mode`.
     var mode: GatingMode {
-        if disabled { return .ungated }
-        return queuePaused ? .paused : .gated
+        if disabled { return .disabled }
+        if pausedAll { return .paused }
+        return queuePaused ? .holding : .gating
     }
 
     /// Flag files, so the shims see it without the daemon and the daemon picks it up on its next tick.
@@ -104,10 +110,11 @@ final class Monitor: NSObject, ObservableObject, UNUserNotificationCenterDelegat
         do {
             try paths.setMode(mode)
         } catch {
-            message = "Couldn't switch to \(mode.title.lowercased()): \(error.localizedDescription)"
+            message = "Couldn't \(mode.action.lowercased()): \(error.localizedDescription)"
         }
         disabled = paths.isDisabled
         queuePaused = paths.isQueuePaused
+        pausedAll = paths.isPaused
     }
 
     func clearMessage() {

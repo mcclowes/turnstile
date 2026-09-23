@@ -91,6 +91,8 @@ final class Daemon {
         var adopted = false
         /// Paused by a person, so it's never resumed automatically.
         var pausedByUser = false
+        /// Stopped by Pause all, so leaving it resumes this job and no other.
+        var pausedByPauseAll = false
         /// Times memory pressure has paused it; see `Pressure.resumeDelay`.
         var pressurePauses = 0
         /// When memory first paused it, which is how long queued jobs may keep starting ahead of it.
@@ -174,6 +176,8 @@ final class Daemon {
     /// Escape kinds logged this run, so a thousand compiler processes make one log line.
     var loggedEscapes: Set<String> = []
     var lastPressureAction: Double = 0
+    /// Jobs Pause all has already dealt with, so one resumed by hand isn't stopped again on the next tick.
+    var pauseAllSeen: Set<Int64> = []
     /// The last tick memory was low or swap was growing, which is what a paused job's backoff counts from.
     var lastPressuredAt = -Double.infinity
     var idleSince = Daemon.clock()
@@ -580,10 +584,10 @@ final class Daemon {
     func schedule() {
         let queued = jobs.values.filter { $0.state == .queued }
         guard !queued.isEmpty else { return }
-        if paths.isQueuePaused {
+        if paths.isQueuePaused || paths.isPaused {
             for job in queued {
                 job.startsAt = nil
-                tellWaiting(job, "the queue is paused; resume it from the menu bar")
+                tellWaiting(job, "turnstile is holding new jobs; enable it from the menu bar")
             }
             return
         }
@@ -595,7 +599,7 @@ final class Daemon {
             running: running.map {
                 RunningJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, footprint: $0.footprint, label: $0.label,
                            usualDuration: $0.paused ? nil : $0.usualDuration, elapsed: $0.ranFor(now: clock) ?? 0,
-                           pausedForMemorySince: $0.paused && !$0.pausedByUser ? $0.firstPressurePauseTick ?? clock : nil,
+                           pausedForMemorySince: $0.paused && !$0.pausedByUser && !$0.pausedByPauseAll ? $0.firstPressurePauseTick ?? clock : nil,
                            resumesIn: max(0, Pressure.resumeDelay(pressurePauses: $0.pressurePauses) - calmFor))
             },
             freeMemory: SystemMemory.free(level: memoryLevel),
@@ -672,8 +676,11 @@ final class Daemon {
             let escaped = escapedRoots(parents: parents, active: active)
             for job in active { sample(job, parents: parents, escaped: escaped[job.id] ?? []) }
             for job in active where jobs[job.id] != nil { enforceCeiling(job, now: now) }
+            applyPauseAll(to: active)
             relievePressure(now: now)
             reclaimUnstarted(now: now)
+        } else {
+            pauseAllSeen = []
         }
         if ticks % Daemon.escapeScanTicks == 0 { watchForEscapes(now: Daemon.now()) }
         schedule()
@@ -856,13 +863,37 @@ final class Daemon {
         }
     }
 
+    /// Stops each running job once while Pause all is on; turning it off resumes only the jobs it stopped.
+    func applyPauseAll(to active: [Job]) {
+        guard paths.isPaused else {
+            for job in active where job.pausedByPauseAll {
+                job.pausedByPauseAll = false
+                guard job.paused, !job.pausedByUser else { continue }
+                job.paused = false
+                ProcessTree.signal(job.tree, SIGCONT)
+                log("#\(job.id) resumed, Pause all is off")
+                for connection in job.connections { connection.send(.notice("resumed")) }
+            }
+            pauseAllSeen = []
+            return
+        }
+        for job in active where !job.tree.isEmpty && job.killReason == nil && pauseAllSeen.insert(job.id).inserted {
+            guard !job.paused else { continue }
+            job.paused = true
+            job.pausedByPauseAll = true
+            ProcessTree.signal(job.tree, SIGSTOP)
+            log("#\(job.id) paused, Pause all is on")
+            for connection in job.connections { connection.send(.notice("paused by Pause all; enable turnstile from the menu bar to carry on")) }
+        }
+    }
+
     /// Pauses the newest job when memory runs out, and resumes jobs once it recovers.
     func relievePressure(now: Double) {
         if memoryLevel < config.machine.pauseBelowPercent || memoryPressure > .normal { lastPressuredAt = now }
         guard now - lastPressureAction >= 3 else { return }
         let candidates = jobs.values.filter { $0.state != .queued && !$0.tree.isEmpty && $0.killReason == nil }.map {
             Pressure.Candidate(id: $0.id, startedAt: $0.admittedTick ?? 0, paused: $0.paused, pausable: $0.pausable,
-                               manual: $0.pausedByUser, runaway: $0.runawaySince != nil, pressurePauses: $0.pressurePauses)
+                               manual: $0.pausedByUser || $0.pausedByPauseAll, runaway: $0.runawaySince != nil, pressurePauses: $0.pressurePauses)
         }
         let action = Pressure.action(
             memoryLevel: memoryLevel, pressure: memoryPressure, calmFor: now - lastPressuredAt, jobs: candidates,
@@ -947,6 +978,7 @@ final class Daemon {
             guard job.paused else { return .error("\(name) isn't paused") }
             job.paused = false
             job.pausedByUser = false
+            job.pausedByPauseAll = false
             ProcessTree.signal(job.tree, SIGCONT)
             log("#\(job.id) resumed by request")
             for connection in job.connections { connection.send(.notice("resumed")) }
@@ -981,6 +1013,7 @@ final class Daemon {
         if job.paused {
             job.paused = false
             job.pausedByUser = false
+            job.pausedByPauseAll = false
             ProcessTree.signal(job.tree, SIGCONT)
         }
         guard job.resourceClass == .compile else { return "#\(job.id) is already running, at utility priority, which can't be raised" }
@@ -1031,7 +1064,7 @@ final class Daemon {
                 footprint: job.state == .queued ? nil : job.footprint, peak: job.peak > 0 ? job.peak : nil,
                 paused: job.paused, clientPid: job.clientPid, childPid: job.childPid, queuedAt: job.queuedAt,
                 startedAt: job.startedAt, waiting: job.lastWait, joiners: job.joiners.count,
-                held: job.held, pausedBy: job.paused ? (job.pausedByUser ? "you" : "memory") : nil,
+                held: job.held, pausedBy: job.paused ? (job.pausedByUser || job.pausedByPauseAll ? "you" : "memory") : nil,
                 estimateSource: job.estimateSource,
                 tree: job.state == .queued ? nil : job.tree,
                 escapees: job.escapees.isEmpty ? nil : job.escapees.sorted(),

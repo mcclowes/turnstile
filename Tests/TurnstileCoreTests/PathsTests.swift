@@ -43,28 +43,34 @@ struct PathsTests {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent("turnstile-paths-\(UUID().uuidString)").path
         defer { try? FileManager.default.removeItem(atPath: home) }
         let paths = Paths(home: home)
-        #expect(paths.mode == .gated)
+        #expect(paths.mode == .gating)
+
+        try paths.setMode(.holding)
+        #expect(paths.mode == .holding)
+        #expect(paths.isQueuePaused && !paths.isDisabled && !paths.isPaused)
 
         try paths.setMode(.paused)
         #expect(paths.mode == .paused)
-        #expect(paths.isQueuePaused && !paths.isDisabled)
+        #expect(paths.isPaused && !paths.isQueuePaused && !paths.isDisabled)
 
-        try paths.setMode(.ungated)
-        #expect(paths.mode == .ungated)
-        #expect(paths.isDisabled && !paths.isQueuePaused)
+        try paths.setMode(.disabled)
+        #expect(paths.mode == .disabled)
+        #expect(paths.isDisabled && !paths.isQueuePaused && !paths.isPaused)
 
-        try paths.setMode(.gated)
-        #expect(paths.mode == .gated)
-        #expect(!paths.isDisabled && !paths.isQueuePaused)
+        try paths.setMode(.gating)
+        #expect(paths.mode == .gating)
+        #expect(!paths.isDisabled && !paths.isQueuePaused && !paths.isPaused)
     }
 
-    @Test func ungatedWinsWhenBothFlagsAreSet() throws {
+    @Test func theStrongestFlagWinsWhenSeveralAreSet() throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent("turnstile-paths-\(UUID().uuidString)").path
         defer { try? FileManager.default.removeItem(atPath: home) }
         let paths = Paths(home: home)
-        try paths.setDisabled(true)
         try paths.setQueuePaused(true)
-        // The shims pass straight through before the daemon's pause could hold anything.
-        #expect(paths.mode == .ungated)
+        try paths.setPaused(true)
+        #expect(paths.mode == .paused)
+        // The shims pass straight through before the daemon could hold anything.
+        try paths.setDisabled(true)
+        #expect(paths.mode == .disabled)
     }
 }

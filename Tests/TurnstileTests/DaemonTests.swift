@@ -110,7 +110,7 @@ struct DaemonAdmissionTests {
         harness.request(waiting)
         let told = waiting.received()
         #expect(!told.contains { $0.type == "admitted" })
-        #expect(told.contains { $0.type == "queued" && $0.text?.contains("paused") == true })
+        #expect(told.contains { $0.type == "queued" && $0.text?.contains("holding new jobs") == true })
 
         try harness.daemon.paths.setQueuePaused(false)
         harness.daemon.schedule()
@@ -429,6 +429,49 @@ struct DaemonPressureTests {
         harness.daemon.memoryLevel = 80
         harness.daemon.relievePressure(now: Daemon.clock() + 10)
         #expect(harness.job(id)?.paused == true)
+    }
+
+    @Test func pauseAllStopsRunningJobsAndResumesOnlyThoseItStopped() throws {
+        let harness = try DaemonHarness()
+        let mine = FakeClient(), theirs = FakeClient(), waiting = FakeClient()
+        let mineTool = try harness.sleeper(), theirsTool = try harness.sleeper()
+        let mineID = harness.request(mine, root: "/mine")
+        harness.started(mine, childPid: mineTool.processIdentifier)
+        let theirsID = harness.request(theirs, root: "/theirs")
+        harness.started(theirs, childPid: theirsTool.processIdentifier)
+        #expect(harness.control("pause", "\(theirsID!)").type == "ok")
+
+        try harness.daemon.paths.setMode(.paused)
+        harness.daemon.tick()
+        #expect(DaemonHarness.state(mineTool.processIdentifier).hasPrefix("T"))
+        #expect(harness.job(mineID)?.paused == true)
+        harness.request(waiting, root: "/waiting")
+        #expect(!waiting.types().contains("admitted"))
+
+        // Memory recovering doesn't undo a pause someone asked for.
+        harness.daemon.memoryLevel = 80
+        harness.daemon.relievePressure(now: Daemon.clock() + 10)
+        #expect(harness.job(mineID)?.paused == true)
+
+        try harness.daemon.paths.setMode(.gating)
+        harness.daemon.tick()
+        #expect(!DaemonHarness.state(mineTool.processIdentifier).hasPrefix("T"))
+        #expect(harness.job(mineID)?.paused == false)
+        #expect(harness.job(theirsID)?.paused == true)
+    }
+
+    @Test func aJobResumedByHandStaysRunningWhilePaused() throws {
+        let harness = try DaemonHarness()
+        let owner = FakeClient()
+        let tool = try harness.sleeper()
+        let id = harness.request(owner)
+        harness.started(owner, childPid: tool.processIdentifier)
+
+        try harness.daemon.paths.setMode(.paused)
+        harness.daemon.tick()
+        #expect(harness.control("resume", "\(id!)").type == "ok")
+        harness.daemon.tick()
+        #expect(harness.job(id)?.paused == false)
     }
 
     /// #17: the level stays healthy while the machine swaps, because swapping is what holds it up.

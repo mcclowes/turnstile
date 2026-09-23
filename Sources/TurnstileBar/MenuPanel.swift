@@ -144,11 +144,11 @@ struct MenuPanel: View {
                 .font(.system(size: 12))
                 .foregroundStyle(MenuBarState.Tone.danger.color)
                 .frame(width: BadgeTile.defaultSize)
-            Text("Gating is off: every command runs ungated")
+            Text("Disabled: every command runs ungated")
                 .font(.system(size: 11))
                 .foregroundStyle(MenuBarState.Tone.danger.color)
             Spacer(minLength: 0)
-            Button("Turn on") { monitor.setMode(.gated) }
+            Button("Enable") { monitor.setMode(.gating) }
                 .controlSize(.small)
                 .pointerStyle(.link)
                 .help("Gate heavy commands again")
@@ -216,28 +216,28 @@ struct MenuPanel: View {
         .padding(.vertical, 8)
     }
 
-    /// A single running job is paused from its own row, not here.
+    /// Shows the state; the menu offers the other modes as actions. A single job is paused from its own row.
     private var modePicker: some View {
         let mode = monitor.mode
         let tint: Color = switch mode {
-        case .gated: .secondary
-        case .paused: MenuBarState.Tone.warning.color
-        case .ungated: MenuBarState.Tone.danger.color
+        case .gating: .secondary
+        case .holding, .paused: MenuBarState.Tone.warning.color
+        case .disabled: MenuBarState.Tone.danger.color
         }
         return Menu {
-            Picker("Mode", selection: Binding(get: { monitor.mode }, set: { monitor.setMode($0) })) {
-                ForEach(GatingMode.allCases, id: \.self) { mode in
-                    Label(mode.title, systemImage: mode.symbol).tag(mode)
+            ForEach(GatingMode.allCases.filter { $0 != mode }, id: \.self) { option in
+                Button {
+                    monitor.setMode(option)
+                } label: {
+                    Label(option.action, systemImage: option.symbol)
+                    Text(option.detail)
                 }
             }
-            .pickerStyle(.inline)
-            .labelsHidden()
         } label: {
-            Label(mode.title, systemImage: mode.symbol)
+            Label(mode.state, systemImage: mode.symbol)
                 .font(.system(size: 11))
         }
         .menuStyle(.borderlessButton)
-        .pointerStyle(.link)
         .fixedSize()
         .foregroundStyle(tint)
         .tint(tint)

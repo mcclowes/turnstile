@@ -2,11 +2,16 @@
 
 Notable changes to turnstile. Versions follow [semantic versioning](https://semver.org/).
 
-## Unreleased
+## 0.8.1
+
+### Changed
+
+- Recent jobs in the menu bar show their stats on one line, separated by a middle dot, with the full command in a tooltip.
 
 ### Fixed
 
 - The version-skew fix now relinks the installed binary, so it no longer restarts a stale daemon when `~/.turnstile/bin` holds a copy.
+- Test jobs use a test tube icon instead of a completion tick.
 
 ## 0.8.0
 

@@ -41,6 +41,7 @@ struct JobRow: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(hovering ? Color(nsColor: .quaternaryLabelColor).opacity(0.5) : .clear)
         )
+        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .padding(.horizontal, Panel.gutter - 8)
         .onHover { inside in
             hoveringNow = inside

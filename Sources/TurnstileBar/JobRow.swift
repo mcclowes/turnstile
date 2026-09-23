@@ -131,7 +131,6 @@ struct JobRow: View {
             iconButton(toggle, symbol: MenuBarState.symbol(for: toggle), tint: Color(nsColor: .secondaryLabelColor)) {
                 send(toggle.message)
             }
-            Divider().frame(height: 12).padding(.horizontal, 3)
             killButton(actions[2])
         }
         .disabled(!hovering)

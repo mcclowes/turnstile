@@ -22,6 +22,8 @@ APP="${TURNSTILE_APP:-/Applications/Turnstile.app/Contents/MacOS/TurnstileBar}"
 
 demo_env() {
   export TURNSTILE_HOME="$T/home" TURNSTILE_CONFIG_DIR="$T/config" TURNSTILE_MEMORY_LEVEL_FILE="$T/level"
+  # The real Mac's swap and kernel pressure would otherwise hold the queue whatever the faked level says.
+  export TURNSTILE_SWAP_USED_FILE="$T/swap" TURNSTILE_PRESSURE_LEVEL_FILE="$T/pressure"
   export PATH="$T/home/shims:$T/bin:$(without_shims)"
   unset TURNSTILE_TOKEN TURNSTILE_DISABLE
 }
@@ -123,6 +125,7 @@ EOF
   cat > "$T/rc" <<EOF
 export BASH_SILENCE_DEPRECATION_WARNING=1 TURNSTILE_AGENT=0
 export TURNSTILE_HOME="$TURNSTILE_HOME" TURNSTILE_CONFIG_DIR="$TURNSTILE_CONFIG_DIR" TURNSTILE_MEMORY_LEVEL_FILE="$TURNSTILE_MEMORY_LEVEL_FILE"
+export TURNSTILE_SWAP_USED_FILE="$TURNSTILE_SWAP_USED_FILE" TURNSTILE_PRESSURE_LEVEL_FILE="$TURNSTILE_PRESSURE_LEVEL_FILE"
 export PATH="$PATH"
 unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT CODEX_THREAD_ID
 PS1='\[\e[2m\]\W\[\e[0m\] \$ '
@@ -137,6 +140,8 @@ start() {
   demo_env
   mkdir -p "$T/config"
   echo "$BASE_LEVEL" > "$T/level"
+  echo 0 > "$T/swap"
+  echo 1 > "$T/pressure"
   write_tools
   write_repos
   write_agents

@@ -6,6 +6,7 @@ sidebar_label: Overview
 ---
 
 import HomepageDemo from '@site/src/components/HomepageDemo';
+import YouTubeEmbed from '@site/src/components/YouTubeEmbed';
 
 # turnstile
 
@@ -61,6 +62,10 @@ Nobody had to tell the publish script about turnstile. It caught the heavy step 
 ## Your Mac as CI
 
 The same gate makes it safe to run CI on the machine you work on. A self-hosted runner on your Mac gets Xcode, simulators, and warm caches for free, but on its own it has no idea your agents are compiling. Behind turnstile, a push queues for memory like everything else, runs at background priority, and yields to you. See [your Mac as a CI runner](./start/local-ci.md).
+
+## Watch the walkthrough
+
+<YouTubeEmbed id="XKwM34pRH7I" title="Turnstile - machine-wide, memory-aware gate for builds and tests" />
 
 ## Where to go next
 

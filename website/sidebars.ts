@@ -7,7 +7,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Start here',
       collapsed: false,
-      items: ['start/install', 'start/agents'],
+      items: ['start/install', 'start/agents', 'start/local-ci'],
     },
     {
       type: 'category',

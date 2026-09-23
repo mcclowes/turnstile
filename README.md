@@ -44,6 +44,10 @@ Gated by default: `swift`, `xcodebuild`, `cargo`, `go`, `gradle`, `make`, `npm`,
 
 More in [how it works](https://turnstile.marginalutility.dev/how-it-works), [scheduling](https://turnstile.marginalutility.dev/scheduling), and [memory pressure](https://turnstile.marginalutility.dev/pressure).
 
+## Your Mac as CI
+
+The same gate makes a self-hosted CI runner on your working Mac safe. CI jobs queue for memory alongside your agents, run at background priority, and yield to you, so a push can't swap the machine you're using. Put the shims on the runner's PATH and you're done. See [your Mac as a CI runner](https://turnstile.marginalutility.dev/local-ci).
+
 ## Everyday commands
 
 | Command | What it does |

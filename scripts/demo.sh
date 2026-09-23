@@ -23,6 +23,8 @@ FILL=0.25
 without_shims() { echo "$PATH" | tr ':' '\n' | grep -v '\.turnstile/shims' | paste -sd: -; }
 BIN="${TURNSTILE_BIN:-$(PATH="$(without_shims)" command -v turnstile || true)}"
 APP="${TURNSTILE_APP:-/Applications/Turnstile.app/Contents/MacOS/TurnstileBar}"
+APP_ID=com.mcclowes.turnstile
+USER_PATH="$PATH"
 
 demo_env() {
   export TURNSTILE_HOME="$T/home" TURNSTILE_CONFIG_DIR="$T/config" TURNSTILE_MEMORY_LEVEL_FILE="$T/level"
@@ -161,8 +163,11 @@ start() {
 
   nohup "$BIN" daemon --idle-exit 86400 >> "$T/home/daemon.log" 2>&1 &
   echo $! > "$T/daemon.pid"
+  # Both copies share a bundle id, so macOS gives their icons one position and one visibility. Stop brings yours back.
   if pgrep -xq TurnstileBar; then
-    echo "Quit your own menu bar app so only the demo's icon shows (it's the same binary)."
+    osascript -e "tell application id \"$APP_ID\" to quit" > /dev/null 2>&1 || true
+    for _ in $(seq 20); do pgrep -xq TurnstileBar || break; sleep 0.25; done
+    touch "$T/reopen-app"
   fi
   nohup "$APP" > /dev/null 2>&1 &
   echo $! > "$T/app.pid"
@@ -184,8 +189,11 @@ stop() {
   done
   "$BIN" stop > /dev/null 2>&1 || true
   pkill -f "$T/bin/" 2> /dev/null || true
+  # open hands the app this environment, so drop the demo's first.
+  [ -f "$T/reopen-app" ] && env -u TURNSTILE_HOME -u TURNSTILE_CONFIG_DIR -u TURNSTILE_MEMORY_LEVEL_FILE \
+    -u TURNSTILE_SWAP_USED_FILE -u TURNSTILE_PRESSURE_LEVEL_FILE PATH="$USER_PATH" open -b "$APP_ID"
   rm -rf "$T"
-  echo "Demo stopped. Reopen your own menu bar app if you quit it."
+  echo "Demo stopped."
 }
 
 case "${1:-}" in

@@ -18,15 +18,32 @@ turnstile makes that setup safe. CI jobs queue for the same slots and the same m
 - **Visible waits.** A queued job prints why it's waiting every 30 seconds, so the CI log shows a queue, not a hang.
 - **Nothing to break.** If the daemon isn't there, commands run ungated. CI never fails because of turnstile.
 
+## What it looks like
+
+A real queue: a GitHub Actions job running the test suite with coverage, next to an agent's compile in a working checkout of the same repo. Both are marked as agent work, and both were admitted against the same memory budget:
+
+```
+memory: 36% free (~5.8 GB of 16 GB), slots: compile 3, test 3, browser 3
+
+running:
+  #2345  test    saggar-desktop-ci npm run coverage:swift  1.1 GB now, peak 2.7 GB, est ~2.4 GB from other projects, 6m21s  [agent]
+  #2347  compile saggar-desktop swift build  23 MB now, peak 23 MB, est ~2.5 GB, 11s  [agent]
+```
+
+The CI checkout had no history of its own yet, so its estimate came from the same command's runs in other checkouts.
+
 ## Set up a GitHub Actions runner
 
-A runner started as a service doesn't read your shell's startup files, so it won't see the shims until you put them on its PATH. The runner reads its PATH from the `.path` file in its install directory. Put the shims first:
+A runner started as a service doesn't read your shell's startup files. Instead, it takes a snapshot of PATH when you configure it and saves that to a `.path` file in its install directory. So if turnstile is installed, configure the runner from a normal shell and the shims are already first:
 
 ```sh
 cd ~/actions-runner
-echo "$HOME/.turnstile/shims:$(cat .path)" > .path
-./svc.sh stop && ./svc.sh start
+./config.sh --url https://github.com/<owner>/<repo> --token <token>
+./svc.sh install && ./svc.sh start
+head -c 80 .path   # should start with ~/.turnstile/shims
 ```
+
+For a runner configured before you installed turnstile, run `./env.sh` from a new shell to take the snapshot again, then restart the service with `./svc.sh stop && ./svc.sh start`.
 
 To do it per workflow instead, add a step before the build:
 
@@ -41,6 +58,16 @@ Setup actions such as `actions/setup-node` also prepend to PATH, so a toolchain 
 ```
 
 Other runners (GitLab, Buildkite, Jenkins agents) work the same way: get `~/.turnstile/shims` to the front of the job's PATH, or use `turnstile run`.
+
+### Keep the workspace warm
+
+The runner's workspace persists between jobs, which is most of the speed advantage over a hosted runner. Keep it:
+
+- `clean: false` on `actions/checkout` stops it wiping untracked files and deleting `.build`, `target`, or `node_modules`.
+- Skip `actions/cache` for build output. Uploading gigabytes to GitHub each run costs more than the warm directory already saves.
+- `concurrency` with `cancel-in-progress: true` drops a superseded run, so a quick second push doesn't mean two full builds.
+
+This is also a good time to take heavy verification out of git hooks. A pre-push build in every agent's worktree scales with the number of agents. One warm CI checkout scales with the number of pushes.
 
 ## Check it's gated
 

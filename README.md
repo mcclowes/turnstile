@@ -46,7 +46,7 @@ More in [how it works](https://turnstile.marginalutility.dev/how-it-works), [sch
 
 ## Your Mac as CI
 
-The same gate makes a self-hosted CI runner on your working Mac safe. CI jobs queue for memory alongside your agents, run at background priority, and yield to you, so a push can't swap the machine you're using. Put the shims on the runner's PATH and you're done. See [your Mac as a CI runner](https://turnstile.marginalutility.dev/local-ci).
+The same gate makes a self-hosted CI runner on your working Mac safe. CI jobs queue for memory alongside your agents, run at background priority, and yield to you, so a push can't swap the machine you're using. Configure the runner from a shell with turnstile installed and it's gated from the first job. See [your Mac as a CI runner](https://turnstile.marginalutility.dev/local-ci).
 
 ## Everyday commands
 

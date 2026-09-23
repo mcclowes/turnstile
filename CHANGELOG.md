@@ -2,6 +2,16 @@
 
 Notable changes to turnstile. Versions follow [semantic versioning](https://semver.org/).
 
+## 0.8.2
+
+### Changed
+
+- Pausing a job says how much memory it still holds and that its reservation is kept.
+
+### Fixed
+
+- A killed job's client now exits 125 even when the tool exits before the cancel reaches it, instead of mirroring the tool's SIGTERM.
+
 ## 0.8.1
 
 ### Changed

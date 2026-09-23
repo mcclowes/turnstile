@@ -68,7 +68,7 @@ public enum MenuBarState {
     public static func symbol(for resourceClass: ResourceClass) -> String {
         switch resourceClass {
         case .compile: return "hammer.fill"
-        case .test: return "checkmark.seal.fill"
+        case .test: return "testtube.2"
         case .browser: return "globe"
         }
     }

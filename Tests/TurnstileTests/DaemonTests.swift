@@ -331,7 +331,9 @@ struct DaemonControlTests {
         let id = harness.request(owner)
         harness.started(owner, childPid: tool.processIdentifier)
 
-        #expect(harness.control("pause", "\(id!)").type == "ok")
+        let paused = harness.control("pause", "\(id!)")
+        #expect(paused.type == "ok")
+        #expect(paused.text?.contains("reservation kept") == true)
         #expect(DaemonHarness.state(tool.processIdentifier).hasPrefix("T"))
         #expect(harness.job(id)?.pausedByUser == true)
 

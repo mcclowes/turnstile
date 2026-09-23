@@ -940,7 +940,9 @@ final class Daemon {
             if !wasPaused { ProcessTree.signal(job.tree, SIGSTOP) }
             log("#\(job.id) paused by request")
             for connection in job.connections { connection.send(.notice("paused by you; `turnstile resume #\(job.id)` to carry on")) }
-            text = wasPaused ? "\(name) was already paused; it now stays paused until you resume it" : "paused \(name)"
+            text = wasPaused
+                ? "\(name) was already paused; it now stays paused until you resume it"
+                : "paused \(name); holding \(Bytes.format(job.footprint)), reservation kept"
         case "resume":
             guard job.paused else { return .error("\(name) isn't paused") }
             job.paused = false

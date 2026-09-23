@@ -239,13 +239,14 @@ struct RecentRow: View {
                 Text(entry.project)
                     .font(.system(size: 12, weight: .medium))
                     .layoutPriority(1)
+                    .help("#\(entry.id) \(entry.project)")
                 Text(entry.key)
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .truncationMode(.middle)
+                    .help(entry.key)
             }
             .lineLimit(1)
-            .help("#\(entry.id) \(entry.project) \(entry.key)")
             if let note = MenuBarState.outcomeNote(for: entry) {
                 let tone = MenuBarState.badge(for: entry).tone
                 Text(note)
@@ -254,8 +255,7 @@ struct RecentRow: View {
                     .fixedSize()
             }
             Spacer(minLength: 6)
-            column(entry.duration.map(formatDuration) ?? "–", width: 52, help: "How long it ran")
-            column(entry.peak.map { Bytes.format($0) } ?? "–", width: 52, help: "Peak memory")
+            stats
         }
         .padding(.horizontal, Panel.gutter)
         .padding(.vertical, 5)
@@ -289,13 +289,17 @@ struct RecentRow: View {
         .help(MenuBarState.outcomeHelp(for: entry))
     }
 
-    private func column(_ text: String, width: CGFloat, help: String) -> some View {
-        Text(text)
+    /// "1.9 GB · 7m25s", matching the running rows so the two sections line up.
+    private var stats: some View {
+        let peak = entry.peak.map { Bytes.format($0) }
+        let duration = entry.duration.map(formatDuration)
+        return Text([peak, duration].compactMap { $0 }.joined(separator: " · "))
             .font(.system(size: 11).monospacedDigit())
             .foregroundStyle(.secondary)
             .lineLimit(1)
-            .frame(width: width, alignment: .trailing)
-            .help(help)
+            .fixedSize()
+            .help([peak.map { "Peak memory \($0)" }, duration.map { "Ran for \($0)" }]
+                .compactMap { $0 }.joined(separator: " · "))
     }
 }
 

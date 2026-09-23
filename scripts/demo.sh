@@ -15,6 +15,10 @@ set -eu
 T=/tmp/turnstile-demo
 BASE_LEVEL=45
 PRESSURE_LEVEL=4
+# Memory is scaled to the machine, so a 16 GB and a 64 GB Mac show the same contention.
+UNIT_MB=$(( $(sysctl -n hw.memsize) / 16 / 1048576 ))
+# Share of its estimate each fake job really holds: enough for the bars to move, not enough to swap the Mac.
+FILL=0.25
 
 without_shims() { echo "$PATH" | tr ':' '\n' | grep -v '\.turnstile/shims' | paste -sd: -; }
 BIN="${TURNSTILE_BIN:-$(PATH="$(without_shims)" command -v turnstile || true)}"
@@ -30,22 +34,29 @@ demo_env() {
 
 write_tools() {
   mkdir -p "$T/bin"
-  # Prints each step spread over a random duration between $1 and $2 seconds.
-  cat > "$T/bin/_work" <<'EOF'
-#!/bin/bash
-low=$1 high=$2; shift 2
-total=$(( low + RANDOM % (high - low + 1) ))
-gap=$(awk -v t="$total" -v n="$#" 'BEGIN { printf "%.2f", t / n }')
-for step in "$@"; do sleep "$gap"; echo "$step"; done
+  # _work <units> <low> <high> <step>...: prints each step spread over $low to $high seconds, growing to FILL of the
+  # command's estimate in real memory. Random pages don't compress, and copying a 1 MB block keeps allocation fast.
+  cat > "$T/bin/_work" <<EOF
+#!/usr/bin/python3
+import os, random, sys, time
+units, low, high, steps = float(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[4:]
+target = int(units * $UNIT_MB * $FILL)
+gap = random.randint(low, high) / len(steps)
+block, held = os.urandom(1 << 20), []
+for i, step in enumerate(steps, 1):
+    while len(held) < target * i // len(steps):
+        held.append(bytearray(block))
+    time.sleep(gap)
+    print(step, flush=True)
 EOF
   cat > "$T/bin/swift" <<'EOF'
 #!/bin/bash
 case "$1" in
   build) echo "Building for debugging..."
-    _work 18 30 "[24/186] Compiling ApiCore Router.swift" "[71/186] Compiling ApiCore Session.swift" \
+    _work 2.5 18 30 "[24/186] Compiling ApiCore Router.swift" "[71/186] Compiling ApiCore Session.swift" \
       "[128/186] Compiling ApiServer Handlers.swift" "[186/186] Linking api" "Build complete!" ;;
   test) echo "Building for debugging..."
-    _work 12 22 "[186/186] Linking apiPackageTests" "Test Suite 'All tests' started" \
+    _work 1.5 12 22 "[186/186] Linking apiPackageTests" "Test Suite 'All tests' started" \
       "Test Suite 'RouterTests' passed" "Test Suite 'SessionTests' passed" "Executed 214 tests, with 0 failures" ;;
   *) echo "Swift version 6.2 (swift-6.2-RELEASE)" ;;
 esac
@@ -53,9 +64,9 @@ EOF
   cat > "$T/bin/cargo" <<'EOF'
 #!/bin/bash
 case "$1" in
-  build) _work 16 28 "   Compiling serde v1.0.219" "   Compiling tokio v1.47.1" "   Compiling engine-core v0.4.0" \
+  build) _work 2 16 28 "   Compiling serde v1.0.219" "   Compiling tokio v1.47.1" "   Compiling engine-core v0.4.0" \
       "   Compiling engine v0.4.0" "    Finished \`dev\` profile [unoptimized + debuginfo] target(s)" ;;
-  test) _work 12 20 "   Compiling engine v0.4.0" "     Running unittests src/lib.rs" "test result: ok. 96 passed; 0 failed" \
+  test) _work 1.5 12 20 "   Compiling engine v0.4.0" "     Running unittests src/lib.rs" "test result: ok. 96 passed; 0 failed" \
       "   Doc-tests engine" "test result: ok. 12 passed; 0 failed" ;;
   *) echo "cargo 1.90.0" ;;
 esac
@@ -65,13 +76,13 @@ EOF
 [ "$1" = run ] && shift
 case "$1" in
   build) printf '> web@1.0.0 build\n> next build\n'
-    _work 16 26 "   Creating an optimized production build ..." " ✓ Compiled successfully" \
+    _work 2 16 26 "   Creating an optimized production build ..." " ✓ Compiled successfully" \
       " ✓ Linting and checking validity of types" " ✓ Generating static pages (48/48)" " ✓ Finalizing page optimization" ;;
   test) printf '> web@1.0.0 test\n> vitest run\n'
-    _work 8 16 " ✓ src/lib/format.test.ts (22 tests)" " ✓ src/components/Cart.test.tsx (18 tests)" \
+    _work 1 8 16 " ✓ src/lib/format.test.ts (22 tests)" " ✓ src/components/Cart.test.tsx (18 tests)" \
       " ✓ src/app/checkout.test.ts (31 tests)" " Test Files  24 passed (24)" "      Tests  311 passed (311)" ;;
   e2e) printf '> web@1.0.0 e2e\n> playwright test\n'
-    _work 24 36 "Running 64 tests using 4 workers" "  ✓  checkout.spec.ts:12:3 › guest checkout" \
+    _work 1.5 24 36 "Running 64 tests using 4 workers" "  ✓  checkout.spec.ts:12:3 › guest checkout" \
       "  ✓  auth.spec.ts:8:3 › sign in with email" "  ✓  search.spec.ts:20:3 › filters results" "  64 passed" ;;
   install|ci) echo "up to date, audited 812 packages in 1s" ;;
   *) echo "10.9.2" ;;
@@ -81,9 +92,7 @@ EOF
 }
 
 write_repos() {
-  local unit=$(( $(sysctl -n hw.memsize) / 16 / 1048576 ))
-  mb() { awk -v u="$unit" -v x="$1" 'BEGIN { printf "\"%dMB\"", u * x }'; }
-  # Memory is scaled to the machine, so a 16 GB and a 64 GB Mac show the same contention.
+  mb() { awk -v u="$UNIT_MB" -v x="$1" 'BEGIN { printf "\"%dMB\"", u * x }'; }
   cat > "$T/config/config.json" <<EOF
 {"concurrency": {"compile": 3, "test": 3, "browser": 1}, "reserve": $(mb 1), "pauseBelow": 8, "resumeAbove": 30}
 EOF

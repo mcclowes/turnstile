@@ -332,9 +332,16 @@ enum Supervisor {
         }
         if daemonOpen {
             client.send(finished)
-            // Wait briefly for a final notice, such as a kill reason.
+            // Wait briefly for a final notice, such as a kill reason. A kill signals the tool before it tells
+            // us, so a cancel can still be waiting here, and the daemon always sends it before this `ok`.
             while case let .message(message) = client.read(timeout: 0.3) {
-                if message.type == "notice", let text = message.text { warn(text) }
+                switch message.type {
+                case "notice": if let text = message.text { warn(text) }
+                case "cancelled" where !cancelled:
+                    cancelled = true
+                    warn(message.text ?? Turnstile.cancelledText)
+                default: break
+                }
                 if message.type == "ok" { break }
             }
         }

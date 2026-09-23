@@ -275,6 +275,25 @@ struct SupervisorTests {
         #expect(run.exitCode == Turnstile.cancelledExitCode)
     }
 
+    /// The daemon signals the tree before telling the client, so the tool can exit before `cancelled` is read.
+    @Test func aCancelReadAfterTheToolExitsStillCountsAsCancelled() throws {
+        let (run, _) = try ShimRun.run(environment: ["FAKE_SLEEP": "30"]) { paths in
+            FakeDaemon(socket: paths.socket) { message, _, send, _ in
+                switch message.type {
+                case "request": send(reply("admitted", job: 5))
+                case "started": if let child = message.childPid { kill(child, SIGTERM) }
+                case "finished":
+                    send(reply("cancelled", job: 5, text: Turnstile.cancelledText))
+                    send(reply("ok"))
+                default: break
+                }
+            }
+        }
+        #expect(!run.signaled)
+        #expect(run.exitCode == Turnstile.cancelledExitCode)
+        #expect(run.stderr.contains("don't retry"))
+    }
+
     @Test func aRunningJobReRegistersWhenItsDaemonDies() throws {
         let (run, daemon) = try ShimRun.run(environment: ["FAKE_SLEEP": "1"]) { paths in
             FakeDaemon(socket: paths.socket) { message, _, send, hangUp in

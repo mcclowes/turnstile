@@ -22,8 +22,7 @@ Compare with the current code and open issues (`gh issue list --state all --limi
 
 ## Output
 
-1. Write a private report to `~/.turnstile/reviews/YYYY-MM-DD.md`: headline numbers, then ranked findings with the evidence (queries and figures) behind each.
-2. For the top findings (max 3 per run) that are new, clearly actionable, and not already covered by an issue, open a GitHub issue in this repo with `gh issue create --label enhancement` (or `bug`). This repo is PUBLIC: issues must describe the product problem in general terms. Never include other project names, paths, command lines from other repos, usernames, or log excerpts. Use aggregate numbers only (for example "median wait 6m across ~200 Swift builds").
-3. Print a one-paragraph summary with the report path and any issue links.
+1. Write a private report to `~/.turnstile/reviews/YYYY-MM-DD.md`: headline numbers, then ranked findings with the evidence (queries and figures) behind each. For each finding, note whether an existing issue covers it.
+2. Print a one-paragraph summary with the report path.
 
-Don't edit code, commit, or push. Be direct and sparing; a run with no new findings should say so and open nothing.
+Don't open or comment on issues, edit code, commit, or push. Be direct and sparing; a run with no new findings should say so.

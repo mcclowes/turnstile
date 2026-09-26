@@ -2,6 +2,23 @@
 
 Notable changes to turnstile. Versions follow [semantic versioning](https://semver.org/).
 
+## 0.9.0
+
+### Added
+
+- Pause all stops running jobs and resumes only the jobs it stopped when you enable turnstile again.
+
+### Changed
+
+- The menu bar footer shows whether turnstile is gating, holding, paused, or disabled, and lets you switch modes.
+
+### Fixed
+
+- Shrinking swap after a growth spurt no longer looks like calm memory.
+- Settling jobs stop promising a start when calm memory breaks.
+- A new worktree no longer borrows its main checkout's memory high-water mark.
+- Queued job controls appear when you hover anywhere over the row.
+
 ## 0.8.2
 
 ### Changed

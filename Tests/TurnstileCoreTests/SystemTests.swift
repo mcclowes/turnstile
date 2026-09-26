@@ -310,6 +310,22 @@ struct FingerprintInputTests {
         #expect(Workspace.inspect(cwd: root, argv: ["swift", "build"]).fingerprint != clean.fingerprint)
     }
 
+    @Test func aLinkedWorktreeKnowsItsMainCheckout() throws {
+        let root = try Self.makeRepo()
+        let linked = root + "-wt"
+        defer {
+            try? FileManager.default.removeItem(atPath: root)
+            try? FileManager.default.removeItem(atPath: linked)
+        }
+        _ = Workspace.git(["worktree", "add", "-q", linked], cwd: root, deadline: .distantFuture)
+        let resolvedLinked = Workspace.root(of: linked)
+
+        #expect(Workspace.inspect(cwd: root, argv: []).home == nil)
+        let workspace = Workspace.inspect(cwd: resolvedLinked, argv: [])
+        #expect(workspace.root == resolvedLinked)
+        #expect(workspace.home == root)
+    }
+
     @Test func slowGitGivesUpOnTheFingerprintButKeepsTheRoot() throws {
         let root = try Self.makeRepo()
         defer { try? FileManager.default.removeItem(atPath: root) }

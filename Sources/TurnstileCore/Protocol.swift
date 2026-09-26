@@ -16,6 +16,8 @@ public struct Message: Codable, Equatable, Sendable {
     public var memory: UInt64?
     public var cwd: String?
     public var root: String?
+    /// The main checkout's root, when `root` is a linked worktree.
+    public var home: String?
     public var fingerprint: String?
     public var agent: Bool?
     public var pausable: Bool?

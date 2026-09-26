@@ -414,9 +414,10 @@ final class Daemon {
         var usualDuration: Double?
     }
 
-    /// Config first, then this project's history, then other projects', then the class default.
+    /// Config first, then this project's history, then its main checkout's, then other projects', then the class default.
     func cost(of request: Message, key: String, root: String) -> Cost {
         var cost = memoryCost(of: request, key: key, root: root)
+        // Not borrowed from the main checkout: its runs are warm and a new worktree's are cold.
         cost.usualDuration = store.usualDuration(key: key, root: root)
         return cost
     }
@@ -427,6 +428,9 @@ final class Daemon {
         let highWater = store.highWaterPeak(key: key, root: root, now: Daemon.now())
         if let memory = request.memory { return Cost(estimate: memory, source: "config", highWaterPeak: highWater) }
         if let highWater { return Cost(estimate: highWater, highWaterPeak: highWater) }
+        if let home = request.home, let homeHighWater = store.highWaterPeak(key: key, root: home, now: Daemon.now()) {
+            return Cost(estimate: homeHighWater, source: projectName(home), highWaterPeak: homeHighWater)
+        }
         if let typical = store.typicalPeak(key: key, excluding: root) {
             return Cost(estimate: typical, source: "other projects", highWaterPeak: highWater)
         }

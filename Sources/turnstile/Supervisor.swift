@@ -71,6 +71,7 @@ enum Supervisor {
         request.memory = classification.memory
         request.cwd = cwd
         request.root = workspace.root
+        request.home = workspace.home
         request.fingerprint = workspace.fingerprint
         request.agent = agent
         request.pausable = isPausable(agent: agent, resourceClass: classification.resourceClass, configured: throttle.pause)

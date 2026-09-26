@@ -213,6 +213,21 @@ struct DaemonLifecycleTests {
         #expect(harness.job(next)?.estimateSource == nil)
     }
 
+    @Test func aNewWorktreeLearnsFromItsRepo() throws {
+        let harness = try DaemonHarness()
+        let main = FakeClient(), other = FakeClient(), worktree = FakeClient()
+        let id = harness.request(main, memory: nil, root: "/code/app")
+        harness.job(id)?.peak = 2400 * Bytes.mb
+        harness.finished(main)
+        let elsewhere = harness.request(other, memory: nil, root: "/code/lib")
+        harness.job(elsewhere)?.peak = 300 * Bytes.mb
+        harness.finished(other)
+
+        let next = harness.request(worktree, memory: nil, root: "/code/app-485", home: "/code/app")
+        #expect(harness.job(next)?.estimate == 2400 * Bytes.mb)
+        #expect(harness.job(next)?.estimateSource == "app")
+    }
+
     @Test func outcomesAreRecorded() throws {
         let harness = try DaemonHarness()
         for (exit, signal, outcome) in [(Int32?(0), Int32?.none, "ok"), (1, nil, "failed"), (nil, SIGTERM, "signaled")] {

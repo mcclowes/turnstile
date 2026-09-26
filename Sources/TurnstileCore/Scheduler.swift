@@ -103,7 +103,8 @@ public enum WaitReason: Equatable, Sendable {
     /// The machine is swapping, so free memory means nothing; nothing new starts until it settles.
     case swapping(running: [String])
     /// The machine swapped moments ago; a calm reading that brief is often a lull, not room.
-    case settling(running: [String], eta: Double)
+    /// `eta` is nil once a calm has broken during the wait, since the clock may well reset again.
+    case settling(running: [String], eta: Double?)
     /// A job paused for memory resumes before this starts.
     case resuming(paused: String)
     /// Someone held it; it waits until released.
@@ -157,8 +158,8 @@ public enum Scheduler {
     /// While the machine is swapping, nothing starts at all: `freeMemory` comes from a level the kernel
     /// is holding up by paging out, so it describes the stand-off rather than room for another job. Nor does
     /// anything start until memory has been calm for `policy.settle` seconds, since pressure often lifts
-    /// for a few seconds mid-swap. `calmFor` is how long it has been calm.
-    public static func decide(queue: [QueuedJob], running: [RunningJob], freeMemory: UInt64, policy: SchedulerPolicy, now: Double = 0, pressure: EffectiveMemoryPressure = .normal, calmFor: Double = .infinity) -> SchedulerDecision {
+    /// for a few seconds mid-swap. `calmFor` is how long it has been calm; `calmBrokenAt` is when a calm spell last ended.
+    public static func decide(queue: [QueuedJob], running: [RunningJob], freeMemory: UInt64, policy: SchedulerPolicy, now: Double = 0, pressure: EffectiveMemoryPressure = .normal, calmFor: Double = .infinity, calmBrokenAt: Double = -.infinity) -> SchedulerDecision {
         var admit: [Int64] = []
         var waiting: [Int64: WaitReason] = [:]
         var skipped: [Int64: String] = [:]
@@ -173,7 +174,10 @@ public enum Scheduler {
 
         if calmFor < policy.settle, !running.isEmpty {
             let labels = running.map(\.label)
-            for job in queue { waiting[job.id] = job.held ? .held : .settling(running: labels, eta: policy.settle - calmFor) }
+            for job in queue {
+                let eta = job.queuedAt < calmBrokenAt ? nil : policy.settle - calmFor
+                waiting[job.id] = job.held ? .held : .settling(running: labels, eta: eta)
+            }
             return SchedulerDecision(admit: [], waiting: waiting)
         }
 

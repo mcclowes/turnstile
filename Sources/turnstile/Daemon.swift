@@ -180,6 +180,9 @@ final class Daemon {
     var pauseAllSeen: Set<Int64> = []
     /// The last tick memory was low or swap was growing, which is what a paused job's backoff counts from.
     var lastPressuredAt = -Double.infinity
+    /// When pressure last returned after a calm spell, so queued jobs that saw it stop promising a start time.
+    var calmBrokenAt = -Double.infinity
+    var lastCalmAt = -Double.infinity
     var idleSince = Daemon.clock()
     /// When the escape scan last recorded something, on the monotonic clock. It holds an idle daemon up.
     var lastEscapeAt: Double?
@@ -610,7 +613,8 @@ final class Daemon {
             policy: policy,
             now: clock,
             pressure: memoryPressure,
-            calmFor: calmFor
+            calmFor: calmFor,
+            calmBrokenAt: calmBrokenAt
         )
         let now = Daemon.now()
         for id in decision.admit {
@@ -893,7 +897,12 @@ final class Daemon {
 
     /// Pauses the newest job when memory runs out, and resumes jobs once it recovers.
     func relievePressure(now: Double) {
-        if memoryLevel < config.machine.pauseBelowPercent || memoryPressure > .normal { lastPressuredAt = now }
+        if memoryLevel < config.machine.pauseBelowPercent || memoryPressure > .normal {
+            if lastPressuredAt < lastCalmAt { calmBrokenAt = now }
+            lastPressuredAt = now
+        } else {
+            lastCalmAt = now
+        }
         guard now - lastPressureAction >= 3 else { return }
         let candidates = jobs.values.filter { $0.state != .queued && !$0.tree.isEmpty && $0.killReason == nil }.map {
             Pressure.Candidate(id: $0.id, startedAt: $0.admittedTick ?? 0, paused: $0.paused, pausable: $0.pausable,

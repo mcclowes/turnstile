@@ -294,4 +294,14 @@ struct SchedulerTests {
         let idle = Scheduler.decide(queue: [queued(1)], running: [], freeMemory: 12 * gb, policy: policy, calmFor: 0)
         #expect(idle.admit == [1])
     }
+
+    /// Seen live: memory flapped every few seconds and five jobs said "under a minute" for eight.
+    @Test func aCalmThatBrokeDuringTheWaitPromisesNoStart() {
+        let running = [RunningJob(id: 9, resourceClass: .compile, estimate: 2 * gb, footprint: 2 * gb, label: "r")]
+        let decision = Scheduler.decide(queue: [queued(1, at: 10), queued(2, at: 50)], running: running, freeMemory: 12 * gb, policy: policy,
+                                        calmFor: 5, calmBrokenAt: 40)
+        #expect(decision.waiting[1] == .settling(running: ["r"], eta: nil))
+        #expect(decision.waiting[2] == .settling(running: ["r"], eta: policy.settle - 5))
+        #expect(Scheduler.message(for: .settling(running: ["r"], eta: nil)) == "waiting for memory to settle after swapping (running: r)")
+    }
 }

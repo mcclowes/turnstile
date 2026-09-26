@@ -68,6 +68,19 @@ struct MemoryPressureTests {
         #expect(tracker.pressure == .normal)
     }
 
+    /// Seen live (#77): swap rose, then swap-ins shrank it a little, and pressure read normal three
+    /// seconds after reading swapping, pausing and resuming a build over and over.
+    @Test func swapShrinkingAfterAGrowthSpurtKeepsReadingSwapping() {
+        var tracker = MemoryPressureTracker()
+        tracker.record(sample(0, swap: 10 * gb))
+        tracker.record(sample(2, swap: 10 * gb + 400 * mb))
+        #expect(tracker.pressure == .swapping)
+        tracker.record(sample(4, swap: 10 * gb - 100 * mb))
+        #expect(tracker.pressure == .swapping)
+        for step in 1...30 { tracker.record(sample(4 + Double(step), swap: 10 * gb - 100 * mb)) }
+        #expect(tracker.pressure == .normal)
+    }
+
     /// Growth stays in the window after it stops, so a machine that has just been swapping gets
     /// time to settle before anything new is let in.
     @Test func growthKeepsReadingForTheRestOfTheWindow() {

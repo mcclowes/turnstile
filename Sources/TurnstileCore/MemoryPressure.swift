@@ -59,10 +59,21 @@ public struct MemoryPressureTracker: Sendable {
     public var pressure: EffectiveMemoryPressure {
         guard let newest = samples.last else { return .normal }
         if newest.kernelPressure >= 4 { return .critical }
-        guard let oldest = samples.first, newest.swapUsed > oldest.swapUsed else { return .normal }
-        let grew = newest.swapUsed - oldest.swapUsed
+        let grew = largestRise
         if grew >= Self.fastGrowth { return .critical }
         if grew >= Self.growth { return .swapping }
         return .normal
+    }
+
+    /// The most swap grew from any low point to a later sample in the window. Not newest minus oldest,
+    /// since swap-ins shrinking it afterwards don't undo the paging-out that just happened.
+    private var largestRise: UInt64 {
+        var low = UInt64.max
+        var rise: UInt64 = 0
+        for sample in samples {
+            low = min(low, sample.swapUsed)
+            rise = max(rise, sample.swapUsed - low)
+        }
+        return rise
     }
 }

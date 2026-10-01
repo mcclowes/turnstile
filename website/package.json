@@ -16,7 +16,7 @@
     "@docusaurus/preset-classic": "3.10.2",
     "@docusaurus/theme-mermaid": "3.10.2",
     "@mdx-js/react": "^3.0.0",
-    "@mermaid-js/layout-elk": "^0.1.9",
+    "@mermaid-js/layout-elk": "^1.0.0",
     "@vercel/analytics": "^2.0.1",
     "clsx": "^2.0.0",
     "plugin-image-zoom": "^1.2.0",

@@ -30,7 +30,7 @@ final class LimitsSettingsModel: ObservableObject {
     }
 
     func setMaxMemory(_ bytes: UInt64?) { update { $0.maxMemory = bytes } }
-    func setPause(_ on: Bool) { update { $0.pause = on } }
+    func setPause(_ policy: PausePolicy) { update { $0.pause = policy } }
     func setInject(_ on: Bool) { update { $0.inject = on } }
     func restoreDefaults() { update { $0 = LimitSettings() } }
 
@@ -104,10 +104,19 @@ struct LimitsSettingsView: View {
                     Text("Keep \(Bytes.format(model.settings.reserveBytes)) free for everything else")
                     Text("Queued jobs wait rather than eat into this.")
                 }
-                Toggle(isOn: Binding(get: { model.settings.pause }, set: { model.setPause($0) })) {
-                    Text("Pause agent jobs when memory runs low")
-                    Text("Paused jobs resume once memory recovers. Off, they keep running and the Mac swaps.")
+                Picker(
+                    "Pause under memory pressure",
+                    selection: Binding(get: { model.settings.pause }, set: { model.setPause($0) })
+                ) {
+                    ForEach(PausePolicy.allCases, id: \.self) { policy in
+                        Text(policy.rawValue).tag(policy)
+                    }
                 }
+                Text(
+                    "Compiles pause by default. Test and browser timeouts keep counting while paused. Your own jobs never pause."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
             Section("Runaways") {

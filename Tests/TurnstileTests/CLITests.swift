@@ -1,8 +1,32 @@
+import Foundation
 import Testing
 
 @testable import TurnstileCore
 
 struct CLITests {
+    @Test(arguments: [
+        ("{}", "{}", "only agent compiles may be paused"),
+        (#"{"throttle":{"pause":true}}"#, "{}", "all agent jobs may be paused"),
+        (#"{"throttle":{"pause":false}}"#, "{}", "never paused"),
+        (#"{"throttle":{"pause":true}}"#, #"{"throttle":{"pause":false}}"#, "never paused"),
+        (#"{"throttle":{"pause":false}}"#, #"{"throttle":{"pause":true}}"#, "all agent jobs may be paused"),
+    ])
+    func configShowsEffectivePausePolicy(_ global: String, _ project: String, _ summary: String) throws {
+        let (run, daemon) = try ShimRun.run(cliArguments: ["config", "show"]) { paths in
+            let root = URL(fileURLWithPath: paths.home).deletingLastPathComponent()
+            let config = root.appendingPathComponent("config")
+            try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
+            try global.write(to: config.appendingPathComponent("config.json"), atomically: true, encoding: .utf8)
+            try project.write(to: root.appendingPathComponent(".turnstilerc"), atomically: true, encoding: .utf8)
+            return FakeDaemon(socket: paths.socket) { _, _, _, _ in }
+        }
+        #expect(run.exitCode == 0)
+        #expect(run.stderr.isEmpty)
+        #expect(run.stdout.split(separator: "\n").contains("  pause         \(summary)"))
+        #expect(daemon.types.isEmpty)
+        #expect(run.toolRuns.isEmpty)
+    }
+
     @Test(
         .bug("https://github.com/mcclowes/turnstile/issues/66"),
         arguments: [

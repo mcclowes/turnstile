@@ -52,6 +52,41 @@ extension CommandRule: Decodable {
     }
 }
 
+/// Nil keeps the compile-only default; true includes test and browser jobs, and false opts out.
+public enum PausePolicy: String, CaseIterable, Sendable {
+    case compileOnly = "Compiles only (default)"
+    case all = "All agent jobs"
+    case never = "Never"
+
+    public init(configured: Bool?) {
+        switch configured {
+        case nil: self = .compileOnly
+        case true: self = .all
+        case false: self = .never
+        }
+    }
+
+    public var configured: Bool? {
+        switch self {
+        case .compileOnly: nil
+        case .all: true
+        case .never: false
+        }
+    }
+
+    public var summary: String {
+        switch self {
+        case .compileOnly: "only agent compiles may be paused"
+        case .all: "all agent jobs may be paused"
+        case .never: "never paused"
+        }
+    }
+
+    public func allows(agent: Bool, resourceClass: ResourceClass) -> Bool {
+        agent && (configured ?? (resourceClass == .compile))
+    }
+}
+
 /// Throttling knobs (issue #2). Every field is optional so project files can override single values.
 public struct ThrottleConfig: Decodable, Equatable, Sendable {
     /// Inject parallelism and heap limits into commands.
@@ -64,7 +99,7 @@ public struct ThrottleConfig: Decodable, Equatable, Sendable {
     public var maxMemory: UInt64?
     /// Kill a job that exceeds this multiple of its usual peak.
     public var killMultiplier: Double?
-    /// Allow pausing (SIGSTOP) this project's jobs under memory pressure.
+    /// Agent compiles only when nil; true includes tests and browsers, false never pauses.
     public var pause: Bool?
 
     public init(inject: Bool? = nil, jobs: Int? = nil, nodeHeap: UInt64? = nil, maxMemory: UInt64? = nil, killMultiplier: Double? = nil, pause: Bool? = nil) {

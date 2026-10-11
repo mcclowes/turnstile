@@ -7,3 +7,5 @@
 .swiftpm/
 *.xcodeproj
 .DS_Store
+.fettle/shots/
+.fettle/visual-results.json

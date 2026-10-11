@@ -104,7 +104,7 @@ enum ConfigCommand {
                 + "at least \(machine.killFloorPercent)% of RAM (75% before there's history)")
             lines.append("  kill above    only under \(machine.pauseBelowPercent)% free, and only after a pause doesn't help")
         }
-        lines.append("  pause         \(throttle.pause ?? true ? "agent jobs may be paused" : "never paused")")
+        lines.append("  pause         \(PausePolicy(configured: throttle.pause).summary)")
 
         let commands = (config.global.commands ?? [:]).merging(config.project?.commands ?? [:]) { $1 }
         let scripts = (config.global.scripts ?? [:]).merging(config.project?.scripts ?? [:]) { $1 }

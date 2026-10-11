@@ -33,6 +33,11 @@ let package = Package(
             name: "TurnstileTests",
             dependencies: ["turnstile", "TurnstileCore"]
         ),
+        .testTarget(
+            name: "TurnstileBarTests",
+            dependencies: ["TurnstileBar", "TurnstileCore"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
     ],
     swiftLanguageModes: [.v5]
 )

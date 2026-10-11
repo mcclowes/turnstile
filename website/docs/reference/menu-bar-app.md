@@ -30,4 +30,6 @@ Settings has three tabs. General holds the gating switch, the notification switc
 
 Hover a recent run's icon to see how it ended. If it left a log, click the icon to open it.
 
+Limits offers three pause policies: compiles only (the default), all agent jobs, or never. Test and browser timeouts keep counting while paused, and your own jobs are never paused under memory pressure.
+
 Open it once and turn on "Launch at login" in Settings.

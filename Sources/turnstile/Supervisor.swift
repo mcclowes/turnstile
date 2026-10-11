@@ -149,7 +149,7 @@ enum Supervisor {
 
     /// Test and browser runners use wall-clock deadlines that keep advancing through SIGSTOP.
     static func isPausable(agent: Bool, resourceClass: ResourceClass, configured: Bool?) -> Bool {
-        agent && (configured ?? (resourceClass == .compile))
+        PausePolicy(configured: configured).allows(agent: agent, resourceClass: resourceClass)
     }
 
     /// Fails open, and leaves a record so `turnstile doctor` can say it happened.

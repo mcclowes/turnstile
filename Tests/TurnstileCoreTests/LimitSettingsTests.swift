@@ -11,7 +11,7 @@ struct LimitSettingsTests {
         let settings = LimitSettings(file: try ConfigFile.decode(Data()))
 
         #expect(settings == LimitSettings())
-        #expect(settings.pause)
+        #expect(settings.pause == .compileOnly)
         #expect(settings.inject)
         #expect(settings.reserveBytes == 2 * Bytes.gb)
         #expect(settings.slots(for: .browser) == 3)
@@ -26,7 +26,7 @@ struct LimitSettingsTests {
         #expect(settings.concurrency == [.test: 5])
         #expect(settings.slots(for: .test) == 5)
         #expect(settings.reserve == 4 * Bytes.gb)
-        #expect(!settings.pause)
+        #expect(settings.pause == .never)
         #expect(!settings.inject)
         #expect(settings.killMultiplier == 5)
         #expect(settings.maxMemory == 8 * Bytes.gb)
@@ -36,7 +36,7 @@ struct LimitSettingsTests {
         let original = Data(#"{"$schema":"config.schema.json","reserve":"2GB","concurrency":{"test":3,"gpu":1},"shims":{"add":["bazel"]},"throttle":{"nodeHeap":"4GB"}}"#.utf8)
         var settings = LimitSettings(file: try ConfigFile.decode(original))
         settings.concurrency[.compile] = 2
-        settings.pause = false
+        settings.pause = .never
 
         let updated = try json(try settings.updatingConfig(original))
 
@@ -55,6 +55,47 @@ struct LimitSettingsTests {
         let updated = try json(try LimitSettings().updatingConfig(original))
 
         #expect(updated.isEmpty)
+    }
+
+    @Test(.bug("https://github.com/mcclowes/turnstile/issues/65"))
+    func allowingAllAgentJobsIsStoredExplicitly() throws {
+        var settings = LimitSettings()
+        settings.pause = .all
+
+        let data = try settings.updatingConfig(Data())
+
+        #expect(try ConfigFile.decode(data).throttle?.pause == true)
+    }
+
+    @Test(arguments: PausePolicy.allCases, [nil, true, false] as [Bool?])
+    func pauseChoicesRoundTripAndKeepOtherSettings(_ policy: PausePolicy, _ previous: Bool?) throws {
+        var root: [String: Any] = [
+            "reserve": "4GB", "concurrency": ["test": 5],
+            "throttle": ["inject": false, "jobs": 2, "nodeHeap": "3GB"],
+        ]
+        var throttle = try #require(root["throttle"] as? [String: Any])
+        throttle["pause"] = previous
+        root["throttle"] = throttle
+        let original = try JSONSerialization.data(withJSONObject: root)
+        var settings = LimitSettings(file: try ConfigFile.decode(original))
+        settings.pause = policy
+
+        let updated = try settings.updatingConfig(original)
+        let decoded = try ConfigFile.decode(updated)
+        let expected: Bool?
+        switch policy {
+        case .compileOnly: expected = nil
+        case .all: expected = true
+        case .never: expected = false
+        }
+        #expect(decoded.throttle?.pause == expected)
+        #expect(LimitSettings(file: decoded).pause == policy)
+        #expect(decoded.throttle?.inject == false)
+        #expect(decoded.throttle?.jobs == 2)
+        #expect(decoded.throttle?.nodeHeap == 3 * Bytes.gb)
+        #expect(decoded.machine.reserve == 4 * Bytes.gb)
+        #expect(decoded.machine.concurrency?["test"] == 5)
+        #expect((try json(updated)["throttle"] as? [String: Any])?["nodeHeap"] as? String == "3GB")
     }
 
     @Test func writesSizesAsReadableStrings() throws {

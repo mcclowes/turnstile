@@ -186,8 +186,7 @@
         },
         "pause": {
           "type": "boolean",
-          "default": true,
-          "description": "Allow this project's agent jobs to be paused under memory pressure."
+          "description": "Allow this project's agent jobs to be paused under memory pressure. Omitted: compiles only. True: includes test and browser jobs. False: never pauses agent jobs. Your own jobs are never paused."
         }
       },
       "patternProperties": {

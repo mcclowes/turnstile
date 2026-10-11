@@ -51,6 +51,15 @@ enum PanelFixtures {
                 pending.append((window, directory.appendingPathComponent("\(fixture.name)-\(suffix).png")))
             }
         }
+        for (appearance, suffix) in [(NSAppearance.Name.aqua, "light"), (.darkAqua, "dark")] {
+            let window = NSWindow(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: false)
+            window.appearance = NSAppearance(named: appearance)
+            window.contentView = NSHostingView(rootView: LimitsSettingsView())
+            window.setContentSize(window.contentView!.fittingSize)
+            window.orderFrontRegardless()
+            windows.append(window)
+            pending.append((window, directory.appendingPathComponent("limits-\(suffix).png")))
+        }
         // Give SwiftUI a few passes to measure the list and settle before capturing.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             for (window, url) in pending {

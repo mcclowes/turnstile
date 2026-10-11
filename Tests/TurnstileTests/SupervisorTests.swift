@@ -91,7 +91,7 @@ struct ShimRun {
     }
 
     /// `daemon` is built once the home, and so the socket path, exists.
-    static func run(_ args: [String] = ["build"], cliArguments: [String]? = nil, environment extra: [String: String] = [:], timeout: Double = 90, daemon: (Paths) -> FakeDaemon) throws -> (ShimRun, FakeDaemon) {
+    static func run(_ args: [String] = ["build"], cliArguments: [String]? = nil, environment extra: [String: String] = [:], timeout: Double = 90, daemon: (Paths) throws -> FakeDaemon) throws -> (ShimRun, FakeDaemon) {
         let root = NSTemporaryDirectory() + "ts-shim-" + UUID().uuidString.prefix(8)
         defer { try? FileManager.default.removeItem(atPath: root) }
         let paths = Paths(home: root + "/home")
@@ -111,7 +111,7 @@ struct ShimRun {
         chmod(bin + "/swift", 0o755)
         try FileManager.default.createSymbolicLink(atPath: paths.shims + "/swift", withDestinationPath: binary())
 
-        let fake = daemon(paths)
+        let fake = try daemon(paths)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: cliArguments == nil ? paths.shims + "/swift" : binary())
         process.arguments = cliArguments ?? args

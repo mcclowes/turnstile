@@ -4,7 +4,7 @@ import Foundation
 public struct LimitSettings: Equatable, Sendable {
     public var concurrency: [ResourceClass: Int] = [:]
     public var reserve: UInt64?
-    public var pause = true
+    public var pause = PausePolicy.compileOnly
     public var inject = true
     public var killMultiplier: Double?
     public var maxMemory: UInt64?
@@ -17,7 +17,7 @@ public struct LimitSettings: Equatable, Sendable {
             concurrency[cls] = file.machine.concurrency?[cls.rawValue]
         }
         reserve = file.machine.reserve
-        pause = file.throttle?.pause ?? true
+        pause = PausePolicy(configured: file.throttle?.pause)
         inject = file.throttle?.inject ?? true
         killMultiplier = file.throttle?.killMultiplier
         maxMemory = file.throttle?.maxMemory
@@ -38,7 +38,7 @@ public struct LimitSettings: Equatable, Sendable {
                 root.set(concurrency[cls], forKey: cls.rawValue, in: "concurrency")
             }
             if reserve != current.reserve { root["reserve"] = reserve.map(Bytes.format) }
-            if pause != current.pause { root.set(pause ? nil : false, forKey: "pause", in: "throttle") }
+            if pause != current.pause { root.set(pause.configured, forKey: "pause", in: "throttle") }
             if inject != current.inject { root.set(inject ? nil : false, forKey: "inject", in: "throttle") }
             if killMultiplier != current.killMultiplier { root.set(killMultiplier, forKey: "killMultiplier", in: "throttle") }
             if maxMemory != current.maxMemory { root.set(maxMemory.map(Bytes.format), forKey: "maxMemory", in: "throttle") }

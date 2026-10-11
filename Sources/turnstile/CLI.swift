@@ -12,7 +12,7 @@ enum CLI {
           turnstile init [--shell zsh|bash|fish] [--no-rc]   install shims and add them to PATH
           turnstile doctor [--shells]                        check the install, PATH, config, and daemon
           turnstile status [--json] [--watch]                running and queued jobs, memory, recent runs
-          turnstile history [--days 30] [--here] [--json]    what each command has cost, and how long jobs waited
+          turnstile history [--days 30] [--limit 20] [--here] [--json]   what each command has cost, and how long jobs waited
           turnstile logs <job> [-f]                          a run's captured output; -f follows it until the run ends
           turnstile top                                      interactive view: select a job to bump, pause, hold, or kill
           turnstile bump <job>                               move a job (number, pid, or name) to the front

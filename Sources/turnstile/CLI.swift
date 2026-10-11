@@ -406,7 +406,9 @@ enum CLI {
             exit(127)
         }
         let rest = Array(parsed.command.dropFirst())
-        if Supervisor.insideAdmittedJob(environment) || paths.isDisabled { execReal(real, rest) }
+        if environment["TURNSTILE_DISABLE"] == "1" || paths.isDisabled || Supervisor.insideAdmittedJob(environment) {
+            execReal(real, rest)
+        }
         let interactive = isatty(0) == 1 && isatty(1) == 1
         let config = Supervisor.loadConfig(environment: environment)
         var classification = Classifier.classify(tool: name, args: rest, context: ClassifierContext(config: config, interactive: interactive))

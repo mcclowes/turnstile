@@ -76,7 +76,7 @@ final class FakeDaemon: @unchecked Sendable {
     }
 }
 
-/// Runs the real binary as a `swift` shim against a fake daemon, with a fake `swift` behind it.
+/// Runs the real binary as a `swift` shim or CLI against a fake daemon and tool.
 struct ShimRun {
     let exitCode: Int32
     let signaled: Bool
@@ -91,7 +91,7 @@ struct ShimRun {
     }
 
     /// `daemon` is built once the home, and so the socket path, exists.
-    static func run(_ args: [String] = ["build"], environment extra: [String: String] = [:], timeout: Double = 90, daemon: (Paths) -> FakeDaemon) throws -> (ShimRun, FakeDaemon) {
+    static func run(_ args: [String] = ["build"], cliArguments: [String]? = nil, environment extra: [String: String] = [:], timeout: Double = 90, daemon: (Paths) -> FakeDaemon) throws -> (ShimRun, FakeDaemon) {
         let root = NSTemporaryDirectory() + "ts-shim-" + UUID().uuidString.prefix(8)
         defer { try? FileManager.default.removeItem(atPath: root) }
         let paths = Paths(home: root + "/home")
@@ -113,8 +113,8 @@ struct ShimRun {
 
         let fake = daemon(paths)
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: paths.shims + "/swift")
-        process.arguments = args
+        process.executableURL = URL(fileURLWithPath: cliArguments == nil ? paths.shims + "/swift" : binary())
+        process.arguments = cliArguments ?? args
         var environment = ["PATH": "\(paths.shims):\(bin):/usr/bin:/bin", "HOME": root, "TURNSTILE_HOME": paths.home,
                            "TURNSTILE_CONFIG_DIR": root + "/config", "TURNSTILE_AGENT": "1"]
         environment.merge(extra) { $1 }

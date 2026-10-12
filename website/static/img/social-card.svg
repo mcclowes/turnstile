@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#252A31"/>
+  <g transform="translate(80 95) scale(0.16)">
+    <line x1="495.731" y1="488.607" x2="318.731" y2="182.034" stroke="#5DCC86" stroke-width="24" stroke-linecap="round"/>
+    <circle cx="500" cy="500" r="50" fill="#5DCC86"/>
+    <line x1="512" y1="503.001" x2="866" y2="503.001" stroke="#5DCC86" stroke-width="24" stroke-linecap="round"/>
+    <line x1="492.267" y1="509.393" x2="315.267" y2="815.966" stroke="#5DCC86" stroke-width="24" stroke-linecap="round"/>
+  </g>
+  <text x="250" y="185" fill="#ECEEF1" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="56" font-weight="600">turnstile</text>
+  <text x="80" y="300" fill="#ECEEF1" font-family="-apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="46" font-weight="600">Run every coding agent at once.</text>
+  <text x="80" y="358" fill="#ECEEF1" font-family="-apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="46" font-weight="600">Builds and tests queue for memory.</text>
+  <rect x="80" y="410" width="1040" height="130" rx="14" fill="#1B1F24"/>
+  <text x="110" y="460" fill="#9AA3AE" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="24"><tspan fill="#5DCC86">$</tspan> swift test</text>
+  <text x="110" y="505" fill="#9AA3AE" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="24">turnstile: waiting for memory, needs ~4 GB, ~1.2 GB spare</text>
+  <text x="80" y="590" fill="#9AA3AE" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="22">macOS · free and open source · turnstile.marginalutility.dev</text>
+</svg>

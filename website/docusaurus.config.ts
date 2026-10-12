@@ -39,6 +39,8 @@ const config: Config = {
     ],
   ],
   themeConfig: {
+    image: 'img/social-card.png',
+    metadata: [{name: 'twitter:card', content: 'summary_large_image'}],
     colorMode: {respectPrefersColorScheme: true},
     tableOfContents: {minHeadingLevel: 2, maxHeadingLevel: 3},
     mermaid: {theme: {light: 'neutral', dark: 'dark'}},

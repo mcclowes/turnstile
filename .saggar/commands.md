@@ -2,16 +2,17 @@
 
 The commands this repo already uses, from CONTRIBUTING.md, the CI workflows, and the headers in `scripts/`. CI runs lint, license checks, coverage, e2e, a release build, and a dev app package; `swift test` and `./scripts/e2e.sh` must pass before a PR. Builds and tests here go through turnstile itself, so they can queue behind other agents.
 
-Effects describe the listed invocations with their default environment. Safe commands may write build output and caches. Global installation and process controls, stress workloads, and broad test-process cleanup require explicit execution intent. Interactive commands need a terminal; long-running commands stay open until stopped.
+Effects describe the listed invocations with their default environment. Safe commands may write build output and caches. Global installation, process controls, and stress workloads require explicit execution intent. Interactive commands need a terminal; long-running commands stay open until stopped.
 
 - Build: `swift build` #safe #quick
 - Tests: `swift test` — unit tests #safe #monitor
-- E2E: `./scripts/e2e.sh` — isolated turnstile home; also kills escaped test servers by process name #destructive #monitor
+- E2E: `./scripts/e2e.sh` — isolated turnstile home and run-scoped escaped-server cleanup #safe #monitor
 - Coverage: `./scripts/coverage.sh` — unit tests with a per-file report, writes .build/coverage.lcov #safe #monitor
 - Lint: `swift format lint --recursive --parallel Sources Tests Package.swift` #safe #quick
 - License check: `node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs` — ThirdParty/ records for every dependency #safe #quick
 - Release helper arguments: `node --test scripts/release-args-tests.mjs` — reject invalid inputs before invoking build or publishing tools #safe #quick
-- CI checks: `swift format lint --recursive --parallel Sources Tests Package.swift && node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs && node --test scripts/release-args-tests.mjs && ./scripts/coverage.sh && ./scripts/e2e.sh && swift build -c release && ./scripts/package.sh --dev` — includes the E2E process cleanup #destructive #monitor #ci
+- E2E server isolation: `node --test scripts/e2e-server-tests.mjs` — concurrent process fixtures cannot match or stop each other #safe #quick
+- CI checks: `swift format lint --recursive --parallel Sources Tests Package.swift && node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs && node --test scripts/release-args-tests.mjs && node --test scripts/e2e-server-tests.mjs && ./scripts/coverage.sh && ./scripts/e2e.sh && swift build -c release && ./scripts/package.sh --dev` — the lint and test jobs from ci.yml, in order #safe #monitor #ci
 - Release build: `swift build -c release` #safe #quick
 - Menu bar app (dev): `./scripts/package.sh --dev` — ad-hoc signed Turnstile.app, not notarized #safe #quick
 - Try local build: `.build/debug/turnstile init` — changes real shims, shell startup files, and installed binary #destructive #quick

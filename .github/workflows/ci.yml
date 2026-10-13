@@ -20,6 +20,8 @@ jobs:
           node scripts/license-check.mjs
       - name: Release helper arguments
         run: node --test scripts/release-args-tests.mjs
+      - name: E2E server isolation
+        run: node --test scripts/e2e-server-tests.mjs
 
   test:
     runs-on: macos-26

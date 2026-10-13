@@ -2,6 +2,12 @@
 
 Notable changes to turnstile. Versions follow [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- Release helpers reject unsupported options, empty arguments, and extra operands before building, signing, or publishing.
+
 ## 0.9.0
 
 ### Added

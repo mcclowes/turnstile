@@ -18,6 +18,8 @@ jobs:
         run: |
           node --test scripts/license-check-tests.mjs
           node scripts/license-check.mjs
+      - name: Release helper arguments
+        run: node --test scripts/release-args-tests.mjs
 
   test:
     runs-on: macos-26

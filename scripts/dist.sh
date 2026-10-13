@@ -6,6 +6,10 @@
 #
 # Env: as for scripts/package.sh (CODESIGN_IDENTITY, NOTARY_PROFILE).
 set -euo pipefail
+if [ "$#" -ne 0 ]; then
+  echo "Usage: scripts/dist.sh" >&2
+  exit 2
+fi
 cd "$(dirname "$0")/.."
 
 VERSION="$(sed -n 's/.*public static let version = "\(.*\)"/\1/p' Sources/TurnstileCore/Paths.swift)"

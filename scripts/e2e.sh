@@ -62,7 +62,12 @@ raise SystemExit(0 if any(j["project"] == project and j["key"] == key and (not s
   done
   return 1
 }
-cleanup() { turnstile stop > /dev/null 2>&1; bash "$SERVER_CONTROL" stop "$FAKE_SERVER_TAG" > /dev/null 2>&1 || true; rm -rf "$T"; }
+cleanup() {
+  [ -z "${frozen:-}" ] || kill -CONT "$frozen" > /dev/null 2>&1 || true
+  turnstile stop > /dev/null 2>&1
+  bash "$SERVER_CONTROL" stop "$FAKE_SERVER_TAG" > /dev/null 2>&1 || true
+  rm -rf "$T"
+}
 trap cleanup EXIT
 
 cd "$T/work"
@@ -314,19 +319,52 @@ cd ..
 check "a cancelled run's joiner runs it itself" 'grep -q "joining an identical" "$T/joiner.out" && grep -q "running it here instead" "$T/joiner.out" && [ "$(cat "$T/joiner.code")" = 0 ] && [ $(( $(runs test) - before )) -ge 1 ]'
 
 # An admitted client that never starts (suspended) frees its slot.
-(cd a && FAKE_SLEEP=1 swift test > /dev/null 2>&1) &
-sleep 0.5
-(cd b && exec swift test > /dev/null 2>&1) &
+suspended_failures=$failures
+touch "$T/suspended-starter.wait"
+(cd a && FAKE_WAIT_FILE="$T/suspended-starter.wait" swift test > "$T/suspended-starter.out" 2>&1) &
+suspended_starter=$!
+check "suspended-client starter occupies the test slot" 'wait_for_job running a "swift test"'
+(cd b && exec swift test > "$T/suspended-client.out" 2>&1) &
 frozen=$!
-sleep 0.3
+check "client queues before suspension" 'wait_for_job queued b "swift test"'
+suspended_id="$(turnstile status --json | /usr/bin/python3 -c 'import json, sys; d = json.load(sys.stdin); print(next(j["id"] for j in d["queued"] if j["clientPid"] == int(sys.argv[1])))' "$frozen")"
 kill -STOP "$frozen"
-sleep 1.5
-start=$(date +%s)
-(swift test > "$T/unstick.out" 2>&1)
-elapsed=$(( $(date +%s) - start ))
+stopped=0
+for i in {1..100}; do
+  case "$(ps -o state= -p "$frozen")" in *T*) stopped=1; break ;; esac
+  sleep 0.05
+done
+check "client is stopped before its slot is released" '[ "$stopped" = 1 ]'
+rm -f "$T/suspended-starter.wait"
+wait "$suspended_starter"
+check "stopped client is admitted" 'wait_for_job running b "swift test"'
+suspended_status="$(turnstile status --json)"
+check "admitted stopped client has no child" 'echo "$suspended_status" | /usr/bin/python3 -c '\''import json, sys; d = json.load(sys.stdin); assert any(j["id"] == int(sys.argv[1]) and j.get("childPid") is None for j in d["running"])'\'' "$suspended_id"'
+(swift test > "$T/unstick.out" 2>&1; echo $? > "$T/unstick.code") &
+suspended_follower=$!
+check "follower queues behind the stopped client" 'wait_for_job queued work "swift test"'
+check "suspended client frees its slot within 25 seconds" '/usr/bin/python3 - "$T/unstick.code" <<'\''PY'\''
+import pathlib, sys, time
+result = pathlib.Path(sys.argv[1])
+deadline = time.monotonic() + 25
+while time.monotonic() < deadline:
+    if result.exists() and result.stat().st_size:
+        raise SystemExit(0)
+    time.sleep(0.05)
+raise SystemExit(1)
+PY'
+check "daemon reports reclaiming the unstarted client" 'grep -Fq "#$suspended_id b swift test: admitted 15s ago but never started; freeing its slot" "$TURNSTILE_HOME/daemon.log"'
+check "follower completes through the gate after reclamation" '[ "$(cat "$T/unstick.code" 2>/dev/null)" = 0 ] && grep -q "fake swift test" "$T/unstick.out" && ! grep -q ungated "$T/unstick.out"'
+if [ "$failures" != "$suspended_failures" ]; then
+  echo "suspended-client diagnostics: pid=$frozen job=$suspended_id"
+  turnstile status --json
+  tail -n 30 "$TURNSTILE_HOME/daemon.log"
+  cat "$T/suspended-starter.out" "$T/suspended-client.out" "$T/unstick.out"
+fi
 kill -CONT "$frozen"
-wait
-check "a suspended client's slot is reclaimed" '[ $elapsed -ge 5 ] && [ $elapsed -lt 25 ] && grep -q "fake swift test" "$T/unstick.out"'
+wait "$frozen"
+unset frozen
+wait "$suspended_follower"
 
 # `kill` drops a queued job and stops a running one; both callers are told not to retry.
 (cd a && FAKE_SLEEP=6 swift test > "$T/k1.out" 2>&1; echo $? > "$T/k1.code") &

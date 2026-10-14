@@ -6,6 +6,7 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ### Fixed
 
+- The suspended-client E2E check confirms queueing and process suspension before admission, and verifies the daemon's reclamation reason.
 - The top E2E check waits for job and terminal shutdown handshakes, and reports each failed condition separately.
 - E2E escaped-server checks and cleanup use a unique run marker, so concurrent runs cannot detect or stop each other's servers.
 - Release helpers reject unsupported options, empty arguments, and extra operands before building, signing, or publishing.

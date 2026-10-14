@@ -19,6 +19,8 @@ jobs:
           node scripts/license-check.mjs
       - name: Release helper checks
         run: node --test scripts/release-args-tests.mjs scripts/package-tests.mjs scripts/dist-tests.mjs
+      - name: History report input checks
+        run: node --test scripts/history-report-tests.mjs
       - name: E2E server isolation
         run: node --test scripts/e2e-server-tests.mjs
       - name: E2E top driver

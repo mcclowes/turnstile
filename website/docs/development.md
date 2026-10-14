@@ -9,7 +9,13 @@ slug: /development
 ```sh
 swift test             # unit tests
 ./scripts/e2e.sh       # end-to-end, with fake tools in a throwaway turnstile home
+node --test scripts/history-report-tests.mjs # isolated report input and SQLite checks
 ```
+
+The history-report helper accepts no arguments for a 30-day report or exactly
+`./scripts/history-report.sh --days <positive-integer>`. Invalid arguments exit
+2 before reading history or invoking SQLite. The fixture tests use disposable
+databases.
 
 ## Docs
 

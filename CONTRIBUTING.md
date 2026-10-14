@@ -20,11 +20,16 @@ swift test             # unit tests
 swift format lint --strict --recursive --parallel Sources Tests Package.swift
 node --test scripts/release-args-tests.mjs scripts/package-tests.mjs scripts/dist-tests.mjs # release helpers with isolated tools
 node --test scripts/e2e-server-tests.mjs   # run-scoped process detection and cleanup
+node --test scripts/history-report-tests.mjs # report arguments and isolated SQLite data
 /usr/bin/python3 scripts/e2e-top-tests.py # PTY handshakes and delayed terminal restoration
 ./scripts/fingerprint-timing.sh # isolated 60k-file fingerprint timings; FILES changes the size
 ```
 
 `swift format` ships with Xcode and reads `.swift-format`; `swift format --in-place <file>` fixes most of what the lint reports.
+
+`scripts/history-report.sh` reads history with a default 30-day period. It also
+accepts exactly `--days <positive-integer>`. Invalid inputs exit 2 before reading
+history. Its fixtures use disposable databases and never read your real history.
 
 Packaging stages replacements until signing and release validation succeed.
 The release checksum is computed before publication. Backup and promotion

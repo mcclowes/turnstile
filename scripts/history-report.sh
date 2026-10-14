@@ -5,11 +5,18 @@
 #   ./scripts/history-report.sh --days 7
 set -u
 
+DAYS=30
+if [ "$#" -gt 0 ]; then
+  if [ "$#" -ne 2 ] || [ "$1" != --days ] || [[ ! "${2:-}" =~ ^[0-9]+$ ]] || [[ ! "${2:-}" =~ [1-9] ]]; then
+    echo 'usage: scripts/history-report.sh [--days positive-integer]' >&2
+    exit 2
+  fi
+  DAYS="$2"
+fi
+
 HOME_DIR="${TURNSTILE_HOME:-$HOME/.turnstile}"
 DB="$HOME_DIR/state.sqlite"
 LOG="$HOME_DIR/daemon.log"
-DAYS=30
-[ "${1:-}" = "--days" ] && DAYS="${2:?days}"
 [ -f "$DB" ] || { echo "no history at $DB" >&2; exit 1; }
 
 SINCE="strftime('%s', 'now') - $DAYS * 86400"

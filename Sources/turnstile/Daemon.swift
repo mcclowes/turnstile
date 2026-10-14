@@ -174,6 +174,9 @@ final class Daemon {
     /// launchd's children, and who created them. Nil when unreadable (another user's).
     var orphanLineage: [pid_t: ProcessTree.Lineage?] = [:]
     var ticks = 0
+    var diagnosticClock: () -> Double = Daemon.clock
+    var diagnosticLog: ((String) -> Void)?
+    private var tickDiagnostics = TickDiagnostics()
     /// How the escape scan reads the process table; tests substitute their own.
     var probe = ProcessProbe.live
     /// Unique ids of processes already accounted for: a job's own, and escapes already recorded.
@@ -723,9 +726,12 @@ final class Daemon {
 
     func tick() {
         let now = Daemon.clock()
+        let gap = tickDiagnostics.begin(at: diagnosticClock())
         readMemory()
+        tickDiagnostics.completePhase("memory observation", at: diagnosticClock())
         ticks += 1
         if ticks % 5 == 0 { reloadConfig() }
+        tickDiagnostics.completePhase("config reload", at: diagnosticClock())
 
         let active = jobs.values.filter { $0.state != .queued }
         if !active.isEmpty {
@@ -739,8 +745,11 @@ final class Daemon {
         } else {
             pauseAllSeen = []
         }
+        tickDiagnostics.completePhase("job monitoring", at: diagnosticClock())
         if ticks % Daemon.escapeScanTicks == 0 { watchForEscapes(now: Daemon.now()) }
+        tickDiagnostics.completePhase("escape scan", at: diagnosticClock())
         schedule()
+        tickDiagnostics.completePhase("scheduling", at: diagnosticClock())
 
         if jobs.isEmpty && connectionsAreIdle() {
             if IdleExit.isDue(now: now, idleSince: idleSince, lastEscape: lastEscapeAt, idleExit: idleExit) {
@@ -751,6 +760,10 @@ final class Daemon {
         }
         if ticks % 60 == 0, let runId { store.touchDaemonRun(runId, at: Daemon.now()) }
         if ticks % 3600 == 0 { cleanLogs() }
+        tickDiagnostics.completePhase("history and log maintenance", at: diagnosticClock())
+        for message in [gap, tickDiagnostics.finish(at: diagnosticClock())].compactMap({ $0 }) {
+            if let diagnosticLog { diagnosticLog(message) } else { log(message) }
+        }
     }
 
     /// Takes a memory reading, noting each running job's closest brush with pausing, and logs large moves while jobs run.

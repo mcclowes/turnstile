@@ -4,6 +4,10 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ## Unreleased
 
+### Added
+
+- Daemon logs report slow scheduler ticks with their longest phase and long gaps between ticks, using monotonic elapsed time.
+
 ### Changed
 
 - CI now fails on Swift formatting violations using the checked-in rules.

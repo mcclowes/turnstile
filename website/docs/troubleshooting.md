@@ -39,3 +39,14 @@ When a gated command can't reach the daemon it runs anyway, and records the run 
 ## Logs
 
 The daemon logs to `~/.turnstile/daemon.log`. Output from runs without a terminal is kept in `~/.turnstile/logs` for a day, or a week if the run failed. Read it with `turnstile logs <job>`, or right-click the job in the menu bar app.
+
+### Scheduler stalls (unreleased)
+
+When a scheduler tick completes, the daemon logs ticks lasting at least five seconds with their slowest phase. It also logs gaps of at least 30 seconds between ticks:
+
+```text
+daemon tick took 6s; slowest phase: escape scan (6s)
+daemon scheduler had a 2m15s gap between ticks
+```
+
+Elapsed times use a monotonic clock. The phases cover memory observation, config reload, job monitoring, escape scans, scheduling, and history and log maintenance. A phase's elapsed time can include delays in scheduling the daemon. A gap can include work in other daemon callbacks. These messages help locate a stall; they don't establish its cause.

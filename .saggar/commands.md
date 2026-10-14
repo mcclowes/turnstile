@@ -7,7 +7,7 @@ Effects describe the listed invocations with their default environment. Safe com
 - Build: `swift build` #safe #quick
 - Tests: `swift test` — unit tests #safe #monitor
 - Fingerprint timing: `./scripts/fingerprint-timing.sh` — disposable 60k-file repository in four states #safe #monitor
-- E2E: `./scripts/e2e.sh` — isolated turnstile home and run-scoped escaped-server cleanup #safe #monitor
+- E2E: `./scripts/e2e.sh` — isolated state, file-gated pressure/restart fixtures, and run-scoped escaped-server cleanup #safe #monitor
 - Coverage: `./scripts/coverage.sh` — unit tests with a per-file report, writes .build/coverage.lcov #safe #monitor
 - Lint: `swift format lint --strict --recursive --parallel Sources Tests Package.swift` #safe #quick
 - License check: `node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs` — ThirdParty/ records for every dependency #safe #quick

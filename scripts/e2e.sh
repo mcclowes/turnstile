@@ -26,7 +26,18 @@ echo "fake swift $*"
 echo "run $$ $*" >> "$FAKE_RUNS"
 [ -n "${FAKE_NESTED:-}" ] && [ "$1" = test ] && FAKE_NESTED= swift build nested
 [ -n "${FAKE_SCRUBBED:-}" ] && [ "$1" = test ] && env -u TURNSTILE_TOKEN FAKE_SCRUBBED= swift test scrubbed
-[ -n "${FAKE_ALLOC_MB:-}" ] && exec /usr/bin/python3 -c "import time; b = bytearray(${FAKE_ALLOC_MB} * 1024 * 1024); [b.__setitem__(i, 1) for i in range(0, len(b), 4096)]; time.sleep(${FAKE_ALLOC_SECONDS:-30})"
+if [ -n "${FAKE_ALLOC_MB:-}" ]; then
+  exec /usr/bin/python3 - "$FAKE_ALLOC_MB" "${FAKE_ALLOC_SECONDS:-30}" "${FAKE_WAIT_FILE:-}" <<'PY'
+import os, sys, time
+b = bytearray(int(sys.argv[1]) * 1024 * 1024)
+[b.__setitem__(i, 1) for i in range(0, len(b), 4096)]
+if sys.argv[3]:
+    while os.path.exists(sys.argv[3]):
+        time.sleep(0.05)
+else:
+    time.sleep(float(sys.argv[2]))
+PY
+fi
 [ -n "${FAKE_EXEC_SLEEP:-}" ] && exec sleep "$FAKE_EXEC_SLEEP"
 [ -n "${FAKE_LATE_OUTPUT:-}" ] && { (sleep 3; echo "late output") & exit 0; }
 # A build server: a short-lived client starts it in its own session, then exits, leaving it to launchd.
@@ -50,14 +61,31 @@ fail() { echo "FAIL $1"; failures=$((failures + 1)); }
 check() { if eval "$2"; then pass "$1"; else fail "$1"; fi; }
 runs() { grep -cE "^run [0-9]+ $1" "$FAKE_RUNS"; }
 wait_for_job() {
-  local section="$1" project="$2" key="$3" state="${4:-}" i
+  local section="$1" project="$2" key="$3" state="${4:-}" minimum_peak="${5:-0}" i
   for i in {1..100}; do
     turnstile status --json | /usr/bin/python3 -c '
 import json, sys
-section, project, key, state = sys.argv[1:]
+section, project, key, state, minimum_peak = sys.argv[1:]
 jobs = json.load(sys.stdin).get(section, [])
-raise SystemExit(0 if any(j["project"] == project and j["key"] == key and (not state or j["state"] == state) for j in jobs) else 1)
-' "$section" "$project" "$key" "$state" && return 0
+raise SystemExit(0 if any(j["project"] == project and j["key"] == key and (not state or j["state"] == state)
+                         and (j.get("peak") or 0) >= int(minimum_peak) for j in jobs) else 1)
+' "$section" "$project" "$key" "$state" "$minimum_peak" && return 0
+    sleep 0.05
+  done
+  return 1
+}
+wait_for_output() {
+  local file="$1" text="$2" i
+  for i in {1..100}; do
+    grep -qF "$text" "$file" 2>/dev/null && return 0
+    sleep 0.05
+  done
+  return 1
+}
+wait_for_replacement() {
+  local previous="$1" i
+  for i in {1..100}; do
+    turnstile status --json | /usr/bin/python3 -c 'import json, sys; raise SystemExit(0 if json.load(sys.stdin)["daemonPid"] != int(sys.argv[1]) else 1)' "$previous" && return 0
     sleep 0.05
   done
   return 1
@@ -129,17 +157,25 @@ check "maxMemory is killed with a reason" 'echo "$out" | grep -q "turnstile: kil
 check "the kill says it is the memory guard, and not to retry" 'echo "$out" | grep -q "memory guard" && echo "$out" | grep -q "retrying won.t help"'
 
 # Memory pressure pauses the newest job and resumes it afterwards.
-(cd a && FAKE_SLEEP=8 swift build > "$T/p1.out" 2>&1) &
-wait_for_job running a "swift build"
-(cd b && FAKE_SLEEP=8 swift build > "$T/p2.out" 2>&1) &
-wait_for_job running b "swift build"
+touch "$T/pressure-a.wait" "$T/pressure-b.wait"
+pressure_started=true
+(cd a && FAKE_WAIT_FILE="$T/pressure-a.wait" swift build > "$T/p1.out" 2>&1) &
+pressure_a=$!
+wait_for_job running a "swift build" || pressure_started=false
+(cd b && FAKE_WAIT_FILE="$T/pressure-b.wait" swift build > "$T/p2.out" 2>&1) &
+wait_for_job running b "swift build" || pressure_started=false
 echo 5 > "$T/level"
-wait_for_job running b "swift build" paused
+pressure_paused=true
+wait_for_job running b "swift build" paused || pressure_paused=false
 echo 60 > "$T/level"
-wait_for_job running b "swift build" running
+rm -f "$T/pressure-a.wait"
+wait "$pressure_a"
+pressure_resumed=true
+wait_for_job running b "swift build" running || pressure_resumed=false
+rm -f "$T/pressure-b.wait"
 wait
-check "pressure pauses the newest job" 'grep -q "turnstile: paused, memory is low" "$T/p2.out" && ! grep -q paused "$T/p1.out"'
-check "paused job resumes and finishes" 'grep -q "turnstile: resumed" "$T/p2.out" && grep -q "fake swift done" "$T/p2.out"'
+check "pressure pauses the newest job" '[ "$pressure_started" = true ] && [ "$pressure_paused" = true ] && grep -q "turnstile: paused, memory is low" "$T/p2.out" && ! grep -q paused "$T/p1.out"'
+check "paused job resumes and finishes" '[ "$pressure_resumed" = true ] && grep -q "turnstile: resumed" "$T/p2.out" && grep -q "fake swift done" "$T/p2.out"'
 
 # A background writer that outlives the job still gets its output through, instead of a SIGPIPE.
 FAKE_LATE_OUTPUT=1 swift build 2>&1 | cat > "$T/late.out"
@@ -181,21 +217,28 @@ wait
 
 # Restarting the daemon keeps its work gated: a running job is adopted, and a queued one requeues.
 before=$(runs test)
-(cd a && FAKE_SLEEP=3 swift test > "$T/restart-running.out" 2>&1; echo $? > "$T/restart-running.code") &
-wait_for_job running a "swift test"
+touch "$T/restart.wait"
+restart_ready=true
+(cd a && FAKE_WAIT_FILE="$T/restart.wait" swift test > "$T/restart-running.out" 2>&1; echo $? > "$T/restart-running.code") &
+wait_for_job running a "swift test" || restart_ready=false
 restart_job="$(turnstile status --json | /usr/bin/python3 -c 'import json, sys; print(next(j["id"] for j in json.load(sys.stdin)["running"] if j["project"] == "a" and j["key"] == "swift test"))')"
 turnstile pause "$restart_job" > /dev/null
-wait_for_job running a "swift test" paused
+wait_for_job running a "swift test" paused || restart_ready=false
 (cd b && swift test > "$T/restart-queued.out" 2>&1; echo $? > "$T/restart-queued.code") &
-wait_for_job queued b "swift test"
+wait_for_job queued b "swift test" || restart_ready=false
 old_daemon="$(turnstile status --json | /usr/bin/python3 -c 'import json, sys; print(json.load(sys.stdin)["daemonPid"])')"
 turnstile restart > "$T/restart.out" 2>&1
-wait
+restart_adopted=true
+wait_for_replacement "$old_daemon" || restart_adopted=false
+wait_for_job running a "swift test" running || restart_adopted=false
 new_daemon="$(turnstile status --json | /usr/bin/python3 -c 'import json, sys; print(json.load(sys.stdin)["daemonPid"])')"
+if [ "$restart_adopted" != true ]; then turnstile resume 'a swift test' > /dev/null 2>&1 || true; fi
+rm -f "$T/restart.wait"
+wait
 check "restart replaces the daemon" '[ "$old_daemon" != "$new_daemon" ]'
-check "restart preserves running and queued jobs" '[ $(( $(runs test) - before )) = 2 ] && [ "$(cat "$T/restart-running.code")" = 0 ] && [ "$(cat "$T/restart-queued.code")" = 0 ]'
+check "restart preserves running and queued jobs" '[ "$restart_ready" = true ] && [ $(( $(runs test) - before )) = 2 ] && [ "$(cat "$T/restart-running.code")" = 0 ] && [ "$(cat "$T/restart-queued.code")" = 0 ]'
 check "restart keeps recovered jobs gated" '! grep -Eq "running ungated|continuing untracked" "$T/restart-running.out" "$T/restart-queued.out"'
-check "restart resumes and adopts work already running" 'grep -q "adopted a swift test" "$TURNSTILE_HOME/daemon.log"'
+check "restart resumes and adopts work already running" '[ "$restart_adopted" = true ] && grep -q "adopted a swift test" "$TURNSTILE_HOME/daemon.log"'
 
 # In a terminal, the job owns the tty and Ctrl-C stops it like any foreground command.
 cat > "$T/ctrlc.py" <<'EOF'
@@ -466,17 +509,34 @@ turnstile stop > /dev/null
 echo '{"concurrency": {"test": 1, "compile": 2}, "killFloor": 0}' > "$T/config/config.json"
 mkdir -p soft && echo '{"throttle": {"killMultiplier": 0.05}}' > soft/.turnstilerc
 cd soft
-FAKE_ALLOC_MB=100 FAKE_ALLOC_SECONDS=3 swift build > /dev/null 2>&1   # gives the command a high-water peak
-out="$(FAKE_ALLOC_MB=100 FAKE_ALLOC_SECONDS=3 swift build 2>&1)"; code=$?
-check "a runaway with memory to spare keeps running" '[ $code = 0 ] && echo "$out" | grep -q "more memory than usual" && ! echo "$out" | grep -q killed'
-
-(FAKE_ALLOC_MB=100 FAKE_ALLOC_SECONDS=8 swift build > "$T/soft.out" 2>&1; echo $? > "$T/soft.code") &
-sleep 2
-echo 5 > "$T/level"
-sleep 3
-echo 60 > "$T/level"
+touch "$T/soft.wait"
+(FAKE_ALLOC_MB=100 FAKE_WAIT_FILE="$T/soft.wait" swift build > /dev/null 2>&1; echo $? > "$T/soft-baseline.code") &
+baseline_sampled=true
+wait_for_job running soft "swift build" running $((100 * 1024 * 1024)) || baseline_sampled=false
+rm -f "$T/soft.wait"
 wait
-check "a runaway under pressure is paused, not killed" '[ "$(cat "$T/soft.code")" = 0 ] && grep -q "turnstile: paused, using" "$T/soft.out" && grep -q "turnstile: resumed" "$T/soft.out"'
+touch "$T/soft.wait"
+(FAKE_ALLOC_MB=100 FAKE_WAIT_FILE="$T/soft.wait" swift build > "$T/soft-warning.out" 2>&1; echo $? > "$T/soft-warning.code") &
+warning_seen=true
+wait_for_output "$T/soft-warning.out" 'more memory than usual' || warning_seen=false
+rm -f "$T/soft.wait"
+wait
+out="$(cat "$T/soft-warning.out")"; code="$(cat "$T/soft-warning.code")"
+check "a runaway with memory to spare keeps running" '[ "$baseline_sampled" = true ] && [ "$(cat "$T/soft-baseline.code")" = 0 ] && [ "$warning_seen" = true ] && [ $code = 0 ] && echo "$out" | grep -q "more memory than usual" && ! echo "$out" | grep -q killed'
+
+touch "$T/soft.wait"
+(FAKE_ALLOC_MB=100 FAKE_WAIT_FILE="$T/soft.wait" swift build > "$T/soft.out" 2>&1; echo $? > "$T/soft.code") &
+soft_started=true
+wait_for_job running soft "swift build" running $((100 * 1024 * 1024)) || soft_started=false
+echo 5 > "$T/level"
+soft_paused=true
+wait_for_job running soft "swift build" paused || soft_paused=false
+echo 60 > "$T/level"
+soft_resumed=true
+wait_for_job running soft "swift build" running || soft_resumed=false
+rm -f "$T/soft.wait"
+wait
+check "a runaway under pressure is paused, not killed" '[ "$soft_started" = true ] && [ "$soft_paused" = true ] && [ "$soft_resumed" = true ] && [ "$(cat "$T/soft.code")" = 0 ] && grep -q "turnstile: paused, using" "$T/soft.out" && grep -q "turnstile: resumed" "$T/soft.out"'
 cd ..
 
 # Config mistakes are caught with a suggestion, and a clean install passes the doctor.

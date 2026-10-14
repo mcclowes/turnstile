@@ -50,6 +50,11 @@ discarding the backup.
 
 The e2e script never touches your real `~/.turnstile`. To try a local build for real, run `.build/debug/turnstile init`, and `turnstile uninstall` when you're done.
 
+Pressure and restart fixtures keep fake jobs alive with wait files until their
+state is observed. Allocation fixtures wait for a sampled peak and visible
+warning before release. Failed handshakes still release the owned gates and
+remain failed assertions.
+
 `./scripts/fingerprint-timing.sh /path/to/repo` measures an existing repository without modifying it. The target is a p95 below 300 ms; the timing test uses a longer deadline so it can measure regressions beyond the production one-second limit.
 
 The code is split into three targets:

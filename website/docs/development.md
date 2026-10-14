@@ -17,6 +17,9 @@ The history-report helper accepts no arguments for a 30-day report or exactly
 2 before reading history or invoking SQLite. The fixture tests use disposable
 databases.
 
+Pressure and restart E2E fixtures keep fake jobs alive until the required state
+is observed, then release their wait files and check completion.
+
 ## Docs
 
 This site lives in `website/`:

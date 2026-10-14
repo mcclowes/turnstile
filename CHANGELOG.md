@@ -14,6 +14,7 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ### Fixed
 
+- Pressure, restart, and memory-warning E2E fixtures wait for observed state before releasing fake jobs.
 - Cancellation received while draining an exited tool's output still returns 125, preserving the instruction not to retry.
 - The history-report helper rejects invalid arguments before reading history or invoking SQLite.
 - App packaging restores prior artifacts on failed publication or handled interruptions, validates the checksum before promotion, and retains recovery files if restoration fails.

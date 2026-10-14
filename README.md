@@ -67,6 +67,8 @@ The full list is in the [command reference](https://turnstile.marginalutility.de
 
 turnstile keeps its history (commands, working directories, memory peaks, and run times), its daemon log, and output from runs without a terminal (a day, or a week for failed runs) in `~/.turnstile`, on your machine. It sends nothing anywhere.
 
+The daemon log notes scheduler ticks lasting at least five seconds, naming their slowest phase, and gaps of at least 30 seconds between ticks. These timings help distinguish work inside a tick from delays between ticks, which can include other daemon callbacks or delays in scheduling the daemon.
+
 ## Contributing
 
 Bug reports and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md), and report security issues privately as described in [SECURITY.md](SECURITY.md).

@@ -96,7 +96,7 @@ struct ShimRun {
     /// `daemon` is built once the home, and so the socket path, exists.
     static func run(
         _ args: [String] = ["build"], cliArguments: [String]? = nil, environment extra: [String: String] = [:],
-        timeout: Double = 90, daemon: (Paths) throws -> FakeDaemon
+        timeout: Double = 90, toolScript: String? = nil, daemon: (Paths) throws -> FakeDaemon
     ) throws -> (ShimRun, FakeDaemon) {
         let root = NSTemporaryDirectory() + "ts-shim-" + UUID().uuidString.prefix(8)
         defer { try? FileManager.default.removeItem(atPath: root) }
@@ -106,13 +106,14 @@ struct ShimRun {
         try FileManager.default.createDirectory(atPath: bin, withIntermediateDirectories: true)
         let runs = root + "/runs"
         FileManager.default.createFile(atPath: runs, contents: nil)
-        let tool = """
-            #!/bin/bash
-            echo "run $* token=${TURNSTILE_TOKEN:-none}" >> "\(runs)"
-            echo "fake swift $*"
-            [ -n "${FAKE_SLEEP:-}" ] && exec sleep "$FAKE_SLEEP"
-            exit "${FAKE_EXIT:-0}"
-            """
+        let tool =
+            toolScript ?? """
+                #!/bin/bash
+                echo "run $* token=${TURNSTILE_TOKEN:-none}" >> "\(runs)"
+                echo "fake swift $*"
+                [ -n "${FAKE_SLEEP:-}" ] && exec sleep "$FAKE_SLEEP"
+                exit "${FAKE_EXIT:-0}"
+                """
         try tool.write(toFile: bin + "/swift", atomically: true, encoding: .utf8)
         chmod(bin + "/swift", 0o755)
         try FileManager.default.createSymbolicLink(atPath: paths.shims + "/swift", withDestinationPath: binary())
@@ -302,6 +303,43 @@ struct SupervisorTests {
         #expect(!run.signaled)
         #expect(run.exitCode == Turnstile.cancelledExitCode)
         #expect(run.stderr.contains("don't retry"))
+    }
+
+    @Test(arguments: [0, 7])
+    func aCancelReadWhileOutputDrainsStillCountsAsCancelled(toolExit: Int32) throws {
+        let tool = """
+            #!/bin/bash
+            touch "$TURNSTILE_HOME/drain"
+            (
+              deadline=$((SECONDS + 10))
+              while [ -e "$TURNSTILE_HOME/drain" ] && [ "$SECONDS" -lt "$deadline" ]; do sleep 0.01; done
+              echo 'late output'
+            ) &
+            exit "$FAKE_EXIT"
+            """
+        let (run, daemon) = try ShimRun.run(environment: ["FAKE_EXIT": "\(toolExit)"], toolScript: tool) { paths in
+            FakeDaemon(socket: paths.socket) { message, _, send, _ in
+                switch message.type {
+                case "request": send(reply("admitted", job: 5))
+                case "started":
+                    guard let child = message.childPid else { return }
+                    let deadline = Date().addingTimeInterval(5)
+                    while kill(child, 0) == 0 && Date() < deadline { usleep(1000) }
+                    if errno == ESRCH { send(reply("notice", text: "direct child was reaped")) }
+                    send(reply("cancelled", job: 5, text: Turnstile.cancelledText))
+                case "finished":
+                    unlink((paths.home + "/drain"))
+                    send(reply("ok"))
+                default: break
+                }
+            }
+        }
+        #expect(run.stderr.contains("direct child was reaped"))
+        #expect(run.stderr.contains(Turnstile.cancelledText))
+        #expect(!run.signaled)
+        #expect(run.exitCode == Turnstile.cancelledExitCode)
+        #expect(run.stdout.contains("late output"))
+        #expect(daemon.received.first { $0.message.type == "finished" }?.message.exitCode == toolExit)
     }
 
     @Test func aRunningJobReRegistersWhenItsDaemonDies() throws {

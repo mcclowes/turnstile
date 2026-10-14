@@ -14,6 +14,7 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ### Fixed
 
+- Cancellation received while draining an exited tool's output still returns 125, preserving the instruction not to retry.
 - The history-report helper rejects invalid arguments before reading history or invoking SQLite.
 - App packaging restores prior artifacts on failed publication or handled interruptions, validates the checksum before promotion, and retains recovery files if restoration fails.
 - Distribution publication restores previous output on failed moves or handled interruptions and retains recovery data if restoration fails.

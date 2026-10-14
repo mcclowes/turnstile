@@ -333,10 +333,12 @@ enum Supervisor {
                         if let text = message.text { warn(text) }
                         if message.type == "release" { released = true }
                         // The daemon signals the tree too; this covers a child it hasn't seen start yet.
-                        if message.type == "cancelled" && !cancelled && !exited {
+                        if message.type == "cancelled" && !cancelled {
                             cancelled = true
-                            kill(child, SIGTERM)
-                            resume(child)
+                            if !exited {
+                                kill(child, SIGTERM)
+                                resume(child)
+                            }
                         }
                     }
                 } else {

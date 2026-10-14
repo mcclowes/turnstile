@@ -18,7 +18,7 @@ swift test             # unit tests
 ./scripts/e2e.sh       # end-to-end, with fake tools in a throwaway turnstile home
 ./scripts/coverage.sh  # unit tests with a coverage report
 swift format lint --strict --recursive --parallel Sources Tests Package.swift
-node --test scripts/release-args-tests.mjs scripts/package-tests.mjs # release helpers, with stubbed external tools
+node --test scripts/release-args-tests.mjs scripts/package-tests.mjs scripts/dist-tests.mjs # release helpers with isolated tools
 node --test scripts/e2e-server-tests.mjs   # run-scoped process detection and cleanup
 /usr/bin/python3 scripts/e2e-top-tests.py # PTY handshakes and delayed terminal restoration
 ./scripts/fingerprint-timing.sh # isolated 60k-file fingerprint timings; FILES changes the size
@@ -30,6 +30,11 @@ Packaging stages replacements until signing and release validation succeed.
 Failures before publication keep the previous app and ZIP.
 `scripts/package.sh --dev` replaces only the app and preserves the release ZIP. The helper tests use
 temporary projects without building, signing, or contacting a notary service.
+
+Distribution assembly also stages the CLI tarball, app ZIP, and checksums before
+replacing `.build/dist`. A failed archive, package, copy, or checksum step keeps
+the previous distribution. Its fixtures use real archive/checksum tools with
+synthetic binaries and a stubbed app packager.
 
 The e2e script never touches your real `~/.turnstile`. To try a local build for real, run `.build/debug/turnstile init`, and `turnstile uninstall` when you're done.
 

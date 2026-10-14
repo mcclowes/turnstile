@@ -14,7 +14,6 @@ cd "$(dirname "$0")/.."
 
 VERSION="$(sed -n 's/.*public static let version = "\(.*\)"/\1/p' Sources/TurnstileCore/Paths.swift)"
 DIST=.build/dist
-TARBALL="$DIST/turnstile-$VERSION-macos.tar.gz"
 ZIP=".build/Turnstile-$VERSION.zip"
 
 fail() { echo "dist.sh: $*" >&2; exit 1; }
@@ -25,11 +24,17 @@ bin="$(swift build -c release --product turnstile "${arch[@]}" --show-bin-path)"
 archs="$(lipo -archs "$bin/turnstile")"
 [[ "$archs" == *arm64* && "$archs" == *x86_64* ]] || fail "the CLI isn't universal: $archs"
 [ "$("$bin/turnstile" --version)" = "$VERSION" ] || fail "the built CLI doesn't report $VERSION"
-rm -rf "$DIST"
-mkdir -p "$DIST"
+mkdir -p .build
+dist_stage=$(mktemp -d .build/.turnstile-dist.XXXXXX)
+trap 'rm -rf "$dist_stage"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+TARBALL="$dist_stage/turnstile-$VERSION-macos.tar.gz"
 tar -czf "$TARBALL" -C "$bin" turnstile
 
 ./scripts/package.sh
-cp "$ZIP" "$DIST/"
-(cd "$DIST" && shasum -a 256 -- *.tar.gz *.zip > SHA256SUMS)
+cp "$ZIP" "$dist_stage/"
+(cd "$dist_stage" && shasum -a 256 -- *.tar.gz *.zip > SHA256SUMS)
+rm -rf "$DIST"
+mv "$dist_stage" "$DIST"
 cat "$DIST/SHA256SUMS"

@@ -20,8 +20,8 @@ DEV=false
 VERSION="$(sed -n 's/.*public static let version = "\(.*\)"/\1/p' Sources/TurnstileCore/Paths.swift)"
 IDENTITY="${CODESIGN_IDENTITY:-Developer ID Application}"
 PROFILE="${NOTARY_PROFILE:-kiln-notary}"
-APP=.build/Turnstile.app
-ZIP=".build/Turnstile-$VERSION.zip"
+FINAL_APP=.build/Turnstile.app
+FINAL_ZIP=".build/Turnstile-$VERSION.zip"
 
 if [ "$DEV" = false ] && [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   echo "package.sh: a release is packaged from a clean commit; commit first, or pass --dev" >&2
@@ -32,7 +32,13 @@ arch=(--arch arm64 --arch x86_64)
 swift build -c release --product TurnstileBar "${arch[@]}"
 bin="$(swift build -c release --product TurnstileBar "${arch[@]}" --show-bin-path)"
 
-rm -rf "$APP" "$ZIP"
+mkdir -p .build
+package_stage=$(mktemp -d .build/.turnstile-package.XXXXXX)
+trap 'rm -rf "$package_stage"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+APP="$package_stage/Turnstile.app"
+ZIP="$package_stage/Turnstile-$VERSION.zip"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$bin/TurnstileBar" "$APP/Contents/MacOS/"
 cp assets/AppIcon.icns "$APP/Contents/Resources/"
@@ -58,7 +64,9 @@ PLIST
 
 if [ "$DEV" = true ]; then
   codesign --force --sign - "$APP"
-  echo "$APP (ad-hoc signed, not notarized)"
+  rm -rf "$FINAL_APP"
+  mv "$APP" "$FINAL_APP"
+  echo "$FINAL_APP (ad-hoc signed, not notarized)"
   exit 0
 fi
 
@@ -82,4 +90,7 @@ spctl --assess --type execute --verbose=2 "$APP"
 # Re-zip so the zip carries the stapled ticket.
 rm "$ZIP"
 ditto -c -k --keepParent "$APP" "$ZIP"
-shasum -a 256 "$ZIP"
+rm -rf "$FINAL_APP"
+mv "$APP" "$FINAL_APP"
+mv "$ZIP" "$FINAL_ZIP"
+shasum -a 256 "$FINAL_ZIP"

@@ -52,7 +52,8 @@ enum Panel {
         let sections = (snapshot.running.isEmpty ? 0 : 1) + (snapshot.queued.isEmpty ? 0 : 1)
         let empty = snapshot.running.isEmpty && snapshot.queued.isEmpty
         if empty { return emptyHeight }
-        let height = CGFloat(sections) * sectionHeight
+        let height =
+            CGFloat(sections) * sectionHeight
             + CGFloat(snapshot.running.count) * runningHeight + CGFloat(snapshot.queued.count) * queuedHeight
         return height + 10
     }
@@ -70,7 +71,10 @@ struct HoverTip: ViewModifier {
         content
             .onHover { hovering = $0 }
             .task(id: hovering) {
-                guard hovering else { shown = false; return }
+                guard hovering else {
+                    shown = false
+                    return
+                }
                 try? await Task.sleep(for: .milliseconds(400))
                 if !Task.isCancelled { shown = true }
             }
@@ -92,7 +96,9 @@ struct HoverTip: ViewModifier {
                 .padding(.vertical, 6)
                 .frame(width: width, alignment: .leading)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Color(nsColor: .separatorColor)))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Color(nsColor: .separatorColor))
+                )
                 .shadow(color: .black.opacity(0.2), radius: 6, y: 2)
                 .padding(.top, 6)
                 .allowsHitTesting(false)
@@ -169,7 +175,10 @@ struct TagLabel: View {
             .foregroundStyle(tag.tone == .neutral ? Color.secondary : tag.tone.color)
             .padding(.horizontal, 6)
             .padding(.vertical, 1)
-            .background((tag.tone == .neutral ? Color(nsColor: .quaternaryLabelColor) : tag.tone.color.opacity(0.14)), in: Capsule())
+            .background(
+                (tag.tone == .neutral ? Color(nsColor: .quaternaryLabelColor) : tag.tone.color.opacity(0.14)),
+                in: Capsule()
+            )
             .fixedSize()
     }
 }

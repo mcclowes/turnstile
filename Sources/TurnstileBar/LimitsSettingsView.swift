@@ -67,7 +67,8 @@ final class LimitsSettingsModel: ObservableObject {
     }
 
     private func write(_ data: Data) throws {
-        try FileManager.default.createDirectory(atPath: (configPath as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            atPath: (configPath as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
         try data.write(to: URL(fileURLWithPath: configPath), options: .atomic)
     }
 }
@@ -83,7 +84,10 @@ struct LimitsSettingsView: View {
             Section {
                 ForEach(ResourceClass.allCases, id: \.self) { cls in
                     let slots = model.settings.slots(for: cls)
-                    Stepper(value: Binding(get: { slots }, set: { model.setSlots($0, for: cls) }), in: 1...max(8, model.cpuCount)) {
+                    Stepper(
+                        value: Binding(get: { slots }, set: { model.setSlots($0, for: cls) }),
+                        in: 1...max(8, model.cpuCount)
+                    ) {
                         Label {
                             Text("\(cls.rawValue.capitalized): \(slots) at once")
                             if model.settings.concurrency[cls] == nil { Text("Automatic") }
@@ -99,8 +103,10 @@ struct LimitsSettingsView: View {
             }
 
             Section("Memory") {
-                Stepper(value: Binding(get: { model.settings.reserveBytes }, set: { model.setReserve($0) }),
-                        in: Self.halfGB...max(Self.halfGB, model.physical / 2), step: Self.step) {
+                Stepper(
+                    value: Binding(get: { model.settings.reserveBytes }, set: { model.setReserve($0) }),
+                    in: Self.halfGB...max(Self.halfGB, model.physical / 2), step: Self.step
+                ) {
                     Text("Keep \(Bytes.format(model.settings.reserveBytes)) free for everything else")
                     Text("Queued jobs wait rather than eat into this.")
                 }
@@ -120,17 +126,25 @@ struct LimitsSettingsView: View {
             }
 
             Section("Runaways") {
-                Stepper(value: Binding(get: { model.settings.killMultiplierValue }, set: { model.setKillMultiplier($0) }),
-                        in: 1.5...10, step: 0.5) {
+                Stepper(
+                    value: Binding(get: { model.settings.killMultiplierValue }, set: { model.setKillMultiplier($0) }),
+                    in: 1.5...10, step: 0.5
+                ) {
                     Text("Runaway past \(model.settings.killMultiplierValue.formatted())× a command's usual peak")
                     Text("A runaway is paused when memory runs out, and killed if that doesn't help.")
                 }
-                Toggle(isOn: Binding(get: { model.settings.maxMemory != nil }, set: { model.setMaxMemory($0 ? 8 * Bytes.gb : nil) })) {
+                Toggle(
+                    isOn: Binding(
+                        get: { model.settings.maxMemory != nil }, set: { model.setMaxMemory($0 ? 8 * Bytes.gb : nil) })
+                ) {
                     Text("Hard memory cap")
                     Text("Kills any job past the cap straight away, whatever memory is spare.")
                 }
                 if let cap = model.settings.maxMemory {
-                    Stepper(value: Binding(get: { cap }, set: { model.setMaxMemory($0) }), in: Bytes.gb...max(Bytes.gb, model.physical), step: Int(Bytes.gb)) {
+                    Stepper(
+                        value: Binding(get: { cap }, set: { model.setMaxMemory($0) }),
+                        in: Bytes.gb...max(Bytes.gb, model.physical), step: Int(Bytes.gb)
+                    ) {
                         Text("Cap at \(Bytes.format(cap))")
                     }
                 }
@@ -151,7 +165,9 @@ struct LimitsSettingsView: View {
                         .disabled(model.settings == LimitSettings())
                 }
             } footer: {
-                caption("Other settings live in the config file. A project's .turnstilerc can override pausing, parallelism, and runaway limits.")
+                caption(
+                    "Other settings live in the config file. A project's .turnstilerc can override pausing, parallelism, and runaway limits."
+                )
             }
 
             if let message = model.message {

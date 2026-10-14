@@ -1,8 +1,9 @@
 import Darwin
 import Foundation
 import Testing
-@testable import turnstile
+
 @testable import TurnstileCore
+@testable import turnstile
 
 @Suite(.serialized)
 struct DaemonAdmissionTests {
@@ -18,7 +19,8 @@ struct DaemonAdmissionTests {
 
     @Test func waitsForAFreeSlotAndSaysWhy() throws {
         let harness = try DaemonHarness()
-        let first = FakeClient(), second = FakeClient()
+        let first = FakeClient()
+        let second = FakeClient()
         harness.request(first, key: "swift test", resourceClass: .test)
         let id = harness.request(second, key: "swift test", resourceClass: .test, root: "/other")
         let waiting = second.received()
@@ -33,7 +35,8 @@ struct DaemonAdmissionTests {
     @Test("Status carries when a waiting job should start, so the app can count down", .bug(id: 44))
     func statusCarriesAnExpectedStart() throws {
         let harness = try DaemonHarness()
-        let first = FakeClient(), second = FakeClient()
+        let first = FakeClient()
+        let second = FakeClient()
         let running = harness.request(first, key: "swift test", resourceClass: .test)
         try #require(harness.job(running)).usualDuration = 600
         let before = Date().timeIntervalSince1970
@@ -47,7 +50,8 @@ struct DaemonAdmissionTests {
 
     @Test func aWaitWithNoKnownEndHasNoExpectedStart() throws {
         let harness = try DaemonHarness()
-        let first = FakeClient(), second = FakeClient()
+        let first = FakeClient()
+        let second = FakeClient()
         harness.request(first, key: "swift test", resourceClass: .test)
         harness.request(second, key: "swift test", resourceClass: .test, root: "/other")
         #expect(harness.daemon.snapshot().queued.first?.startsAt == nil)
@@ -55,7 +59,8 @@ struct DaemonAdmissionTests {
 
     @Test func waitsForMemory() throws {
         let harness = try DaemonHarness(memoryLevel: 50)
-        let first = FakeClient(), second = FakeClient()
+        let first = FakeClient()
+        let second = FakeClient()
         harness.request(first, memory: harness.physical / 4)
         harness.request(second, memory: harness.physical / 2, root: "/other")
         let waiting = second.received()
@@ -65,7 +70,9 @@ struct DaemonAdmissionTests {
 
     @Test func peopleGoAheadOfAgents() throws {
         let harness = try DaemonHarness()
-        let running = FakeClient(), agent = FakeClient(), person = FakeClient()
+        let running = FakeClient()
+        let agent = FakeClient()
+        let person = FakeClient()
         harness.request(running, key: "swift test", resourceClass: .test)
         harness.request(agent, key: "swift test", resourceClass: .test, root: "/agent")
         harness.request(person, key: "swift test", resourceClass: .test, agent: false, root: "/person")
@@ -79,7 +86,9 @@ struct DaemonAdmissionTests {
 
     @Test func bumpMovesAJobToTheFront() throws {
         let harness = try DaemonHarness()
-        let running = FakeClient(), older = FakeClient(), newer = FakeClient()
+        let running = FakeClient()
+        let older = FakeClient()
+        let newer = FakeClient()
         harness.request(running, key: "swift test", resourceClass: .test)
         harness.request(older, key: "swift test", resourceClass: .test, root: "/older")
         let bumped = harness.request(newer, key: "swift test", resourceClass: .test, root: "/newer")
@@ -92,7 +101,8 @@ struct DaemonAdmissionTests {
 
     @Test func heldJobsWaitUntilReleased() throws {
         let harness = try DaemonHarness()
-        let running = FakeClient(), held = FakeClient()
+        let running = FakeClient()
+        let held = FakeClient()
         harness.request(running, key: "swift test", resourceClass: .test)
         let id = harness.request(held, key: "swift test", resourceClass: .test, root: "/held")
         #expect(harness.control("hold", "\(id!)").type == "ok")
@@ -119,7 +129,8 @@ struct DaemonAdmissionTests {
 
     @Test func aNestedCallInsideARunningJobIsReleased() throws {
         let harness = try DaemonHarness()
-        let owner = FakeClient(), nested = FakeClient()
+        let owner = FakeClient()
+        let nested = FakeClient()
         let shell = try harness.sleeper()
         harness.request(owner)
         harness.started(owner, childPid: shell.processIdentifier)
@@ -137,7 +148,8 @@ struct DaemonAdmissionTests {
 struct DaemonMergingTests {
     @Test func anIdenticalRunJoinsAndGetsItsResult() throws {
         let harness = try DaemonHarness()
-        let owner = FakeClient(), joiner = FakeClient()
+        let owner = FakeClient()
+        let joiner = FakeClient()
         let id = harness.request(owner, fingerprint: "abc")
         harness.request(joiner, fingerprint: "abc")
         let joined = joiner.received()
@@ -153,7 +165,8 @@ struct DaemonMergingTests {
 
     @Test func runsWithoutFollowableOutputDontMerge() throws {
         let harness = try DaemonHarness()
-        let owner = FakeClient(), other = FakeClient()
+        let owner = FakeClient()
+        let other = FakeClient()
         harness.request(owner, fingerprint: "abc", captures: false)
         harness.request(other, fingerprint: "abc")
         #expect(other.types() == ["admitted"])
@@ -162,7 +175,8 @@ struct DaemonMergingTests {
 
     @Test func differentTreesDontMerge() throws {
         let harness = try DaemonHarness()
-        let owner = FakeClient(), other = FakeClient()
+        let owner = FakeClient()
+        let other = FakeClient()
         harness.request(owner, fingerprint: "abc")
         harness.request(other, fingerprint: "def")
         #expect(other.types() == ["admitted"])
@@ -170,7 +184,9 @@ struct DaemonMergingTests {
 
     @Test func aNewerRequestFromTheSameWorktreeSupersedesTheQueuedOne() throws {
         let harness = try DaemonHarness()
-        let running = FakeClient(), stale = FakeClient(), fresh = FakeClient()
+        let running = FakeClient()
+        let stale = FakeClient()
+        let fresh = FakeClient()
         harness.request(running, key: "swift test", resourceClass: .test, root: "/busy")
         let staleID = harness.request(stale, key: "swift test", resourceClass: .test, fingerprint: "v1")
         let freshID = harness.request(fresh, key: "swift test", resourceClass: .test, fingerprint: "v2")
@@ -185,7 +201,9 @@ struct DaemonMergingTests {
 
     @Test func aQueuedOwnerLeavingTellsItsJoinersToRunThemselves() throws {
         let harness = try DaemonHarness()
-        let running = FakeClient(), owner = FakeClient(), joiner = FakeClient()
+        let running = FakeClient()
+        let owner = FakeClient()
+        let joiner = FakeClient()
         harness.request(running, key: "swift test", resourceClass: .test, root: "/busy")
         let id = harness.request(owner, key: "swift test", resourceClass: .test, fingerprint: "abc")
         harness.request(joiner, key: "swift test", resourceClass: .test, fingerprint: "abc")
@@ -203,7 +221,8 @@ struct DaemonMergingTests {
 struct DaemonLifecycleTests {
     @Test func finishedRunsTeachTheNextEstimate() throws {
         let harness = try DaemonHarness()
-        let first = FakeClient(), second = FakeClient()
+        let first = FakeClient()
+        let second = FakeClient()
         let id = harness.request(first, memory: nil)
         harness.job(id)?.peak = 700 * Bytes.mb
         harness.finished(first)
@@ -215,7 +234,9 @@ struct DaemonLifecycleTests {
 
     @Test func aNewWorktreeLearnsFromItsRepo() throws {
         let harness = try DaemonHarness()
-        let main = FakeClient(), other = FakeClient(), worktree = FakeClient()
+        let main = FakeClient()
+        let other = FakeClient()
+        let worktree = FakeClient()
         let id = harness.request(main, memory: nil, root: "/code/app")
         harness.job(id)?.peak = 2400 * Bytes.mb
         harness.finished(main)
@@ -230,7 +251,8 @@ struct DaemonLifecycleTests {
 
     @Test func outcomesAreRecorded() throws {
         let harness = try DaemonHarness()
-        for (exit, signal, outcome) in [(Int32?(0), Int32?.none, "ok"), (1, nil, "failed"), (nil, SIGTERM, "signaled")] {
+        for (exit, signal, outcome) in [(Int32?(0), Int32?.none, "ok"), (1, nil, "failed"), (nil, SIGTERM, "signaled")]
+        {
             let client = FakeClient()
             let id = harness.request(client, root: "/\(outcome)")
             harness.finished(client, exitCode: exit, signal: signal)
@@ -308,11 +330,14 @@ struct DaemonLifecycleTests {
 struct DaemonControlTests {
     @Test func killingAQueuedJobCancelsItAndItsJoiners() throws {
         let harness = try DaemonHarness()
-        let running = FakeClient(), owner = FakeClient(), joiner = FakeClient()
+        let running = FakeClient()
+        let owner = FakeClient()
+        let joiner = FakeClient()
         harness.request(running, key: "swift test", resourceClass: .test, root: "/busy")
         let id = harness.request(owner, key: "swift test", resourceClass: .test, fingerprint: "abc")
         harness.request(joiner, key: "swift test", resourceClass: .test, fingerprint: "abc")
-        _ = owner.received(); _ = joiner.received()
+        _ = owner.received()
+        _ = joiner.received()
 
         let reply = harness.control("kill", "\(id!)")
         #expect(reply.text?.contains("and 1 joined run") == true)
@@ -367,17 +392,30 @@ struct DaemonControlTests {
 
     @Test func jobsResolveByNumberPidOrUniqueName() throws {
         let harness = try DaemonHarness()
-        let build = FakeClient(), test = FakeClient()
+        let build = FakeClient()
+        let test = FakeClient()
         let buildID = harness.request(build, root: "/api", pid: 4242)
         harness.request(test, key: "swift test", resourceClass: .test, root: "/web")
 
-        guard case let .success(byNumber) = harness.daemon.resolve("#\(buildID!)") else { Issue.record("by number"); return }
+        guard case let .success(byNumber) = harness.daemon.resolve("#\(buildID!)") else {
+            Issue.record("by number")
+            return
+        }
         #expect(byNumber.id == buildID)
-        guard case let .success(byPid) = harness.daemon.resolve("4242") else { Issue.record("by pid"); return }
+        guard case let .success(byPid) = harness.daemon.resolve("4242") else {
+            Issue.record("by pid")
+            return
+        }
         #expect(byPid.id == buildID)
-        guard case let .success(byName) = harness.daemon.resolve("web") else { Issue.record("by name"); return }
+        guard case let .success(byName) = harness.daemon.resolve("web") else {
+            Issue.record("by name")
+            return
+        }
         #expect(byName.key == "swift test")
-        guard case .failure = harness.daemon.resolve("swift") else { Issue.record("ambiguous name resolved"); return }
+        guard case .failure = harness.daemon.resolve("swift") else {
+            Issue.record("ambiguous name resolved")
+            return
+        }
     }
 }
 
@@ -385,8 +423,10 @@ struct DaemonControlTests {
 struct DaemonPressureTests {
     @Test func theNewestAgentJobIsPausedUnderPressureAndResumedAfter() throws {
         let harness = try DaemonHarness()
-        let older = FakeClient(), newer = FakeClient()
-        let olderTool = try harness.sleeper(), newerTool = try harness.sleeper()
+        let older = FakeClient()
+        let newer = FakeClient()
+        let olderTool = try harness.sleeper()
+        let newerTool = try harness.sleeper()
         let olderID = harness.request(older, root: "/older")
         harness.started(older, childPid: olderTool.processIdentifier)
         let newerID = harness.request(newer, root: "/newer")
@@ -410,8 +450,10 @@ struct DaemonPressureTests {
 
     @Test func recordsHowCloseEachJobCameToPausing() throws {
         let harness = try DaemonHarness()
-        let older = FakeClient(), newer = FakeClient()
-        let olderTool = try harness.sleeper(), newerTool = try harness.sleeper()
+        let older = FakeClient()
+        let newer = FakeClient()
+        let olderTool = try harness.sleeper()
+        let newerTool = try harness.sleeper()
         let olderID = harness.request(older, root: "/older")
         harness.started(older, childPid: olderTool.processIdentifier)
         let newerID = harness.request(newer, root: "/newer")
@@ -423,7 +465,8 @@ struct DaemonPressureTests {
         #expect(harness.job(newerID)?.paused == false)
         harness.daemon.observe(MemoryReading(level: 60, pressure: .normal, swapUsed: 0))
         harness.finished(newer)
-        #expect(harness.daemon.store.memory(of: newerID!) == JobMemory(minLevel: 30, maxPressure: .warn, wouldPause: true))
+        #expect(
+            harness.daemon.store.memory(of: newerID!) == JobMemory(minLevel: 30, maxPressure: .warn, wouldPause: true))
 
         _ = harness.control("pause", "\(olderID!)")
         usleep(50_000)
@@ -448,8 +491,11 @@ struct DaemonPressureTests {
 
     @Test func pauseAllStopsRunningJobsAndResumesOnlyThoseItStopped() throws {
         let harness = try DaemonHarness()
-        let mine = FakeClient(), theirs = FakeClient(), waiting = FakeClient()
-        let mineTool = try harness.sleeper(), theirsTool = try harness.sleeper()
+        let mine = FakeClient()
+        let theirs = FakeClient()
+        let waiting = FakeClient()
+        let mineTool = try harness.sleeper()
+        let theirsTool = try harness.sleeper()
         let mineID = harness.request(mine, root: "/mine")
         harness.started(mine, childPid: mineTool.processIdentifier)
         let theirsID = harness.request(theirs, root: "/theirs")
@@ -492,8 +538,10 @@ struct DaemonPressureTests {
     /// #17: the level stays healthy while the machine swaps, because swapping is what holds it up.
     @Test func swappingPausesEvenWhileTheLevelLooksHealthy() throws {
         let harness = try DaemonHarness()
-        let older = FakeClient(), newer = FakeClient()
-        let olderTool = try harness.sleeper(), newerTool = try harness.sleeper()
+        let older = FakeClient()
+        let newer = FakeClient()
+        let olderTool = try harness.sleeper()
+        let newerTool = try harness.sleeper()
         let olderID = harness.request(older, root: "/older")
         harness.started(older, childPid: olderTool.processIdentifier)
         let newerID = harness.request(newer, root: "/newer")
@@ -519,7 +567,8 @@ struct DaemonPressureTests {
 
     @Test func nothingIsAdmittedWhileTheMachineSwaps() throws {
         let harness = try DaemonHarness()
-        let running = FakeClient(), waiting = FakeClient()
+        let running = FakeClient()
+        let waiting = FakeClient()
         let tool = try harness.sleeper()
         harness.request(running)
         harness.started(running, childPid: tool.processIdentifier)
@@ -598,17 +647,30 @@ struct DaemonPressureTests {
 
         harness.daemon.probe = probe([
             // Xcode's build service compiles without a shell, so nothing can gate it.
-            Fake(pid: 500, parent: 400, name: "swift-frontend", executable: "/usr/bin/swift-frontend", args: ["swift-frontend", "-c"], cwd: "/Users/me/app"),
-            Fake(pid: 400, parent: 1, name: "SWBBuildService", executable: "/Applications/Xcode.app/SWBBuildService", args: ["SWBBuildService"], cwd: "/"),
+            Fake(
+                pid: 500, parent: 400, name: "swift-frontend", executable: "/usr/bin/swift-frontend",
+                args: ["swift-frontend", "-c"], cwd: "/Users/me/app"),
+            Fake(
+                pid: 400, parent: 1, name: "SWBBuildService", executable: "/Applications/Xcode.app/SWBBuildService",
+                args: ["SWBBuildService"], cwd: "/"),
             // A compiler inside a gated job, which is already accounted for.
-            Fake(pid: 301, parent: 300, name: "swift-frontend", executable: "/usr/bin/swift-frontend", args: ["swift-frontend", "-c"], cwd: "/repo"),
-            Fake(pid: 300, parent: 200, name: "swift", executable: "/usr/bin/swift", args: ["swift", "build"], cwd: "/repo"),
+            Fake(
+                pid: 301, parent: 300, name: "swift-frontend", executable: "/usr/bin/swift-frontend",
+                args: ["swift-frontend", "-c"], cwd: "/repo"),
+            Fake(
+                pid: 300, parent: 200, name: "swift", executable: "/usr/bin/swift", args: ["swift", "build"],
+                cwd: "/repo"),
             // Not a build at all.
-            Fake(pid: 600, parent: 400, name: "node", executable: "/usr/local/bin/node", args: ["node", "/app/server.js"], cwd: "/app"),
+            Fake(
+                pid: 600, parent: 400, name: "node", executable: "/usr/local/bin/node",
+                args: ["node", "/app/server.js"], cwd: "/app"),
         ])
 
         harness.daemon.watchForEscapes(now: 1000)
-        #expect(harness.daemon.store.escapes(since: 0) == [EscapeRow(label: "swift-frontend", via: "Xcode", cwd: "/Users/me/app", count: 1, lastSeen: 1000)])
+        #expect(
+            harness.daemon.store.escapes(since: 0) == [
+                EscapeRow(label: "swift-frontend", via: "Xcode", cwd: "/Users/me/app", count: 1, lastSeen: 1000)
+            ])
         // Seeing one keeps an idle daemon up to watch for more (#30).
         #expect(harness.daemon.lastEscapeAt != nil)
 
@@ -624,8 +686,12 @@ struct DaemonPressureTests {
         harness.started(client, childPid: 300)
         // The job's tree hasn't been sampled yet, so the ancestry check is what keeps this one out.
         harness.daemon.probe = probe([
-            Fake(pid: 301, parent: 300, name: "rustc", executable: "/usr/bin/rustc", args: ["rustc", "src/main.rs"], cwd: "/repo"),
-            Fake(pid: 300, parent: 200, name: "cargo", executable: "/usr/bin/cargo", args: ["cargo", "build"], cwd: "/repo"),
+            Fake(
+                pid: 301, parent: 300, name: "rustc", executable: "/usr/bin/rustc", args: ["rustc", "src/main.rs"],
+                cwd: "/repo"),
+            Fake(
+                pid: 300, parent: 200, name: "cargo", executable: "/usr/bin/cargo", args: ["cargo", "build"],
+                cwd: "/repo"),
         ])
         harness.daemon.watchForEscapes(now: 1000)
         #expect(harness.daemon.store.escapes(since: 0).isEmpty)

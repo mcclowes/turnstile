@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import TurnstileCore
 
 struct BytesTests {
@@ -15,7 +16,9 @@ struct BytesTests {
         #expect(Bytes.parse("4 parsecs") == nil)
     }
 
-    @Test(arguments: [(UInt64(512) << 20, "512 MB"), (UInt64(4) << 30, "4 GB"), (1536 << 20, "1.5 GB"), (UInt64(12) << 30, "12 GB")])
+    @Test(arguments: [
+        (UInt64(512) << 20, "512 MB"), (UInt64(4) << 30, "4 GB"), (1536 << 20, "1.5 GB"), (UInt64(12) << 30, "12 GB"),
+    ])
     func formats(bytes: UInt64, text: String) {
         #expect(Bytes.format(bytes) == text)
     }
@@ -68,10 +71,13 @@ struct ConfigTests {
         let nested = root.appendingPathComponent("packages/web/src")
         try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        try #"{"throttle": {"jobs": 1}}"#.write(to: root.appendingPathComponent(".turnstilerc"), atomically: true, encoding: .utf8)
-        try #"{"throttle": {"jobs": 2}}"#.write(to: root.appendingPathComponent("packages/web/.turnstilerc"), atomically: true, encoding: .utf8)
+        try #"{"throttle": {"jobs": 1}}"#.write(
+            to: root.appendingPathComponent(".turnstilerc"), atomically: true, encoding: .utf8)
+        try #"{"throttle": {"jobs": 2}}"#.write(
+            to: root.appendingPathComponent("packages/web/.turnstilerc"), atomically: true, encoding: .utf8)
 
-        let config = try ConfigLoader.load(cwd: nested.path, environment: ["TURNSTILE_CONFIG_DIR": root.appendingPathComponent("none").path])
+        let config = try ConfigLoader.load(
+            cwd: nested.path, environment: ["TURNSTILE_CONFIG_DIR": root.appendingPathComponent("none").path])
         #expect(config.throttle.jobs == 2)
         #expect(config.projectRoot?.hasSuffix("packages/web") == true)
     }
@@ -97,11 +103,17 @@ struct ShellSetupTests {
         let path = "/usr/bin:\(shims):/bin"
         let snippet = ShellSetup.snippet(shell: shell, shimsDir: shims)
         guard let binary = ["zsh": "/bin/zsh", "bash": "/bin/bash", "fish": "/opt/homebrew/bin/fish"][shell.rawValue],
-              FileManager.default.isExecutableFile(atPath: binary) else { return }
+            FileManager.default.isExecutableFile(atPath: binary)
+        else { return }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: binary)
-        let script = shell == .fish ? "set -gx PATH (string split : \"\(path)\"); \(snippet); string join : $PATH" : "PATH='\(path)'; \(snippet)\n\(snippet)\nprintf %s \"$PATH\""
-        process.arguments = shell == .fish ? ["--no-config", "-c", script] : ["-f", "-c", script].filter { shell == .zsh || $0 != "-f" }
+        let script =
+            shell == .fish
+            ? "set -gx PATH (string split : \"\(path)\"); \(snippet); string join : $PATH"
+            : "PATH='\(path)'; \(snippet)\n\(snippet)\nprintf %s \"$PATH\""
+        process.arguments =
+            shell == .fish
+            ? ["--no-config", "-c", script] : ["-f", "-c", script].filter { shell == .zsh || $0 != "-f" }
         let output = Pipe()
         process.standardOutput = output
         try process.run()
@@ -133,7 +145,8 @@ struct ShellSetupTests {
         process.standardOutput = output
         try process.run()
         process.waitUntilExit()
-        let lines = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).split(separator: "\n")
+        let lines = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).split(
+            separator: "\n")
         #expect(lines.first == "\(shims):/nvm/v22/bin:/usr/bin:/bin")
         #expect(lines.last == "_turnstile_shims_first")
     }

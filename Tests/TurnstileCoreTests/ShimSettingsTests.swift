@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import TurnstileCore
 
 struct ShimSettingsTests {
@@ -15,7 +16,9 @@ struct ShimSettingsTests {
     }
 
     @Test func updatesOnlyShimConfiguration() throws {
-        let original = Data(#"{"$schema":"config.schema.json","//":"keep me","concurrency":{"test":3},"shims":{"add":["old"],"remove":["make"]}}"#.utf8)
+        let original = Data(
+            #"{"$schema":"config.schema.json","//":"keep me","concurrency":{"test":3},"shims":{"add":["old"],"remove":["make"]}}"#
+                .utf8)
         var settings = ShimSettings(machine: try ConfigFile.decode(original).machine)
         settings.enabledDefaults.remove("swift")
         settings.enabledDefaults.insert("make")

@@ -26,14 +26,19 @@ public enum SystemMemory {
         return usage.xsu_used
     }
 
-    public static func sample(environment: [String: String] = ProcessInfo.processInfo.environment, at: Double) -> MemorySample {
-        MemorySample(level: level(environment: environment), kernelPressure: kernelPressure(environment: environment),
-                     swapUsed: swapUsed(environment: environment), at: at)
+    public static func sample(environment: [String: String] = ProcessInfo.processInfo.environment, at: Double)
+        -> MemorySample
+    {
+        MemorySample(
+            level: level(environment: environment), kernelPressure: kernelPressure(environment: environment),
+            swapUsed: swapUsed(environment: environment), at: at)
     }
 
     /// A file standing in for a sysctl, so tests and the soak script can drive the daemon.
     static func faked(_ key: String, _ environment: [String: String]) -> Int64? {
-        guard let path = environment[key], let text = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+        guard let path = environment[key], let text = try? String(contentsOfFile: path, encoding: .utf8) else {
+            return nil
+        }
         return Int64(text.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
@@ -89,7 +94,9 @@ public enum Sandbox {
 }
 
 public enum MemoryPressure: Int, Comparable, Sendable {
-    case normal = 1, warn = 2, critical = 4
+    case normal = 1
+    case warn = 2
+    case critical = 4
 
     /// From `kern.memorystatus_vm_pressure_level`. Anything unrecognised counts as normal.
     public init(level: Int64?) {
@@ -119,7 +126,9 @@ public struct MemoryReading: Equatable, Sendable {
     }
 
     public static func now(environment: [String: String] = ProcessInfo.processInfo.environment) -> MemoryReading {
-        MemoryReading(level: SystemMemory.level(environment: environment), pressure: SystemMemory.pressure(environment: environment), swapUsed: SystemMemory.swapUsed)
+        MemoryReading(
+            level: SystemMemory.level(environment: environment),
+            pressure: SystemMemory.pressure(environment: environment), swapUsed: SystemMemory.swapUsed)
     }
 
     /// A new pressure verdict, or a level at least 5 points from the last one logged. Swap alone follows the others.
@@ -154,8 +163,12 @@ public enum ProcessTree {
             var info = proc_bsdinfo()
             let size = Int32(MemoryLayout<proc_bsdinfo>.size)
             guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { continue }
-            let name = withUnsafeBytes(of: info.pbi_name) { String(cString: $0.baseAddress!.assumingMemoryBound(to: CChar.self)) }
-            let comm = withUnsafeBytes(of: info.pbi_comm) { String(cString: $0.baseAddress!.assumingMemoryBound(to: CChar.self)) }
+            let name = withUnsafeBytes(of: info.pbi_name) {
+                String(cString: $0.baseAddress!.assumingMemoryBound(to: CChar.self))
+            }
+            let comm = withUnsafeBytes(of: info.pbi_comm) {
+                String(cString: $0.baseAddress!.assumingMemoryBound(to: CChar.self))
+            }
             result[pid] = Entry(parent: pid_t(info.pbi_ppid), name: name.isEmpty ? comm : name, uid: info.pbi_uid)
         }
         return result
@@ -205,7 +218,9 @@ public enum ProcessTree {
         var info = proc_vnodepathinfo()
         let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
         guard proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, size) == size else { return nil }
-        let path = withUnsafeBytes(of: info.pvi_cdir.vip_path) { String(cString: $0.baseAddress!.assumingMemoryBound(to: CChar.self)) }
+        let path = withUnsafeBytes(of: info.pvi_cdir.vip_path) {
+            String(cString: $0.baseAddress!.assumingMemoryBound(to: CChar.self))
+        }
         return path.isEmpty ? nil : path
     }
 
@@ -280,7 +295,9 @@ public enum ProcessTree {
         var buffer = [UInt8](repeating: 0, count: Int(size))
         guard proc_pidinfo(pid, 17, 0, &buffer, size) == size else { return nil }
         return buffer.withUnsafeBytes { raw in
-            Lineage(id: raw.loadUnaligned(fromByteOffset: 16, as: UInt64.self), creator: raw.loadUnaligned(fromByteOffset: 24, as: UInt64.self))
+            Lineage(
+                id: raw.loadUnaligned(fromByteOffset: 16, as: UInt64.self),
+                creator: raw.loadUnaligned(fromByteOffset: 24, as: UInt64.self))
         }
     }
 

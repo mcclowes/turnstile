@@ -1,8 +1,9 @@
 import Darwin
 import Foundation
 import Testing
-@testable import turnstile
+
 @testable import TurnstileCore
+@testable import turnstile
 
 /// A scripted stand-in for the daemon: listens on the turnstile socket and answers each message with `reply`.
 final class FakeDaemon: @unchecked Sendable {
@@ -25,7 +26,9 @@ final class FakeDaemon: @unchecked Sendable {
             buffer[bytes.count] = 0
         }
         _ = withUnsafePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(listener, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                bind(listener, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
         }
         Darwin.listen(listener, 8)
         Thread.detachNewThread { [self] in acceptLoop() }
@@ -91,7 +94,10 @@ struct ShimRun {
     }
 
     /// `daemon` is built once the home, and so the socket path, exists.
-    static func run(_ args: [String] = ["build"], cliArguments: [String]? = nil, environment extra: [String: String] = [:], timeout: Double = 90, daemon: (Paths) throws -> FakeDaemon) throws -> (ShimRun, FakeDaemon) {
+    static func run(
+        _ args: [String] = ["build"], cliArguments: [String]? = nil, environment extra: [String: String] = [:],
+        timeout: Double = 90, daemon: (Paths) throws -> FakeDaemon
+    ) throws -> (ShimRun, FakeDaemon) {
         let root = NSTemporaryDirectory() + "ts-shim-" + UUID().uuidString.prefix(8)
         defer { try? FileManager.default.removeItem(atPath: root) }
         let paths = Paths(home: root + "/home")
@@ -115,12 +121,15 @@ struct ShimRun {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: cliArguments == nil ? paths.shims + "/swift" : binary())
         process.arguments = cliArguments ?? args
-        var environment = ["PATH": "\(paths.shims):\(bin):/usr/bin:/bin", "HOME": root, "TURNSTILE_HOME": paths.home,
-                           "TURNSTILE_CONFIG_DIR": root + "/config", "TURNSTILE_AGENT": "1"]
+        var environment = [
+            "PATH": "\(paths.shims):\(bin):/usr/bin:/bin", "HOME": root, "TURNSTILE_HOME": paths.home,
+            "TURNSTILE_CONFIG_DIR": root + "/config", "TURNSTILE_AGENT": "1",
+        ]
         environment.merge(extra) { $1 }
         process.environment = environment
         process.currentDirectoryURL = URL(fileURLWithPath: root)
-        let out = Pipe(), err = Pipe()
+        let out = Pipe()
+        let err = Pipe()
         process.standardOutput = out
         process.standardError = err
         process.standardInput = FileHandle.nullDevice
@@ -134,7 +143,8 @@ struct ShimRun {
             signaled: process.terminationReason == .uncaughtSignal,
             stdout: String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self),
             stderr: String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self),
-            toolRuns: ((try? String(contentsOfFile: runs, encoding: .utf8)) ?? "").split(separator: "\n").map(String.init),
+            toolRuns: ((try? String(contentsOfFile: runs, encoding: .utf8)) ?? "").split(separator: "\n").map(
+                String.init),
             ungated: UngatedLog.parse((try? String(contentsOfFile: paths.ungatedLog, encoding: .utf8)) ?? "")
         )
         return (result, fake)

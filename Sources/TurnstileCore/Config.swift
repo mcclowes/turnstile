@@ -36,7 +36,8 @@ extension CommandRule: Decodable {
         var bytes: UInt64?
         if let memory {
             guard let parsed = Bytes.parse(memory) else {
-                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "bad size \"\(memory)\""))
+                throw DecodingError.dataCorrupted(
+                    .init(codingPath: decoder.codingPath, debugDescription: "bad size \"\(memory)\""))
             }
             bytes = parsed
         }
@@ -45,7 +46,10 @@ extension CommandRule: Decodable {
         case nil: return .gate(nil, memory: bytes)
         case let word?:
             guard let cls = ResourceClass(rawValue: word) else {
-                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "unknown class \"\(word)\" (use compile, test, browser, or pass)"))
+                throw DecodingError.dataCorrupted(
+                    .init(
+                        codingPath: decoder.codingPath,
+                        debugDescription: "unknown class \"\(word)\" (use compile, test, browser, or pass)"))
             }
             return .gate(cls, memory: bytes)
         }
@@ -102,7 +106,10 @@ public struct ThrottleConfig: Decodable, Equatable, Sendable {
     /// Agent compiles only when nil; true includes tests and browsers, false never pauses.
     public var pause: Bool?
 
-    public init(inject: Bool? = nil, jobs: Int? = nil, nodeHeap: UInt64? = nil, maxMemory: UInt64? = nil, killMultiplier: Double? = nil, pause: Bool? = nil) {
+    public init(
+        inject: Bool? = nil, jobs: Int? = nil, nodeHeap: UInt64? = nil, maxMemory: UInt64? = nil,
+        killMultiplier: Double? = nil, pause: Bool? = nil
+    ) {
         self.inject = inject
         self.jobs = jobs
         self.nodeHeap = nodeHeap
@@ -196,7 +203,10 @@ public struct ConfigFile: Decodable, Equatable, Sendable {
     public var throttle: ThrottleConfig?
     public var machine: MachineConfig
 
-    public init(commands: [String: CommandRule]? = nil, scripts: [String: CommandRule]? = nil, throttle: ThrottleConfig? = nil, machine: MachineConfig = MachineConfig()) {
+    public init(
+        commands: [String: CommandRule]? = nil, scripts: [String: CommandRule]? = nil, throttle: ThrottleConfig? = nil,
+        machine: MachineConfig = MachineConfig()
+    ) {
         self.commands = commands
         self.scripts = scripts
         self.throttle = throttle
@@ -255,7 +265,8 @@ public struct Config: Equatable, Sendable {
         for (key, rule) in rules {
             let prefix = key.split(separator: " ").map(String.init)
             guard !prefix.isEmpty, prefix.count <= words.count,
-                  Array(words.prefix(prefix.count)) == prefix else { continue }
+                Array(words.prefix(prefix.count)) == prefix
+            else { continue }
             if prefix.count > (best?.count ?? 0) { best = (prefix.count, rule) }
         }
         return best?.rule
@@ -315,7 +326,8 @@ public struct ConfigError: Error, CustomStringConvertible {
         if case let DecodingError.dataCorrupted(context) = underlying {
             let syntax = (context.underlyingError as NSError?)?.userInfo[NSDebugDescriptionErrorKey] as? String
             let path = context.codingPath.map(\.stringValue).joined(separator: ".")
-            detail = syntax.map { "invalid JSON: \($0)" } ?? (path.isEmpty ? "" : path + ": ") + context.debugDescription
+            detail =
+                syntax.map { "invalid JSON: \($0)" } ?? (path.isEmpty ? "" : path + ": ") + context.debugDescription
         } else if case let DecodingError.typeMismatch(_, context) = underlying {
             detail = "\(context.codingPath.map(\.stringValue).joined(separator: ".")): \(context.debugDescription)"
         } else {

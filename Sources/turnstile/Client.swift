@@ -51,7 +51,11 @@ func executablePath() -> String? {
 /// posix_spawn with default signal handling restored in the child.
 /// `closeOthers` closes every descriptor except stdio; otherwise the child inherits non-CLOEXEC fds.
 /// `passing` hands the child extra descriptors, as (ours, theirs).
-func spawn(path: String, argv: [String], environment: [String: String], stdin: String? = nil, output: String? = nil, stdoutFD: Int32? = nil, stderrFD: Int32? = nil, passing: [(Int32, Int32)] = [], newSession: Bool = false, closeOthers: Bool = true) -> pid_t? {
+func spawn(
+    path: String, argv: [String], environment: [String: String], stdin: String? = nil, output: String? = nil,
+    stdoutFD: Int32? = nil, stderrFD: Int32? = nil, passing: [(Int32, Int32)] = [], newSession: Bool = false,
+    closeOthers: Bool = true
+) -> pid_t? {
     var actions: posix_spawn_file_actions_t?
     posix_spawn_file_actions_init(&actions)
     defer { posix_spawn_file_actions_destroy(&actions) }
@@ -90,8 +94,8 @@ func spawn(path: String, argv: [String], environment: [String: String], stdin: S
     let cArgs = argv.map { strdup($0) } + [nil]
     let cEnv = environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
     defer {
-        cArgs.forEach { free($0) }
-        cEnv.forEach { free($0) }
+        for pointer in cArgs { free(pointer) }
+        for pointer in cEnv { free(pointer) }
     }
     var pid: pid_t = 0
     let result = posix_spawn(&pid, path, &actions, &attributes, cArgs, cEnv)

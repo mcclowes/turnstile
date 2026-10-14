@@ -17,7 +17,7 @@ swift build
 swift test             # unit tests
 ./scripts/e2e.sh       # end-to-end, with fake tools in a throwaway turnstile home
 ./scripts/coverage.sh  # unit tests with a coverage report
-swift format lint --recursive Sources Tests Package.swift
+swift format lint --strict --recursive --parallel Sources Tests Package.swift
 node --test scripts/release-args-tests.mjs # release helper arguments, with blocked external tools
 node --test scripts/e2e-server-tests.mjs   # run-scoped process detection and cleanup
 /usr/bin/python3 scripts/e2e-top-tests.py # PTY handshakes and delayed terminal restoration

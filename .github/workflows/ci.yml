@@ -11,9 +11,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      # Warns without failing until the codebase has been formatted once (#26); then add --strict.
       - name: swift format lint
-        run: swift format lint --recursive --parallel Sources Tests Package.swift
+        run: swift format lint --strict --recursive --parallel Sources Tests Package.swift
       - name: Dependency licenses
         run: |
           node --test scripts/license-check-tests.mjs

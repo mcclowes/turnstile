@@ -66,7 +66,9 @@ public struct MemoryMeter: Equatable, Sendable {
     public init(_ snapshot: StatusSnapshot) {
         let free = SystemMemory.free(level: snapshot.memoryLevel, of: snapshot.physicalMemory)
         let running = snapshot.running.map {
-            RunningJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, footprint: $0.footprint ?? 0, label: $0.label)
+            RunningJob(
+                id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, footprint: $0.footprint ?? 0,
+                label: $0.label)
         }
         let headroom = Scheduler.headroom(freeMemory: free, reserve: snapshot.reserve, running: running)
         let inJobs = running.reduce(UInt64(0)) { $0 + $1.footprint }
@@ -74,7 +76,9 @@ public struct MemoryMeter: Equatable, Sendable {
 
         other = inUse > inJobs ? inUse - inJobs : 0
         segments = zip(snapshot.running, running).map { job, scheduled in
-            Segment(id: job.id, project: job.project, label: job.label, resourceClass: job.resourceClass, used: scheduled.footprint, committed: scheduled.pendingGrowth, paused: job.paused)
+            Segment(
+                id: job.id, project: job.project, label: job.label, resourceClass: job.resourceClass,
+                used: scheduled.footprint, committed: scheduled.pendingGrowth, paused: job.paused)
         }
         segments = Self.assigningHues(segments)
         spare = UInt64(max(0, headroom))
@@ -118,6 +122,10 @@ public struct MemoryMeter: Equatable, Sendable {
             taken.insert(hue)
             hues[id] = hue
         }
-        return segments.map { var segment = $0; segment.hue = hues[$0.id] ?? 0; return segment }
+        return segments.map {
+            var segment = $0
+            segment.hue = hues[$0.id] ?? 0
+            return segment
+        }
     }
 }

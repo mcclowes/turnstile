@@ -95,7 +95,9 @@ public enum ShellCheck {
     }
 
     /// Runs the probe with a bare environment, as a harness that starts its own shell would.
-    public static func ask(_ probe: Probe, tools: [String], environment: [String: String], timeout: Double = 15) -> String? {
+    public static func ask(_ probe: Probe, tools: [String], environment: [String: String], timeout: Double = 15)
+        -> String?
+    {
         guard FileManager.default.isExecutableFile(atPath: probe.binary) else { return nil }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: probe.binary)
@@ -132,7 +134,9 @@ public enum ShellCheck {
         let files = (try? manager.contentsOfDirectory(atPath: directory)) ?? []
         let dated = files.compactMap { file -> (String, Date)? in
             let path = directory + "/" + file
-            guard let modified = (try? manager.attributesOfItem(atPath: path))?[.modificationDate] as? Date else { return nil }
+            guard let modified = (try? manager.attributesOfItem(atPath: path))?[.modificationDate] as? Date else {
+                return nil
+            }
             return (path, modified)
         }
         return dated.max { $0.1 < $1.1 }?.0

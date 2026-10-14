@@ -108,7 +108,9 @@ struct JobRow: View {
             .foregroundStyle(.secondary)
             .font(.system(size: 11).monospacedDigit())
             .lineLimit(1)
-            .help((footprint.map { "\($0) in use. " } ?? "") + (queued ? "Waiting for \(elapsed)" : "Running for \(elapsed)"))
+            .help(
+                (footprint.map { "\($0) in use. " } ?? "")
+                    + (queued ? "Waiting for \(elapsed)" : "Running for \(elapsed)"))
     }
 
     private var promoteVisible: Bool { canPromote && (queued || hovering) }
@@ -118,10 +120,16 @@ struct JobRow: View {
     private var promoteButton: some View {
         let bump = actions[0]
         let visible = promoteVisible
-        iconButton(bump, symbol: MenuBarState.symbol(for: bump), tint: queued ? .accentColor : Color(nsColor: .secondaryLabelColor)) {
+        iconButton(
+            bump, symbol: MenuBarState.symbol(for: bump),
+            tint: queued ? .accentColor : Color(nsColor: .secondaryLabelColor)
+        ) {
             send(bump.message)
         }
-        .background(queued && visible ? Color.accentColor.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .background(
+            queued && visible ? Color.accentColor.opacity(0.12) : .clear,
+            in: RoundedRectangle(cornerRadius: 5, style: .continuous)
+        )
         .opacity(visible ? 1 : 0)
         .disabled(!visible)
         .pointerStyle(visible ? .link : nil)
@@ -157,7 +165,9 @@ struct JobRow: View {
         }
     }
 
-    private func iconButton(_ action: MenuBarState.Action, symbol: String, tint: Color, perform: @escaping () -> Void) -> some View {
+    private func iconButton(_ action: MenuBarState.Action, symbol: String, tint: Color, perform: @escaping () -> Void)
+        -> some View
+    {
         Button(action: perform) {
             Image(systemName: symbol)
                 .font(.system(size: 10, weight: .semibold))

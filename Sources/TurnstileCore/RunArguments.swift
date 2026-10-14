@@ -18,7 +18,10 @@ public struct RunArguments: Equatable, Sendable {
         var index = 0
         while index < args.count {
             let arg = args[index]
-            if arg == "--" { index += 1; break }
+            if arg == "--" {
+                index += 1
+                break
+            }
             let value: String
             if arg == "--class", index + 1 < args.count {
                 value = args[index + 1]

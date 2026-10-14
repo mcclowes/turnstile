@@ -12,7 +12,10 @@ public struct Workspace: Equatable, Sendable {
     /// Identifies the working tree's contents: HEAD, the staged and unstaged diff, and untracked files' sizes and mtimes.
     /// Variables that commonly change what a build or test does, so runs that differ in them never merge.
     public static func environmentInputs(_ environment: [String: String]) -> [String] {
-        let exact: Set<String> = ["CI", "NODE_ENV", "RAILS_ENV", "RUST_BACKTRACE", "RUSTFLAGS", "CFLAGS", "GOFLAGS", "SWIFT_ACTIVE_COMPILATION_CONDITIONS", "CONFIGURATION"]
+        let exact: Set<String> = [
+            "CI", "NODE_ENV", "RAILS_ENV", "RUST_BACKTRACE", "RUSTFLAGS", "CFLAGS", "GOFLAGS",
+            "SWIFT_ACTIVE_COMPILATION_CONDITIONS", "CONFIGURATION",
+        ]
         return environment.keys
             .filter { exact.contains($0) || $0.uppercased().contains("TEST") }
             .sorted()
@@ -23,8 +26,14 @@ public struct Workspace: Equatable, Sendable {
     /// and a run that merges nothing is cheaper than every run waiting on git.
     public static let fingerprintBudget: TimeInterval = 1
 
-    public static func inspect(cwd: String, argv: [String], environment: [String: String] = [:], budget: TimeInterval = fingerprintBudget) -> Workspace {
-        guard let top = git(["rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir", "HEAD"], cwd: cwd, deadline: .distantFuture) else {
+    public static func inspect(
+        cwd: String, argv: [String], environment: [String: String] = [:], budget: TimeInterval = fingerprintBudget
+    ) -> Workspace {
+        guard
+            let top = git(
+                ["rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir", "HEAD"], cwd: cwd,
+                deadline: .distantFuture)
+        else {
             return Workspace(root: cwd, fingerprint: nil)
         }
         let lines = String(decoding: top, as: UTF8.self).split(separator: "\n").map(String.init)
@@ -38,16 +47,23 @@ public struct Workspace: Equatable, Sendable {
         for arg in argv { hash.update(data: Data((arg + "\u{0}").utf8)) }
         for input in environmentInputs(environment) { hash.update(data: Data((input + "\u{0}").utf8)) }
         let deadline = Date(timeIntervalSinceNow: budget)
-        guard git(["diff", "HEAD", "--no-color", "--no-ext-diff", "--binary"], cwd: root, deadline: deadline, consume: { hash.update(data: $0) }),
-              let untracked = git(["ls-files", "--others", "--exclude-standard", "-z"], cwd: root, deadline: deadline) else {
+        guard
+            git(
+                ["diff", "HEAD", "--no-color", "--no-ext-diff", "--binary"], cwd: root, deadline: deadline,
+                consume: { hash.update(data: $0) }),
+            let untracked = git(["ls-files", "--others", "--exclude-standard", "-z"], cwd: root, deadline: deadline)
+        else {
             return Workspace(root: root, fingerprint: nil, home: home)
         }
         // Ignored .env files change test results without showing up in git.
-        let envFiles = ((try? FileManager.default.contentsOfDirectory(atPath: root)) ?? []).filter { $0.hasPrefix(".env") }.sorted()
+        let envFiles = ((try? FileManager.default.contentsOfDirectory(atPath: root)) ?? []).filter {
+            $0.hasPrefix(".env")
+        }.sorted()
         for name in envFiles {
             let attributes = try? FileManager.default.attributesOfItem(atPath: root + "/" + name)
             let mtime = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
-            hash.update(data: Data("\(name)\u{0}\((attributes?[.size] as? NSNumber)?.int64Value ?? -1)\u{0}\(mtime)\u{0}".utf8))
+            hash.update(
+                data: Data("\(name)\u{0}\((attributes?[.size] as? NSNumber)?.int64Value ?? -1)\u{0}\(mtime)\u{0}".utf8))
         }
         for path in untracked.split(separator: 0).map({ String(decoding: $0, as: UTF8.self) }) {
             let attributes = try? FileManager.default.attributesOfItem(atPath: root + "/" + path)
@@ -70,7 +86,8 @@ public struct Workspace: Equatable, Sendable {
     /// The worktree root that jobs from `cwd` are recorded under, without hashing the tree's contents.
     public static func root(of cwd: String) -> String {
         guard let top = git(["rev-parse", "--show-toplevel"], cwd: cwd, deadline: .distantFuture),
-              let line = String(decoding: top, as: UTF8.self).split(separator: "\n").first else { return cwd }
+            let line = String(decoding: top, as: UTF8.self).split(separator: "\n").first
+        else { return cwd }
         return String(line)
     }
 

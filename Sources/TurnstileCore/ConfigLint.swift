@@ -15,7 +15,8 @@ public enum ConfigLint {
 
     public static func warnings(_ data: Data, scope: ConfigScope) -> [String] {
         guard !data.allSatisfy({ [0x20, 0x0A, 0x0D, 0x09].contains($0) }),
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
+            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return [] }
         var warnings: [String] = []
 
         let allowed = fileKeys + machineKeys
@@ -46,7 +47,8 @@ public enum ConfigLint {
     static func machine(_ root: [String: Any]) -> [String] {
         var warnings: [String] = []
         let classes = ResourceClass.allCases.map(\.rawValue)
-        for (name, value) in (root["concurrency"] as? [String: Any] ?? [:]).sorted(by: { $0.key < $1.key }) where !isComment(name) {
+        for (name, value) in (root["concurrency"] as? [String: Any] ?? [:]).sorted(by: { $0.key < $1.key })
+        where !isComment(name) {
             if !classes.contains(name) {
                 warnings.append("unknown class \"concurrency.\(name)\" (use compile, test, or browser)")
             } else if let limit = value as? Int, limit < 1 {
@@ -63,14 +65,17 @@ public enum ConfigLint {
         }
         let effectivePause = pause ?? MachineConfig().pauseBelowPercent
         let effectiveResume = resume ?? MachineConfig().resumeAbovePercent
-        if (pause != nil || resume != nil), effectivePause >= effectiveResume, (0...100).contains(effectivePause) {
-            warnings.append("\"pauseBelow\" (\(effectivePause)) should be lower than \"resumeAbove\" (\(effectiveResume))")
+        if pause != nil || resume != nil, effectivePause >= effectiveResume, (0...100).contains(effectivePause) {
+            warnings.append(
+                "\"pauseBelow\" (\(effectivePause)) should be lower than \"resumeAbove\" (\(effectiveResume))")
         }
         return warnings
     }
 
     static func unknownKeys(_ object: [String: Any], among allowed: [String], path: String) -> [String] {
-        object.keys.sorted().filter { !isComment($0) && !allowed.contains($0) }.map { unknown($0, among: allowed, path: path) }
+        object.keys.sorted().filter { !isComment($0) && !allowed.contains($0) }.map {
+            unknown($0, among: allowed, path: path)
+        }
     }
 
     static func unknown(_ key: String, among allowed: [String], path: String? = nil) -> String {
@@ -89,7 +94,8 @@ public enum ConfigLint {
     }
 
     static func distance(_ a: String, _ b: String) -> Int {
-        let a = Array(a), b = Array(b)
+        let a = Array(a)
+        let b = Array(b)
         var previous = Array(0...b.count)
         for i in 1...max(1, a.count) where !a.isEmpty {
             var current = [i] + Array(repeating: 0, count: b.count)

@@ -1,10 +1,12 @@
 import Foundation
 import Testing
+
 @testable import TurnstileCore
 
 /// The published schemas must list exactly the keys the decoder reads.
 struct SchemaTests {
-    static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent()
 
     func schema(_ name: String) throws -> [String: Any] {
         let data = try Data(contentsOf: SchemaTests.root.appendingPathComponent("schema/\(name)"))

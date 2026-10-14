@@ -1,4 +1,5 @@
 import Testing
+
 @testable import TurnstileCore
 
 struct ThrottleTests {
@@ -14,7 +15,9 @@ struct ThrottleTests {
 
     @Test func shrinksParallelismUnderPressure() {
         #expect(Throttle.limits(memoryLevel: 20, cpuCount: 10, config: ThrottleConfig()) == JobLimits(jobs: 5))
-        #expect(Throttle.limits(memoryLevel: 10, cpuCount: 10, config: ThrottleConfig()) == JobLimits(jobs: 2, nodeHeapMB: 2048))
+        #expect(
+            Throttle.limits(memoryLevel: 10, cpuCount: 10, config: ThrottleConfig())
+                == JobLimits(jobs: 2, nodeHeapMB: 2048))
     }
 
     @Test func configuredLimitsApplyAlwaysUnlessDisabled() {
@@ -25,9 +28,13 @@ struct ThrottleTests {
         #expect(Throttle.limits(memoryLevel: 5, cpuCount: 10, config: off) == JobLimits())
     }
 
-    func inject(_ command: String, env: [String: String] = [:], jobs: Int? = 4, heap: Int? = nil) -> ([String], [String: String]) {
+    func inject(_ command: String, env: [String: String] = [:], jobs: Int? = 4, heap: Int? = nil) -> (
+        [String], [String: String]
+    ) {
         let words = command.split(separator: " ").map(String.init)
-        let result = Throttle.inject(tool: words[0], args: Array(words.dropFirst()), environment: env, limits: JobLimits(jobs: jobs, nodeHeapMB: heap))
+        let result = Throttle.inject(
+            tool: words[0], args: Array(words.dropFirst()), environment: env,
+            limits: JobLimits(jobs: jobs, nodeHeapMB: heap))
         return (result.args, result.environment)
     }
 
@@ -55,10 +62,13 @@ struct ThrottleTests {
 
     @Test func nodeHeapNeverOverridesTheCaller() {
         #expect(inject("npm test", jobs: nil, heap: 2048).1["NODE_OPTIONS"] == "--max-old-space-size=2048")
-        #expect(inject("npm test", env: ["NODE_OPTIONS": "--enable-source-maps"], jobs: nil, heap: 2048).1["NODE_OPTIONS"]
-            == "--enable-source-maps --max-old-space-size=2048")
-        #expect(inject("npm test", env: ["NODE_OPTIONS": "--max-old-space-size=8192"], jobs: nil, heap: 2048).1["NODE_OPTIONS"]
-            == "--max-old-space-size=8192")
+        #expect(
+            inject("npm test", env: ["NODE_OPTIONS": "--enable-source-maps"], jobs: nil, heap: 2048).1["NODE_OPTIONS"]
+                == "--enable-source-maps --max-old-space-size=2048")
+        #expect(
+            inject("npm test", env: ["NODE_OPTIONS": "--max-old-space-size=8192"], jobs: nil, heap: 2048).1[
+                "NODE_OPTIONS"]
+                == "--max-old-space-size=8192")
         #expect(inject("cargo build", jobs: nil, heap: 2048).1["NODE_OPTIONS"] == nil)
     }
 }
@@ -67,25 +77,42 @@ struct PressureTests {
     let gb = Bytes.gb
 
     @Test func ceilingFollowsTheHighWaterPeak() {
-        #expect(Pressure.ceiling(highWaterPeak: 2 * gb, physicalMemory: 16 * gb, floorPercent: 25, config: ThrottleConfig()) == 6 * gb)
-        #expect(Pressure.ceiling(highWaterPeak: nil, physicalMemory: 16 * gb, floorPercent: 25, config: ThrottleConfig()) == 12 * gb)
-        #expect(Pressure.ceiling(highWaterPeak: 2 * gb, physicalMemory: 16 * gb, floorPercent: 25, config: ThrottleConfig(maxMemory: 3 * gb)) == 3 * gb)
+        #expect(
+            Pressure.ceiling(highWaterPeak: 2 * gb, physicalMemory: 16 * gb, floorPercent: 25, config: ThrottleConfig())
+                == 6 * gb)
+        #expect(
+            Pressure.ceiling(highWaterPeak: nil, physicalMemory: 16 * gb, floorPercent: 25, config: ThrottleConfig())
+                == 12 * gb)
+        #expect(
+            Pressure.ceiling(
+                highWaterPeak: 2 * gb, physicalMemory: 16 * gb, floorPercent: 25,
+                config: ThrottleConfig(maxMemory: 3 * gb)) == 3 * gb)
     }
 
     /// A compile that usually fits in a few hundred MB still needs gigabytes after a cold rebuild,
     /// so the floor is a share of the machine rather than a fixed 2 GB.
     @Test func theFloorIsAShareOfTheMachine() {
-        #expect(Pressure.ceiling(highWaterPeak: 100 * Bytes.mb, physicalMemory: 16 * gb, floorPercent: 25, config: ThrottleConfig()) == 4 * gb)
-        #expect(Pressure.ceiling(highWaterPeak: 100 * Bytes.mb, physicalMemory: 64 * gb, floorPercent: 25, config: ThrottleConfig()) == 16 * gb)
-        #expect(Pressure.ceiling(highWaterPeak: 100 * Bytes.mb, physicalMemory: 16 * gb, floorPercent: 0, config: ThrottleConfig()) == 300 * Bytes.mb)
+        #expect(
+            Pressure.ceiling(
+                highWaterPeak: 100 * Bytes.mb, physicalMemory: 16 * gb, floorPercent: 25, config: ThrottleConfig()) == 4
+                * gb)
+        #expect(
+            Pressure.ceiling(
+                highWaterPeak: 100 * Bytes.mb, physicalMemory: 64 * gb, floorPercent: 25, config: ThrottleConfig())
+                == 16 * gb)
+        #expect(
+            Pressure.ceiling(
+                highWaterPeak: 100 * Bytes.mb, physicalMemory: 16 * gb, floorPercent: 0, config: ThrottleConfig())
+                == 300 * Bytes.mb)
     }
 
     func runaway(
         footprint: UInt64, ceiling: UInt64 = Bytes.gb, hard: Bool = false, memoryLevel: Int = 60,
         pressure: EffectiveMemoryPressure = .normal, pressuredFor: Double? = nil
     ) -> Pressure.Runaway? {
-        Pressure.runaway(footprint: footprint, ceiling: ceiling, hard: hard, memoryLevel: memoryLevel,
-                         pressure: pressure, pauseBelow: 8, pressuredFor: pressuredFor)
+        Pressure.runaway(
+            footprint: footprint, ceiling: ceiling, hard: hard, memoryLevel: memoryLevel,
+            pressure: pressure, pauseBelow: 8, pressuredFor: pressuredFor)
     }
 
     @Test func aJobUnderItsCeilingIsLeftAlone() {
@@ -121,12 +148,20 @@ struct PressureTests {
         #expect(runaway(footprint: 500 * Bytes.mb, hard: true) == nil)
     }
 
-    func job(_ id: Int64, started: Double, paused: Bool = false, pausable: Bool = true, manual: Bool = false, runaway: Bool = false, pressurePauses: Int = 0) -> Pressure.Candidate {
-        Pressure.Candidate(id: id, startedAt: started, paused: paused, pausable: pausable, manual: manual, runaway: runaway, pressurePauses: pressurePauses)
+    func job(
+        _ id: Int64, started: Double, paused: Bool = false, pausable: Bool = true, manual: Bool = false,
+        runaway: Bool = false, pressurePauses: Int = 0
+    ) -> Pressure.Candidate {
+        Pressure.Candidate(
+            id: id, startedAt: started, paused: paused, pausable: pausable, manual: manual, runaway: runaway,
+            pressurePauses: pressurePauses)
     }
 
     @Test func neverResumesAJobSomeonePaused() {
-        #expect(Pressure.action(memoryLevel: 60, jobs: [job(1, started: 1, paused: true, manual: true)], pauseBelow: 8, resumeAbove: 20) == nil)
+        #expect(
+            Pressure.action(
+                memoryLevel: 60, jobs: [job(1, started: 1, paused: true, manual: true)], pauseBelow: 8, resumeAbove: 20)
+                == nil)
         let jobs = [job(1, started: 1, paused: true, manual: true), job(2, started: 2, paused: true)]
         #expect(Pressure.action(memoryLevel: 60, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == .resume(2))
     }
@@ -137,13 +172,22 @@ struct PressureTests {
     }
 
     @Test func pausesTheNewestButKeepsOneRunning() {
-        #expect(Pressure.action(memoryLevel: 5, jobs: [job(1, started: 1), job(2, started: 2)], pauseBelow: 8, resumeAbove: 20) == .pause(2))
+        #expect(
+            Pressure.action(
+                memoryLevel: 5, jobs: [job(1, started: 1), job(2, started: 2)], pauseBelow: 8, resumeAbove: 20)
+                == .pause(2))
         #expect(Pressure.action(memoryLevel: 5, jobs: [job(1, started: 1)], pauseBelow: 8, resumeAbove: 20) == nil)
-        #expect(Pressure.action(memoryLevel: 5, jobs: [job(1, started: 1), job(2, started: 2, paused: true)], pauseBelow: 8, resumeAbove: 20) == nil)
+        #expect(
+            Pressure.action(
+                memoryLevel: 5, jobs: [job(1, started: 1), job(2, started: 2, paused: true)], pauseBelow: 8,
+                resumeAbove: 20) == nil)
     }
 
     @Test func neverPausesPeoplesJobs() {
-        #expect(Pressure.action(memoryLevel: 5, jobs: [job(1, started: 1), job(2, started: 2, pausable: false)], pauseBelow: 8, resumeAbove: 20) == nil)
+        #expect(
+            Pressure.action(
+                memoryLevel: 5, jobs: [job(1, started: 1), job(2, started: 2, pausable: false)], pauseBelow: 8,
+                resumeAbove: 20) == nil)
     }
 
     @Test func resumesTheOldestOnceMemoryRecovers() {
@@ -155,11 +199,16 @@ struct PressureTests {
     @Test func kernelPressureWouldPauseTheJobTheLevelThresholdMisses() {
         let jobs = [job(1, started: 1), job(2, started: 2)]
         #expect(Pressure.shadowPause(pressure: .warn, memoryLevel: 30, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == 2)
-        #expect(Pressure.shadowPause(pressure: .critical, memoryLevel: 30, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == 2)
-        #expect(Pressure.shadowPause(pressure: .normal, memoryLevel: 30, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == nil)
+        #expect(
+            Pressure.shadowPause(pressure: .critical, memoryLevel: 30, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == 2)
+        #expect(
+            Pressure.shadowPause(pressure: .normal, memoryLevel: 30, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == nil)
         // The level threshold already pauses here, so there's nothing to learn.
-        #expect(Pressure.shadowPause(pressure: .warn, memoryLevel: 5, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == nil)
-        #expect(Pressure.shadowPause(pressure: .warn, memoryLevel: 30, jobs: [job(1, started: 1)], pauseBelow: 8, resumeAbove: 20) == nil)
+        #expect(
+            Pressure.shadowPause(pressure: .warn, memoryLevel: 5, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == nil)
+        #expect(
+            Pressure.shadowPause(
+                pressure: .warn, memoryLevel: 30, jobs: [job(1, started: 1)], pauseBelow: 8, resumeAbove: 20) == nil)
     }
 
     @Test func readsKernelPressureLevels() {
@@ -181,7 +230,9 @@ struct PressureTests {
     }
 
     @Test func resumesWhenNothingElseIsRunning() {
-        #expect(Pressure.action(memoryLevel: 5, jobs: [job(2, started: 2, paused: true)], pauseBelow: 8, resumeAbove: 20) == .resume(2))
+        #expect(
+            Pressure.action(memoryLevel: 5, jobs: [job(2, started: 2, paused: true)], pauseBelow: 8, resumeAbove: 20)
+                == .resume(2))
     }
 
     /// Resuming a job that was paused for being past its ceiling, while the pressure that paused it is
@@ -197,17 +248,23 @@ struct PressureTests {
     @Test func pausesWhileSwappingWhateverTheLevelSays() {
         let jobs = [job(1, started: 1), job(2, started: 2)]
         #expect(Pressure.action(memoryLevel: 35, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == nil)
-        #expect(Pressure.action(memoryLevel: 35, pressure: .swapping, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == .pause(2))
+        #expect(
+            Pressure.action(memoryLevel: 35, pressure: .swapping, jobs: jobs, pauseBelow: 8, resumeAbove: 20)
+                == .pause(2))
     }
 
     @Test func swappingKeepsOneJobRunningToo() {
-        #expect(Pressure.action(memoryLevel: 35, pressure: .critical, jobs: [job(1, started: 1)], pauseBelow: 8, resumeAbove: 20) == nil)
+        #expect(
+            Pressure.action(
+                memoryLevel: 35, pressure: .critical, jobs: [job(1, started: 1)], pauseBelow: 8, resumeAbove: 20) == nil
+        )
     }
 
     @Test func doesntResumeBackIntoSwap() {
         let jobs = [job(1, started: 1), job(2, started: 2, paused: true)]
         #expect(Pressure.action(memoryLevel: 60, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == .resume(2))
-        #expect(Pressure.action(memoryLevel: 60, pressure: .swapping, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == nil)
+        #expect(
+            Pressure.action(memoryLevel: 60, pressure: .swapping, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == nil)
     }
 
     /// #35: swap quietens for one 20 s window after a pause, the job resumes, faults its pages back in, and is
@@ -225,7 +282,10 @@ struct PressureTests {
     }
 
     @Test func aJobThatHasBeenPausedLessResumesFirst() {
-        let jobs = [job(1, started: 1), job(2, started: 2, paused: true, pressurePauses: 5), job(3, started: 3, paused: true, pressurePauses: 1)]
+        let jobs = [
+            job(1, started: 1), job(2, started: 2, paused: true, pressurePauses: 5),
+            job(3, started: 3, paused: true, pressurePauses: 1),
+        ]
         #expect(Pressure.action(memoryLevel: 40, calmFor: 45, jobs: jobs, pauseBelow: 8, resumeAbove: 20) == .resume(3))
     }
 
@@ -236,12 +296,17 @@ struct PressureTests {
 
     /// Nothing else is running, so keeping it paused can't help anyone.
     @Test func resumesWhileSwappingWhenNothingElseRuns() {
-        #expect(Pressure.action(memoryLevel: 35, pressure: .critical, jobs: [job(2, started: 2, paused: true)], pauseBelow: 8, resumeAbove: 20) == .resume(2))
+        #expect(
+            Pressure.action(
+                memoryLevel: 35, pressure: .critical, jobs: [job(2, started: 2, paused: true)], pauseBelow: 8,
+                resumeAbove: 20) == .resume(2))
     }
 
     @Test func swappingSizesLimitsAsIfMemoryWereShort() {
         let config = ThrottleConfig()
         #expect(Throttle.limits(memoryLevel: 40, cpuCount: 8, config: config) == JobLimits())
-        #expect(Throttle.limits(memoryLevel: 40, pressure: .swapping, cpuCount: 8, config: config) == JobLimits(jobs: 2, nodeHeapMB: 2048))
+        #expect(
+            Throttle.limits(memoryLevel: 40, pressure: .swapping, cpuCount: 8, config: config)
+                == JobLimits(jobs: 2, nodeHeapMB: 2048))
     }
 }

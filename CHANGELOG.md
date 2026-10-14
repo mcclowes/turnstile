@@ -4,6 +4,10 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ## Unreleased
 
+### Changed
+
+- CI now fails on Swift formatting violations using the checked-in rules.
+
 ### Fixed
 
 - The suspended-client E2E check confirms queueing and process suspension before admission, and verifies the daemon's reclamation reason.

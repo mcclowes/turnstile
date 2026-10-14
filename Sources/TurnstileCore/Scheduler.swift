@@ -14,7 +14,10 @@ public struct QueuedJob: Equatable, Sendable {
     /// Usual run time in seconds, if known.
     public var duration: Double?
 
-    public init(id: Int64, resourceClass: ResourceClass, estimate: UInt64, agent: Bool = true, bumpedAt: Double? = nil, queuedAt: Double, label: String = "", held: Bool = false, duration: Double? = nil) {
+    public init(
+        id: Int64, resourceClass: ResourceClass, estimate: UInt64, agent: Bool = true, bumpedAt: Double? = nil,
+        queuedAt: Double, label: String = "", held: Bool = false, duration: Double? = nil
+    ) {
         self.id = id
         self.resourceClass = resourceClass
         self.estimate = estimate
@@ -42,7 +45,10 @@ public struct RunningJob: Equatable, Sendable {
     /// Seconds until a job paused for memory could resume at the earliest, if known.
     public var resumesIn: Double?
 
-    public init(id: Int64, resourceClass: ResourceClass, estimate: UInt64, footprint: UInt64 = 0, label: String = "", usualDuration: Double? = nil, elapsed: Double = 0, pausedForMemorySince: Double? = nil, resumesIn: Double? = nil) {
+    public init(
+        id: Int64, resourceClass: ResourceClass, estimate: UInt64, footprint: UInt64 = 0, label: String = "",
+        usualDuration: Double? = nil, elapsed: Double = 0, pausedForMemorySince: Double? = nil, resumesIn: Double? = nil
+    ) {
         self.id = id
         self.resourceClass = resourceClass
         self.estimate = estimate
@@ -76,7 +82,10 @@ public struct SchedulerPolicy: Sendable {
     /// Seconds memory must stay calm after pressure before anything new starts.
     public var settle: Double
 
-    public init(classLimits: [ResourceClass: Int], reserve: UInt64, backfillMax: UInt64 = 0, backfillAge: Double = 120, pausedBackfillAge: Double = 60, settle: Double = Pressure.resumeDelay(pressurePauses: 1)) {
+    public init(
+        classLimits: [ResourceClass: Int], reserve: UInt64, backfillMax: UInt64 = 0, backfillAge: Double = 120,
+        pausedBackfillAge: Double = 60, settle: Double = Pressure.resumeDelay(pressurePauses: 1)
+    ) {
         self.classLimits = classLimits
         self.reserve = reserve
         self.backfillMax = backfillMax
@@ -159,7 +168,10 @@ public enum Scheduler {
     /// is holding up by paging out, so it describes the stand-off rather than room for another job. Nor does
     /// anything start until memory has been calm for `policy.settle` seconds, since pressure often lifts
     /// for a few seconds mid-swap. `calmFor` is how long it has been calm; `calmBrokenAt` is when a calm spell last ended.
-    public static func decide(queue: [QueuedJob], running: [RunningJob], freeMemory: UInt64, policy: SchedulerPolicy, now: Double = 0, pressure: EffectiveMemoryPressure = .normal, calmFor: Double = .infinity, calmBrokenAt: Double = -.infinity) -> SchedulerDecision {
+    public static func decide(
+        queue: [QueuedJob], running: [RunningJob], freeMemory: UInt64, policy: SchedulerPolicy, now: Double = 0,
+        pressure: EffectiveMemoryPressure = .normal, calmFor: Double = .infinity, calmBrokenAt: Double = -.infinity
+    ) -> SchedulerDecision {
         var admit: [Int64] = []
         var waiting: [Int64: WaitReason] = [:]
         var skipped: [Int64: String] = [:]
@@ -183,10 +195,17 @@ public enum Scheduler {
 
         var headroom = headroom(freeMemory: freeMemory, reserve: policy.reserve, running: running)
         var anythingRunning = !running.isEmpty
-        var memoryBlocked = running
-            .compactMap { job in job.pausedForMemorySince.map { Blocker(label: job.label, since: $0, startsIn: job.resumesIn, paused: true) } }
+        var memoryBlocked =
+            running
+            .compactMap { job in
+                job.pausedForMemorySince.map {
+                    Blocker(label: job.label, since: $0, startsIn: job.resumesIn, paused: true)
+                }
+            }
             .min { $0.since < $1.since }
-        var active = running.map { Active(resourceClass: $0.resourceClass, remaining: $0.remaining, releases: max($0.estimate, $0.footprint)) }
+        var active = running.map {
+            Active(resourceClass: $0.resourceClass, remaining: $0.remaining, releases: max($0.estimate, $0.footprint))
+        }
         let labels = running.map(\.label)
         var waitingByClass: [ResourceClass: [QueuedJob]] = [:]
         var waitingCount = 0
@@ -204,7 +223,8 @@ public enum Scheduler {
             }
             let skipping = memoryBlocked
             if let blocker = skipping, !mayGoAhead(job, of: blocker, policy: policy, now: now) {
-                waiting[job.id] = blocker.paused ? .resuming(paused: blocker.label) : .queue(ahead: waitingCount, next: blocker.label)
+                waiting[job.id] =
+                    blocker.paused ? .resuming(paused: blocker.label) : .queue(ahead: waitingCount, next: blocker.label)
                 continue
             }
             let used = counts[job.resourceClass, default: 0]
@@ -258,9 +278,11 @@ public enum Scheduler {
         var paused: Bool
     }
 
-    private static func mayGoAhead(_ job: QueuedJob, of blocker: Blocker, policy: SchedulerPolicy, now: Double) -> Bool {
+    private static func mayGoAhead(_ job: QueuedJob, of blocker: Blocker, policy: SchedulerPolicy, now: Double) -> Bool
+    {
         if let startsIn = blocker.startsIn, let duration = job.duration { return duration <= startsIn }
-        return job.estimate <= policy.backfillMax && now - blocker.since < (blocker.paused ? policy.pausedBackfillAge : policy.backfillAge)
+        return job.estimate <= policy.backfillMax
+            && now - blocker.since < (blocker.paused ? policy.pausedBackfillAge : policy.backfillAge)
     }
 
     /// Seconds until `need` fits, as active jobs finish soonest first. Nil if that depends on a job
@@ -288,7 +310,8 @@ public enum Scheduler {
         case let .slots(cls, running, eta):
             return "waiting for a \(cls.rawValue) slot\(startsIn(eta)) (running: \(summary(running)))"
         case let .memory(need, free, running, eta):
-            return "waiting for memory, needs ~\(Bytes.format(need)), ~\(Bytes.format(free)) spare\(startsIn(eta)) (running: \(summary(running)))"
+            return
+                "waiting for memory, needs ~\(Bytes.format(need)), ~\(Bytes.format(free)) spare\(startsIn(eta)) (running: \(summary(running)))"
         case let .swapping(running):
             return "waiting, the machine is swapping (running: \(summary(running)))"
         case let .settling(running, eta):

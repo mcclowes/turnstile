@@ -20,6 +20,7 @@ swift test             # unit tests
 swift format lint --recursive Sources Tests Package.swift
 node --test scripts/release-args-tests.mjs # release helper arguments, with blocked external tools
 node --test scripts/e2e-server-tests.mjs   # run-scoped process detection and cleanup
+/usr/bin/python3 scripts/e2e-top-tests.py # PTY handshakes and delayed terminal restoration
 ```
 
 `swift format` ships with Xcode and reads `.swift-format`; `swift format --in-place <file>` fixes most of what the lint reports.

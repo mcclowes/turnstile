@@ -36,7 +36,7 @@ You can also download the universal binary from [releases](https://github.com/mc
 - **A daemon** starts on the first gated command and exits after 30 idle minutes. There's nothing to launch or keep running.
 - **Admission** is per class (compile, test, and browser each get their own slots) and by memory. Each command's peak and run time are learned from its recent runs in that project.
 - **People go first.** Agent commands run at lower priority and queue behind the ones you type.
-- **Duplicate runs merge.** The same command on identical working-tree contents joins the run in progress.
+- **Duplicate runs merge.** The same command on an unchanged working tree joins the run in progress.
 - **Pressure relief.** When memory runs low, turnstile lowers each tool's parallelism, then pauses the newest agent compile if it gets critical.
 - **It fails open.** If the daemon is missing or broken, commands run ungated rather than failing.
 

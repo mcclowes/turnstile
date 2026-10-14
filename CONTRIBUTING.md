@@ -21,11 +21,14 @@ swift format lint --strict --recursive --parallel Sources Tests Package.swift
 node --test scripts/release-args-tests.mjs # release helper arguments, with blocked external tools
 node --test scripts/e2e-server-tests.mjs   # run-scoped process detection and cleanup
 /usr/bin/python3 scripts/e2e-top-tests.py # PTY handshakes and delayed terminal restoration
+./scripts/fingerprint-timing.sh # isolated 60k-file fingerprint timings; FILES changes the size
 ```
 
 `swift format` ships with Xcode and reads `.swift-format`; `swift format --in-place <file>` fixes most of what the lint reports.
 
 The e2e script never touches your real `~/.turnstile`. To try a local build for real, run `.build/debug/turnstile init`, and `turnstile uninstall` when you're done.
+
+`./scripts/fingerprint-timing.sh /path/to/repo` measures an existing repository without modifying it. The target is a p95 below 300 ms; the timing test uses a longer deadline so it can measure regressions beyond the production one-second limit.
 
 The code is split into three targets:
 

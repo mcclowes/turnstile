@@ -351,6 +351,121 @@ struct FingerprintInputTests {
         #expect(Workspace.inspect(cwd: root, argv: ["swift", "build"]).fingerprint != clean.fingerprint)
     }
 
+    @Test func stagingChangesTheFingerprint() throws {
+        let root = try Self.makeRepo()
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        try "two\n".write(toFile: root + "/a.txt", atomically: true, encoding: .utf8)
+        let unstaged = try #require(Workspace.inspect(cwd: root, argv: []).fingerprint)
+        _ = Workspace.git(["add", "a.txt"], cwd: root, deadline: .distantFuture)
+        let staged = try #require(Workspace.inspect(cwd: root, argv: []).fingerprint)
+        #expect(staged != unstaged)
+    }
+
+    @Test(arguments: ["a.txt", "untracked space\ncafé.txt", ".env.local"])
+    func sameSizeEditWithRestoredMtimeChangesTheFingerprint(_ name: String) throws {
+        let root = try Self.makeRepo()
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        if name.hasPrefix(".env") {
+            try ".env*\n".write(toFile: root + "/.gitignore", atomically: true, encoding: .utf8)
+        }
+        let path = root + "/" + name
+        try "two\n".write(toFile: path, atomically: true, encoding: .utf8)
+        if name.hasPrefix(".env") {
+            #expect(Workspace.git(["check-ignore", name], cwd: root, deadline: .distantFuture) != nil)
+        }
+        var info = stat()
+        #expect(lstat(path, &info) == 0)
+        let before = try #require(Workspace.inspect(cwd: root, argv: []).fingerprint)
+        let file = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+        try file.write(contentsOf: Data("six\n".utf8))
+        try file.close()
+        var timestamps = [info.st_atimespec, info.st_mtimespec]
+        #expect(utimensat(AT_FDCWD, path, &timestamps, 0) == 0)
+        let after = try #require(Workspace.inspect(cwd: root, argv: []).fingerprint)
+        #expect(after != before)
+    }
+
+    @Test func fingerprintFollowsCommitsUntrackedFilesAndDeletions() throws {
+        let root = try Self.makeRepo()
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        func fingerprint() throws -> String {
+            try #require(Workspace.inspect(cwd: root, argv: []).fingerprint)
+        }
+        var seen = Set([try fingerprint()])
+        _ = Workspace.git(
+            ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "--allow-empty", "-qm", "next"],
+            cwd: root, deadline: .distantFuture)
+        #expect(try seen.insert(fingerprint()).inserted)
+        let untracked = root + "/new space\ncafé.txt"
+        try "new\n".write(toFile: untracked, atomically: true, encoding: .utf8)
+        #expect(try seen.insert(fingerprint()).inserted)
+        try FileManager.default.removeItem(atPath: root + "/a.txt")
+        #expect(try seen.insert(fingerprint()).inserted)
+        #expect(try fingerprint() == fingerprint())
+    }
+
+    @Test func commandDirectoryAndEnvironmentRemainPartOfTheFingerprint() throws {
+        let root = try Self.makeRepo()
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let subdirectory = root + "/src"
+        try FileManager.default.createDirectory(atPath: subdirectory, withIntermediateDirectories: true)
+        let baseline = try #require(Workspace.inspect(cwd: root, argv: ["swift", "test"]).fingerprint)
+        #expect(Workspace.inspect(cwd: root, argv: ["swift", "build"]).fingerprint != baseline)
+        #expect(Workspace.inspect(cwd: subdirectory, argv: ["swift", "test"]).fingerprint != baseline)
+        #expect(
+            Workspace.inspect(cwd: root, argv: ["swift", "test"], environment: ["CI": "1"]).fingerprint
+                != baseline)
+        #expect(
+            Workspace.inspect(cwd: root, argv: ["swift", "test"], environment: ["TERM": "xterm"]).fingerprint
+                == baseline)
+    }
+
+    @Test func findsTheRootThroughASymlinkWithoutRefreshingTheIndex() throws {
+        let root = try Self.makeRepo()
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        try FileManager.default.createDirectory(atPath: root + "/src/deep", withIntermediateDirectories: true)
+        let link = FileManager.default.temporaryDirectory.appendingPathComponent("link-\(UUID().uuidString)").path
+        try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: root)
+        defer { try? FileManager.default.removeItem(atPath: link) }
+        try FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: root + "/a.txt")
+        let index = URL(fileURLWithPath: root + "/.git/index")
+        let original = try Data(contentsOf: index)
+        let workspace = Workspace.inspect(cwd: link + "/src/deep", argv: [])
+        #expect(workspace.root == root)
+        #expect(workspace.fingerprint != nil)
+        #expect(try Data(contentsOf: index) == original)
+        #expect(!FileManager.default.fileExists(atPath: root + "/.git/index.lock"))
+    }
+
+    @Test func outsideGitTheRootIsTheWorkingDirectory() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("plain-\(UUID().uuidString)").path
+        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+        #expect(Workspace.inspect(cwd: directory, argv: []) == Workspace(root: directory, fingerprint: nil))
+    }
+
+    @Test func parsesPorcelainV2PathsWithSpacesAndNewlines() {
+        let output =
+            [
+                "# branch.oid 1111111111111111111111111111111111111111",
+                "# branch.head main",
+                "1 .M N... 100644 100644 100644 aaaa aaaa src/a b.txt",
+                "2 R. N... 100644 100644 100644 bbbb bbbb R100 new.txt", "old.txt",
+                "u UU N... 100644 100644 100644 100644 c1 c2 c3 conflict.txt",
+                "? untracked\ncafé.txt",
+            ].joined(separator: "\u{0}") + "\u{0}"
+        let status = Workspace.Status(porcelain: Data(output.utf8))
+        #expect(status.head == "1111111111111111111111111111111111111111")
+        #expect(status.entries.map(\.path) == ["src/a b.txt", "new.txt", "conflict.txt", "untracked\ncafé.txt"])
+        #expect(status.entries[1].record.hasSuffix("new.txt\u{0}old.txt"))
+    }
+
+    @Test func undecodablePathsDisableTheFingerprint() {
+        var output = Data("# branch.oid aaaa\u{0}? file".utf8)
+        output.append(contentsOf: [0xFF, 0])
+        #expect(Workspace.Status(porcelain: output).head == nil)
+    }
+
     @Test func aLinkedWorktreeKnowsItsMainCheckout() throws {
         let root = try Self.makeRepo()
         let linked = root + "-wt"
@@ -365,6 +480,21 @@ struct FingerprintInputTests {
         let workspace = Workspace.inspect(cwd: resolvedLinked, argv: [])
         #expect(workspace.root == resolvedLinked)
         #expect(workspace.home == root)
+        let expired = Workspace.inspect(cwd: resolvedLinked, argv: [], budget: 0)
+        #expect(expired.root == resolvedLinked)
+        #expect(expired.home == root)
+        #expect(expired.fingerprint == nil)
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["TURNSTILE_FINGERPRINT_REPO"] != nil))
+    func timesTheFingerprintOnALargeRepo() throws {
+        let repo = try #require(ProcessInfo.processInfo.environment["TURNSTILE_FINGERPRINT_REPO"])
+        let times = try (0..<20).map { _ in
+            let start = Date()
+            _ = try #require(Workspace.inspect(cwd: repo, argv: [], budget: 10).fingerprint)
+            return Date().timeIntervalSince(start) * 1000
+        }.sorted()
+        print("fingerprint ms: median \(Int(times[10])), p95 \(Int(times[18])), max \(Int(times[19]))")
     }
 
     @Test func slowGitGivesUpOnTheFingerprintButKeepsTheRoot() throws {

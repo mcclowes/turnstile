@@ -10,6 +10,7 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ### Fixed
 
+- Workspace fingerprints use Git status and file metadata instead of serializing binary diffs, restoring the performance fix from #28. Staging and edits with restored modification times produce distinct fingerprints.
 - Removed Swift compiler warnings in history migrations and process-path decoding.
 - The suspended-client E2E check confirms queueing and process suspension before admission, and verifies the daemon's reclamation reason.
 - The top E2E check waits for job and terminal shutdown handshakes, and reports each failed condition separately.

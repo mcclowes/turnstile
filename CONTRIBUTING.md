@@ -27,7 +27,9 @@ node --test scripts/e2e-server-tests.mjs   # run-scoped process detection and cl
 `swift format` ships with Xcode and reads `.swift-format`; `swift format --in-place <file>` fixes most of what the lint reports.
 
 Packaging stages replacements until signing and release validation succeed.
-Failures before publication keep the previous app and ZIP.
+The release checksum is computed before publication. Backup and promotion
+failures or handled interruptions restore the previous app and ZIP. If
+restoration fails, the error identifies retained recovery files.
 `scripts/package.sh --dev` replaces only the app and preserves the release ZIP. The helper tests use
 temporary projects without building, signing, or contacting a notary service.
 

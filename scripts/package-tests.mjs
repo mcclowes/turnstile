@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -17,6 +18,10 @@ function fixture(context) {
   fs.writeFileSync(path.join(root, "Sources/TurnstileCore/Paths.swift"), 'public static let version = "9.8.7"\n');
   fs.writeFileSync(path.join(app, "old"), "previous app");
   fs.writeFileSync(zip, "previous release");
+  fs.chmodSync(app, 0o750);
+  fs.chmodSync(zip, 0o640);
+  fs.mkdirSync(path.join(root, ".build/.turnstile-package.unrelated"));
+  fs.writeFileSync(path.join(root, ".build/.turnstile-package.unrelated/keep"), "preserve neighbor");
   fs.writeFileSync(path.join(root, "build output/TurnstileBar"), "fixture executable", { mode: 0o755 });
   fs.writeFileSync(path.join(root, "assets/AppIcon.icns"), "fixture icon");
   const stub = `#!/bin/bash
@@ -61,10 +66,27 @@ case "$tool" in
     fi
     if [ "$1" = stapler ] && [ "$MODE" = staple-failure ]; then exit 48; fi ;;
   spctl) [ "$MODE" != assess-failure ] || exit 49 ;;
+  shasum)
+    [ "$MODE" != checksum-failure ] || { echo 'fixture checksum failure' >&2; exit 56; }
+    exec /usr/bin/shasum "$@" ;;
+  mv)
+    if [ "$MODE" = app-backup-failure ] && [ "$1" = .build/Turnstile.app ]; then exit 52; fi
+    if [ "$MODE" = zip-backup-failure ] && [ "$1" = .build/Turnstile-9.8.7.zip ]; then exit 53; fi
+    if [[ "$1" == .build/.turnstile-package.*/Turnstile.app ]] && [ "$2" = .build/Turnstile.app ]; then
+      if [ "$MODE" = app-promotion-failure ]; then echo 'fixture app promotion failure' >&2; exit 54; fi
+      if [ "$MODE" = interrupt-app ]; then /bin/mv "$@"; kill -TERM "$PPID"; exit 0; fi
+    fi
+    if [[ "$1" == .build/.turnstile-package.*/Turnstile-9.8.7.zip ]] && [ "$2" = .build/Turnstile-9.8.7.zip ]; then
+      if [ "$MODE" = zip-promotion-failure ] || [ "$MODE" = rollback-app ] || [ "$MODE" = rollback-zip ]; then echo 'fixture ZIP promotion failure' >&2; exit 55; fi
+      if [ "$MODE" = interrupt-zip ]; then /bin/mv "$@"; kill -TERM "$PPID"; exit 0; fi
+    fi
+    if [ "$MODE" = rollback-app ] && [[ "$1" == */previous-app ]]; then echo 'fixture app restoration failure' >&2; exit 57; fi
+    if [ "$MODE" = rollback-zip ] && [[ "$1" == */previous.zip ]]; then echo 'fixture ZIP restoration failure' >&2; exit 58; fi
+    exec /bin/mv "$@" ;;
 esac
 exit 0
 `;
-  for (const tool of ["git", "swift", "codesign", "ditto", "xcrun", "spctl"]) {
+  for (const tool of ["git", "swift", "codesign", "ditto", "xcrun", "spctl", "shasum", "mv"]) {
     fs.writeFileSync(path.join(root, "tools", tool), stub, { mode: 0o755 });
   }
   return {
@@ -83,13 +105,17 @@ exit 0
 }
 
 function assertCleanup(current) {
-  assert.deepEqual(fs.readdirSync(path.join(current.root, ".build")).filter((name) => name.startsWith(".turnstile-package.")), []);
+  assert.deepEqual(fs.readdirSync(path.join(current.root, ".build")).filter((name) =>
+    name !== ".turnstile-package.unrelated" && name.startsWith(".turnstile-package.")), []);
+  assert.equal(fs.readFileSync(path.join(current.root, ".build/.turnstile-package.unrelated/keep"), "utf8"), "preserve neighbor");
 }
 
 function assertPrevious(current) {
   assert.equal(fs.readFileSync(path.join(current.app, "old"), "utf8"), "previous app");
   assert.deepEqual(fs.readdirSync(current.app), ["old"]);
   assert.equal(fs.readFileSync(current.zip, "utf8"), "previous release");
+  assert.equal(fs.statSync(current.app).mode & 0o777, 0o750);
+  assert.equal(fs.statSync(current.zip).mode & 0o777, 0o640);
   assertCleanup(current);
 }
 
@@ -138,6 +164,8 @@ test("successful release publishes only the final app and archive", (context) =>
   assert.equal(fs.readFileSync(path.join(current.app, "Contents/MacOS/TurnstileBar"), "utf8"), "fixture executable");
   assert.ok(fs.statSync(path.join(current.app, "Contents/MacOS/TurnstileBar")).mode & 0o111);
   assert.equal(fs.readFileSync(current.zip, "utf8"), "fixture archive 2");
+  const digest = createHash("sha256").update(fs.readFileSync(current.zip)).digest("hex");
+  assert.ok(result.stdout.endsWith(`${digest}  .build/Turnstile-9.8.7.zip\n`));
   const calls = fs.readFileSync(path.join(current.root, "calls"), "utf8");
   assert.match(calls, /swift build -c release --product TurnstileBar --arch arm64 --arch x86_64/);
   assert.match(calls, /codesign --force --options runtime --timestamp --sign fixture identity /);
@@ -156,3 +184,78 @@ test("successful release publishes only the final app and archive", (context) =>
   assert.equal(fs.readFileSync(current.zip, "utf8"), "fixture archive 4");
   assertCleanup(current);
 });
+
+for (const [mode, expected] of [["app-backup-failure", 52], ["app-promotion-failure", 54], ["interrupt-app", 143]]) {
+  test(`dev ${mode} restores the previous app and preserves the release ZIP`, (context) => {
+    const current = fixture(context);
+    const result = current.run(mode, true);
+    assert.equal(result.status, expected, result.stdout + result.stderr);
+    assertPrevious(current);
+  });
+}
+
+for (const [mode, expected] of [["app-promotion-failure", 54], ["interrupt-app", 143]]) {
+  test(`first-time dev ${mode} leaves no app and preserves the release ZIP`, (context) => {
+    const current = fixture(context);
+    fs.rmSync(current.app, { recursive: true });
+    const result = current.run(mode, true);
+    assert.equal(result.status, expected, result.stdout + result.stderr);
+    assert.equal(fs.existsSync(current.app), false);
+    assert.equal(fs.readFileSync(current.zip, "utf8"), "previous release");
+    assert.equal(fs.statSync(current.zip).mode & 0o777, 0o640);
+    assertCleanup(current);
+  });
+}
+
+for (const [mode, expected] of [
+  ["app-backup-failure", 52], ["zip-backup-failure", 53], ["app-promotion-failure", 54],
+  ["zip-promotion-failure", 55], ["checksum-failure", 56], ["interrupt-app", 143], ["interrupt-zip", 143],
+]) {
+  test(`release ${mode} restores both previous artifacts`, (context) => {
+    const current = fixture(context);
+    const result = current.run(mode);
+    assert.equal(result.status, expected, result.stdout + result.stderr);
+    assertPrevious(current);
+  });
+}
+
+for (const [mode, expected] of [["app-promotion-failure", 54], ["zip-promotion-failure", 55], ["interrupt-zip", 143]]) {
+  test(`first-time release ${mode} leaves neither published artifact`, (context) => {
+    const current = fixture(context);
+    fs.rmSync(current.app, { recursive: true });
+    fs.unlinkSync(current.zip);
+    const result = current.run(mode);
+    assert.equal(result.status, expected, result.stdout + result.stderr);
+    assert.equal(fs.existsSync(current.app), false);
+    assert.equal(fs.existsSync(current.zip), false);
+    assertCleanup(current);
+  });
+}
+
+for (const [mode, backup, restored, failure] of [
+  ["rollback-app", "previous-app", "zip", /fixture app restoration failure/],
+  ["rollback-zip", "previous.zip", "app", /fixture ZIP restoration failure/],
+]) {
+  test(`${mode} retains recovery data and restores the other artifact`, (context) => {
+    const current = fixture(context);
+    const result = current.run(mode);
+    assert.equal(result.status, 55);
+    assert.match(result.stderr, /fixture ZIP promotion failure/);
+    assert.match(result.stderr, failure);
+    const build = path.join(current.root, ".build");
+    const retained = fs.readdirSync(build).filter((name) => name !== ".turnstile-package.unrelated" && name.startsWith(".turnstile-package."));
+    assert.equal(retained.length, 1);
+    assert.ok(result.stderr.includes(retained[0]));
+    const old = path.join(build, retained[0], backup);
+    if (restored === "zip") {
+      assert.equal(fs.readFileSync(path.join(old, "old"), "utf8"), "previous app");
+      assert.equal(fs.statSync(old).mode & 0o777, 0o750);
+      assert.equal(fs.readFileSync(current.zip, "utf8"), "previous release");
+    } else {
+      assert.equal(fs.readFileSync(old, "utf8"), "previous release");
+      assert.equal(fs.statSync(old).mode & 0o777, 0o640);
+      assert.equal(fs.readFileSync(path.join(current.app, "old"), "utf8"), "previous app");
+    }
+    assert.equal(fs.readFileSync(path.join(build, ".turnstile-package.unrelated/keep"), "utf8"), "preserve neighbor");
+  });
+}

@@ -36,6 +36,11 @@ replacing `.build/dist`. A failed archive, package, copy, or checksum step keeps
 the previous distribution. Its fixtures use real archive/checksum tools with
 synthetic binaries and a stubbed app packager.
 
+Final publication keeps a backup until the new distribution is in place. A
+failed move or handled interruption restores the previous directory. If
+restoration fails, the error reports retained recovery directories rather than
+discarding the backup.
+
 The e2e script never touches your real `~/.turnstile`. To try a local build for real, run `.build/debug/turnstile init`, and `turnstile uninstall` when you're done.
 
 `./scripts/fingerprint-timing.sh /path/to/repo` measures an existing repository without modifying it. The target is a p95 below 300 ms; the timing test uses a longer deadline so it can measure regressions beyond the production one-second limit.

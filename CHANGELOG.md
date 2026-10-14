@@ -10,6 +10,7 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ### Fixed
 
+- Distribution publication restores previous output on failed moves or handled interruptions and retains recovery data if restoration fails.
 - Updated the documentation site's DOMPurify sanitizer to 3.4.17.
 - Distribution assembly preserves the previous release directory when archiving, app packaging, copying, or checksum generation fails.
 - Packaging keeps previous app and ZIP artifacts until release validation succeeds; dev packaging preserves the release ZIP.

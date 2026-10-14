@@ -26,7 +26,30 @@ archs="$(lipo -archs "$bin/turnstile")"
 [ "$("$bin/turnstile" --version)" = "$VERSION" ] || fail "the built CLI doesn't report $VERSION"
 mkdir -p .build
 dist_stage=$(mktemp -d .build/.turnstile-dist.XXXXXX)
-trap 'rm -rf "$dist_stage"' EXIT
+dist_backup=''
+dist_promoting=false
+dist_committed=false
+cleanup_distribution() {
+  local exit_status=$?
+  local retain_recovery=false
+  if [ "$dist_committed" = false ]; then
+    if [ "$dist_promoting" = true ] && ! rm -rf "$DIST"; then
+      retain_recovery=true
+    elif [ -n "$dist_backup" ] && { [ -e "$dist_backup/previous" ] || [ -L "$dist_backup/previous" ]; } &&
+      ! mv "$dist_backup/previous" "$DIST"; then
+      retain_recovery=true
+    fi
+  fi
+  if [ "$retain_recovery" = true ]; then
+    echo "dist.sh: rollback failed; recovery directories retained: $dist_stage $dist_backup" >&2
+    [ "$exit_status" -ne 0 ] || exit_status=1
+  else
+    rm -rf "$dist_stage"
+    [ -z "$dist_backup" ] || rm -rf "$dist_backup"
+  fi
+  return "$exit_status"
+}
+trap cleanup_distribution EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 TARBALL="$dist_stage/turnstile-$VERSION-macos.tar.gz"
@@ -35,6 +58,11 @@ tar -czf "$TARBALL" -C "$bin" turnstile
 ./scripts/package.sh
 cp "$ZIP" "$dist_stage/"
 (cd "$dist_stage" && shasum -a 256 -- *.tar.gz *.zip > SHA256SUMS)
-rm -rf "$DIST"
+dist_backup=$(mktemp -d .build/.turnstile-dist-backup.XXXXXX)
+if [ -e "$DIST" ] || [ -L "$DIST" ]; then
+  mv "$DIST" "$dist_backup/previous"
+fi
+dist_promoting=true
 mv "$dist_stage" "$DIST"
+dist_committed=true
 cat "$DIST/SHA256SUMS"

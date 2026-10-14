@@ -14,6 +14,9 @@ function fixture(context) {
   fs.copyFileSync(new URL("./dist.sh", import.meta.url), path.join(root, "scripts/dist.sh"));
   fs.writeFileSync(path.join(root, "Sources/TurnstileCore/Paths.swift"), 'public static let version = "9.8.7"\n');
   fs.writeFileSync(path.join(root, ".build/dist/previous"), "previous distribution");
+  fs.chmodSync(path.join(root, ".build/dist"), 0o750);
+  fs.mkdirSync(path.join(root, ".build/.turnstile-dist.unrelated"));
+  fs.writeFileSync(path.join(root, ".build/.turnstile-dist.unrelated/keep"), "preserve neighbor");
   fs.writeFileSync(path.join(root, "build output/turnstile"), `#!/bin/bash
 if [ "$MODE" = version-failure ]; then echo 0.0.0; else echo 9.8.7; fi
 `, { mode: 0o755 });
@@ -53,10 +56,21 @@ case "$tool" in
   shasum)
     if [ "$MODE" = checksum-failure ]; then printf 'partial checksum'; exit 46; fi
     exec /usr/bin/shasum "$@" ;;
+  mv)
+    if [ "$MODE" = backup-failure ] && [ "$1" = .build/dist ]; then echo 'fixture backup failure' >&2; exit 52; fi
+    if [[ "$1" == .build/.turnstile-dist.* ]] && [ "$2" = .build/dist ]; then
+      case "$MODE" in
+        promotion-failure|rollback-failure) echo 'fixture promotion failure' >&2; exit 53 ;;
+        interrupt-before) kill -TERM "$PPID"; exit 143 ;;
+        interrupt-after) /bin/mv "$@"; kill -TERM "$PPID"; exit 0 ;;
+      esac
+    fi
+    if [ "$MODE" = rollback-failure ] && [[ "$1" == .build/.turnstile-dist-backup.*/previous ]]; then echo 'fixture rollback failure' >&2; exit 54; fi
+    exec /bin/mv "$@" ;;
 esac
 exit 0
 `;
-  for (const tool of ["swift", "lipo", "tar", "cp", "shasum"]) fs.writeFileSync(path.join(root, "tools", tool), stub, { mode: 0o755 });
+  for (const tool of ["swift", "lipo", "tar", "cp", "shasum", "mv"]) fs.writeFileSync(path.join(root, "tools", tool), stub, { mode: 0o755 });
   return {
     root,
     run(mode = "success") {
@@ -71,8 +85,52 @@ exit 0
 }
 
 function assertCleanup(current) {
-  assert.deepEqual(fs.readdirSync(path.join(current.root, ".build")).filter((name) => name.startsWith(".turnstile-dist.")), []);
+  assert.deepEqual(fs.readdirSync(path.join(current.root, ".build")).filter((name) =>
+    name !== ".turnstile-dist.unrelated" && (name.startsWith(".turnstile-dist.") || name.startsWith(".turnstile-dist-backup."))), []);
+  assert.equal(fs.readFileSync(path.join(current.root, ".build/.turnstile-dist.unrelated/keep"), "utf8"), "preserve neighbor");
 }
+
+for (const [mode, expected] of [["backup-failure", 52], ["promotion-failure", 53], ["interrupt-before", 143], ["interrupt-after", 143]]) {
+  test(`${mode} restores the previous distribution at publication`, (context) => {
+    const current = fixture(context);
+    const result = current.run(mode);
+    assert.equal(result.status, expected, result.stdout + result.stderr);
+    const dist = path.join(current.root, ".build/dist");
+    assert.deepEqual(fs.readdirSync(dist), ["previous"]);
+    assert.equal(fs.readFileSync(path.join(dist, "previous"), "utf8"), "previous distribution");
+    assert.equal(fs.statSync(dist).mode & 0o777, 0o750);
+    assertCleanup(current);
+  });
+}
+
+for (const [mode, expected] of [["promotion-failure", 53], ["interrupt-after", 143]]) {
+  test(`${mode} preserves absent first-time distribution output`, (context) => {
+    const current = fixture(context);
+    const dist = path.join(current.root, ".build/dist");
+    fs.rmSync(dist, { recursive: true });
+    const result = current.run(mode);
+    assert.equal(result.status, expected, result.stdout + result.stderr);
+    assert.equal(fs.existsSync(dist), false);
+    assertCleanup(current);
+  });
+}
+
+test("failed rollback retains and reports the previous distribution for recovery", (context) => {
+  const current = fixture(context);
+  const result = current.run("rollback-failure");
+  assert.equal(result.status, 53);
+  assert.match(result.stderr, /fixture promotion failure/);
+  assert.match(result.stderr, /fixture rollback failure/);
+  const build = path.join(current.root, ".build");
+  const backups = fs.readdirSync(build).filter((name) => name.startsWith(".turnstile-dist-backup."));
+  assert.equal(backups.length, 1);
+  assert.ok(result.stderr.includes(backups[0]));
+  const previous = path.join(build, backups[0], "previous");
+  assert.deepEqual(fs.readdirSync(previous), ["previous"]);
+  assert.equal(fs.readFileSync(path.join(previous, "previous"), "utf8"), "previous distribution");
+  assert.equal(fs.statSync(previous).mode & 0o777, 0o750);
+  assert.equal(fs.readFileSync(path.join(build, ".turnstile-dist.unrelated/keep"), "utf8"), "preserve neighbor");
+});
 
 test("failed app packaging keeps the previous distribution", (context) => {
   const current = fixture(context);

@@ -377,6 +377,31 @@ struct FingerprintInputTests {
 }
 
 struct ProcessDetailTests {
+    @Test func readsAnExecutablePathWithSpacesAndUnicode() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "process-path café 🧪-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let executable = directory.appendingPathComponent("sleep")
+        try FileManager.default.copyItem(at: URL(fileURLWithPath: "/bin/sleep"), to: executable)
+        let canonicalPath = try #require(realpath(executable.path, nil))
+        defer { free(canonicalPath) }
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = ["30"]
+        try process.run()
+        defer {
+            if process.isRunning { process.terminate() }
+            process.waitUntilExit()
+        }
+        #expect(ProcessTree.executable(process.processIdentifier) == String(cString: canonicalPath))
+    }
+
+    @Test(arguments: [pid_t(-1), pid_t(Int32.max)])
+    func unavailableProcessesHaveNoExecutable(_ pid: pid_t) {
+        #expect(ProcessTree.executable(pid) == nil)
+    }
+
     @Test func readsItsOwnProcess() {
         let me = getpid()
         let table = ProcessTree.table()

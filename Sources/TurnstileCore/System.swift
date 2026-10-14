@@ -187,9 +187,10 @@ public enum ProcessTree {
     }
 
     public static func executable(_ pid: pid_t) -> String? {
-        var buffer = [CChar](repeating: 0, count: Int(4 * MAXPATHLEN))
+        var buffer = [UInt8](repeating: 0, count: Int(4 * MAXPATHLEN))
         let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
-        return length > 0 ? String(cString: buffer) : nil
+        guard length > 0 else { return nil }
+        return String(decoding: buffer.prefix(while: { $0 != 0 }), as: UTF8.self)
     }
 
     /// The process's argv, including argv[0]. Nil for another user's process.

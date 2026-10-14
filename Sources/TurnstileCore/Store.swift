@@ -63,7 +63,9 @@ public final class Store {
             )
             """)
         var columns: Set<String> = []
-        query("PRAGMA table_info(jobs)", []) { row in row.text(1).map { columns.insert($0) } }
+        query("PRAGMA table_info(jobs)", []) { row in
+            if let column = row.text(1) { columns.insert(column) }
+        }
         for (column, type) in [
             ("ran_for", "REAL"), ("min_level", "INTEGER"), ("max_pressure", "INTEGER"), ("paused_for", "REAL"),
             ("would_pause", "INTEGER"),

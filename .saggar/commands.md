@@ -11,11 +11,11 @@ Effects describe the listed invocations with their default environment. Safe com
 - Coverage: `./scripts/coverage.sh` — unit tests with a per-file report, writes .build/coverage.lcov #safe #monitor
 - Lint: `swift format lint --strict --recursive --parallel Sources Tests Package.swift` #safe #quick
 - License check: `node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs` — ThirdParty/ records for every dependency #safe #quick
-- Release helper arguments: `node --test scripts/release-args-tests.mjs` — reject invalid inputs before invoking build or publishing tools #safe #quick
+- Release helper checks: `node --test scripts/release-args-tests.mjs scripts/package-tests.mjs scripts/dist-tests.mjs` — argument validation and artifact retention/rollback in disposable projects with stubbed build/signing tools #safe #quick
 - History report inputs: `node --test scripts/history-report-tests.mjs` — argument rejection and read-only reports with isolated SQLite data #safe #quick
 - E2E server isolation: `node --test scripts/e2e-server-tests.mjs` — concurrent process fixtures cannot match or stop each other #safe #quick
 - E2E top driver: `/usr/bin/python3 scripts/e2e-top-tests.py` — PTY handshakes and delayed terminal restoration with a fake CLI #safe #quick
-- CI checks: `swift format lint --strict --recursive --parallel Sources Tests Package.swift && node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs && node --test scripts/release-args-tests.mjs && node --test scripts/history-report-tests.mjs && node --test scripts/e2e-server-tests.mjs && /usr/bin/python3 scripts/e2e-top-tests.py && ./scripts/coverage.sh && ./scripts/e2e.sh && swift build -c release && ./scripts/package.sh --dev` — the lint and test jobs from ci.yml, in order #safe #monitor #ci
+- CI checks: `swift format lint --strict --recursive --parallel Sources Tests Package.swift && node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs && node --test scripts/release-args-tests.mjs scripts/package-tests.mjs scripts/dist-tests.mjs && node --test scripts/history-report-tests.mjs && node --test scripts/e2e-server-tests.mjs && /usr/bin/python3 scripts/e2e-top-tests.py && ./scripts/coverage.sh && ./scripts/e2e.sh && swift build -c release && ./scripts/package.sh --dev` — the lint and test jobs from ci.yml, in order #safe #monitor #ci
 - Release build: `swift build -c release` #safe #quick
 - Menu bar app (dev): `./scripts/package.sh --dev` — ad-hoc signed Turnstile.app, not notarized #safe #quick
 - Try local build: `.build/debug/turnstile init` — changes real shims, shell startup files, and installed binary #destructive #quick

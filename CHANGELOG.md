@@ -14,6 +14,7 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ### Fixed
 
+- Release publication rejects missing or whitespace-only changelog notes before checking GitHub releases.
 - Pressure, restart, and memory-warning E2E fixtures wait for observed state before releasing fake jobs.
 - Cancellation received while draining an exited tool's output still returns 125, preserving the instruction not to retry.
 - The history-report helper rejects invalid arguments before reading history or invoking SQLite.

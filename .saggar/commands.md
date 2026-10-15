@@ -11,7 +11,7 @@ Effects describe the listed invocations with their default environment. Safe com
 - Coverage: `./scripts/coverage.sh` — unit tests with a per-file report, writes .build/coverage.lcov #safe #monitor
 - Lint: `swift format lint --strict --recursive --parallel Sources Tests Package.swift` #safe #quick
 - License check: `node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs` — ThirdParty/ records for every dependency #safe #quick
-- Release helper checks: `node --test scripts/release-args-tests.mjs scripts/package-tests.mjs scripts/dist-tests.mjs` — argument validation and artifact retention/rollback in disposable projects with stubbed build/signing tools #safe #quick
+- Release helper checks: `node --test scripts/release-args-tests.mjs scripts/package-tests.mjs scripts/dist-tests.mjs` — argument/release-note validation and artifact retention/rollback in disposable projects with stubbed external tools #safe #quick
 - History report inputs: `node --test scripts/history-report-tests.mjs` — argument rejection and read-only reports with isolated SQLite data #safe #quick
 - E2E server isolation: `node --test scripts/e2e-server-tests.mjs` — concurrent process fixtures cannot match or stop each other #safe #quick
 - E2E top driver: `/usr/bin/python3 scripts/e2e-top-tests.py` — PTY handshakes and delayed terminal restoration with a fake CLI #safe #quick

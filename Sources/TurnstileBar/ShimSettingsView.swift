@@ -16,11 +16,14 @@ final class ShimSettingsModel: ObservableObject {
     }
 
     enum Status {
-        case checking, gated, bypassed(String), notInstalled, off
+        case checking, gated
+        case bypassed(String)
+        case notInstalled, off
     }
 
     var rows: [Row] {
-        Classifier.defaultShims.map { Row(name: $0, custom: false) } + settings.custom.map { Row(name: $0, custom: true) }
+        Classifier.defaultShims.map { Row(name: $0, custom: false) }
+            + settings.custom.map { Row(name: $0, custom: true) }
     }
 
     private let environment: [String: String]
@@ -150,10 +153,13 @@ struct ShimSettingsView: View {
         VStack(alignment: .leading, spacing: 10) {
             Table(model.rows) {
                 TableColumn("On") { row in
-                    Toggle("Intercept \(row.name)", isOn: Binding(
-                        get: { row.custom || model.settings.enabledDefaults.contains(row.name) },
-                        set: { model.setDefault(row.name, enabled: $0) }
-                    ))
+                    Toggle(
+                        "Intercept \(row.name)",
+                        isOn: Binding(
+                            get: { row.custom || model.settings.enabledDefaults.contains(row.name) },
+                            set: { model.setDefault(row.name, enabled: $0) }
+                        )
+                    )
                     .toggleStyle(.checkbox)
                     .labelsHidden()
                     .disabled(row.custom)
@@ -200,10 +206,12 @@ struct ShimSettingsView: View {
                     .help("Ask your login shell again where each tool comes from")
             }
 
-            Text("Status is what your login shell runs. Quick commands still pass straight through; custom tools use the compile queue unless a command rule says otherwise.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "Status is what your login shell runs. Quick commands still pass straight through; custom tools use the compile queue unless a command rule says otherwise."
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
 
             if let message = model.message {
                 Text(message)

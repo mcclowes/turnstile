@@ -1,37 +1,56 @@
 import Testing
+
 @testable import TurnstileCore
 
 struct MenuBarStateTests {
     func job(_ id: Int64, state: String = "running", pausedBy: String? = nil, held: Bool = false) -> JobSnapshot {
         JobSnapshot(
-            id: id, state: pausedBy != nil ? "paused" : state, resourceClass: .test, project: "api", key: "swift test", cwd: "/api",
-            agent: true, estimate: Bytes.gb, footprint: nil, peak: nil, paused: pausedBy != nil, clientPid: 1, childPid: nil,
+            id: id, state: pausedBy != nil ? "paused" : state, resourceClass: .test, project: "api", key: "swift test",
+            cwd: "/api",
+            agent: true, estimate: Bytes.gb, footprint: nil, peak: nil, paused: pausedBy != nil, clientPid: 1,
+            childPid: nil,
             queuedAt: 0, startedAt: nil, waiting: nil, joiners: 0, held: held, pausedBy: pausedBy
         )
     }
 
     func entry(_ id: Int64, _ outcome: String) -> HistoryEntry {
-        HistoryEntry(id: id, project: "api", key: "swift test", outcome: outcome, exitCode: nil, peak: 7 * Bytes.gb, duration: 3, finishedAt: 0)
+        HistoryEntry(
+            id: id, project: "api", key: "swift test", outcome: outcome, exitCode: nil, peak: 7 * Bytes.gb, duration: 3,
+            finishedAt: 0)
     }
 
-    func snapshot(level: Int = 40, running: [JobSnapshot] = [], queued: [JobSnapshot] = [], recent: [HistoryEntry] = []) -> StatusSnapshot {
-        StatusSnapshot(memoryLevel: level, physicalMemory: 16 * Bytes.gb, reserve: 0, limits: [:], running: running, queued: queued, recent: recent, daemonPid: 1)
+    func snapshot(level: Int = 40, running: [JobSnapshot] = [], queued: [JobSnapshot] = [], recent: [HistoryEntry] = [])
+        -> StatusSnapshot
+    {
+        StatusSnapshot(
+            memoryLevel: level, physicalMemory: 16 * Bytes.gb, reserve: 0, limits: [:], running: running,
+            queued: queued, recent: recent, daemonPid: 1)
     }
 
     @Test func iconShowsJobsInFlightAndTrouble() {
         #expect(MenuBarState.indicator(nil) == .init(symbol: MenuBarState.iconSymbol, count: nil))
         #expect(MenuBarState.indicator(snapshot()).count == nil)
         #expect(MenuBarState.indicator(snapshot(running: [job(1)])).count == 1)
-        #expect(MenuBarState.indicator(snapshot(running: [job(1)], queued: [job(2, state: "queued"), job(3, state: "queued")])) == .init(symbol: MenuBarState.iconSymbol, count: 3))
-        #expect(MenuBarState.indicator(snapshot(running: [job(1, pausedBy: "you")])).symbol == MenuBarState.pausedSymbol)
+        #expect(
+            MenuBarState.indicator(
+                snapshot(running: [job(1)], queued: [job(2, state: "queued"), job(3, state: "queued")]))
+                == .init(symbol: MenuBarState.iconSymbol, count: 3))
+        #expect(
+            MenuBarState.indicator(snapshot(running: [job(1, pausedBy: "you")])).symbol == MenuBarState.pausedSymbol)
         #expect(MenuBarState.indicator(snapshot(level: 10, running: [job(1)])).symbol == MenuBarState.pressureSymbol)
-        #expect(MenuBarState.indicator(snapshot(running: [job(1, pausedBy: "memory")])).symbol == MenuBarState.pressureSymbol)
+        #expect(
+            MenuBarState.indicator(snapshot(running: [job(1, pausedBy: "memory")])).symbol
+                == MenuBarState.pressureSymbol)
     }
 
     @Test func gatingOffBeatsEverythingElseOnTheIcon() {
         let trouble = snapshot(level: 10, running: [job(1, pausedBy: "memory")], queued: [job(2, state: "queued")])
-        #expect(MenuBarState.indicator(trouble, disabled: true) == .init(symbol: MenuBarState.disabledSymbol, count: 2, tone: .danger))
-        #expect(MenuBarState.indicator(nil, disabled: true) == .init(symbol: MenuBarState.disabledSymbol, count: nil, tone: .danger))
+        #expect(
+            MenuBarState.indicator(trouble, disabled: true)
+                == .init(symbol: MenuBarState.disabledSymbol, count: 2, tone: .danger))
+        #expect(
+            MenuBarState.indicator(nil, disabled: true)
+                == .init(symbol: MenuBarState.disabledSymbol, count: nil, tone: .danger))
     }
 
     @Test func iconOnlyTakesColourWhenSomethingWantsAttention() {
@@ -145,12 +164,17 @@ struct MenuBarStateTests {
         #expect(MenuBarState.actions(for: job(1)).map(\.message) == ["bump", "pause", "kill"])
         #expect(MenuBarState.actions(for: job(1, pausedBy: "memory")).map(\.message) == ["bump", "resume", "kill"])
         #expect(MenuBarState.actions(for: job(2, state: "queued")).map(\.message) == ["bump", "hold", "kill"])
-        #expect(MenuBarState.actions(for: job(2, state: "queued", held: true)).map(\.title) == ["Move to front", "Release", "Kill"])
+        #expect(
+            MenuBarState.actions(for: job(2, state: "queued", held: true)).map(\.title) == [
+                "Move to front", "Release", "Kill",
+            ])
     }
 
     @Test func notifiesOnMemoryKillsAndPausesOnly() {
         let before = snapshot(running: [job(1), job(2)], recent: [entry(5, "ok")])
-        let after = snapshot(level: 6, running: [job(2, pausedBy: "memory")], recent: [entry(1, "killed"), entry(7, "cancelled"), entry(5, "ok")])
+        let after = snapshot(
+            level: 6, running: [job(2, pausedBy: "memory")],
+            recent: [entry(1, "killed"), entry(7, "cancelled"), entry(5, "ok")])
         let events = MenuBarState.events(from: before, to: after)
         #expect(events.count == 1)
         #expect(events.first?.title == "Paused #2 api swift test")
@@ -167,7 +191,8 @@ struct MenuBarStateTests {
     }
 
     @Test func pausesCarryTheJobSoTheNotificationCanActOnIt() {
-        let events = MenuBarState.events(from: snapshot(running: [job(2)]), to: snapshot(running: [job(2, pausedBy: "memory")]))
+        let events = MenuBarState.events(
+            from: snapshot(running: [job(2)]), to: snapshot(running: [job(2, pausedBy: "memory")]))
         #expect(events.map(\.kind) == [.memoryPause])
         #expect(events.first?.job == 2)
         #expect(MenuBarState.Event.Kind.memoryPause.actions.map(\.message) == ["resume", "kill"])
@@ -184,8 +209,16 @@ struct MenuBarStateTests {
     }
 
     @Test func shortWaitsAndAgentsWaitsStaySilent() {
-        let before = snapshot(running: [job(1)], queued: [yours(job(2, state: "queued"), queuedAt: 100), job(3, state: "queued")])
-        let after = snapshot(running: [yours(job(2), queuedAt: 100, startedAt: 130), { var j = job(3); j.startedAt = 1000; return j }()])
+        let before = snapshot(
+            running: [job(1)], queued: [yours(job(2, state: "queued"), queuedAt: 100), job(3, state: "queued")])
+        let after = snapshot(running: [
+            yours(job(2), queuedAt: 100, startedAt: 130),
+            {
+                var j = job(3)
+                j.startedAt = 1000
+                return j
+            }(),
+        ])
         #expect(MenuBarState.events(from: before, to: after).isEmpty)
     }
 
@@ -228,9 +261,15 @@ struct MenuBarStateTests {
         var queued = job(2, state: "queued")
         queued.waiting = Scheduler.message(for: .memory(need: 4 * Bytes.gb, free: Bytes.gb, running: ["a"], eta: 200))
         queued.startsAt = 1000
-        #expect(MenuBarState.waitingText(for: queued, now: 800) == "waiting for memory, needs ~4 GB, ~1 GB spare, starts in ~4m (running: a)")
-        #expect(MenuBarState.waitingText(for: queued, now: 958) == "waiting for memory, needs ~4 GB, ~1 GB spare, starts in 42s (running: a)")
-        #expect(MenuBarState.waitingText(for: queued, now: 1003) == "waiting for memory, needs ~4 GB, ~1 GB spare, should start any moment (running: a)")
+        #expect(
+            MenuBarState.waitingText(for: queued, now: 800)
+                == "waiting for memory, needs ~4 GB, ~1 GB spare, starts in ~4m (running: a)")
+        #expect(
+            MenuBarState.waitingText(for: queued, now: 958)
+                == "waiting for memory, needs ~4 GB, ~1 GB spare, starts in 42s (running: a)")
+        #expect(
+            MenuBarState.waitingText(for: queued, now: 1003)
+                == "waiting for memory, needs ~4 GB, ~1 GB spare, should start any moment (running: a)")
     }
 
     @Test func waitsWithoutAnExpectedStartReadAsSent() {

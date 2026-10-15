@@ -2,6 +2,30 @@
 
 Notable changes to turnstile. Versions follow [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- Daemon logs report slow scheduler ticks with their longest phase and long gaps between ticks, using monotonic elapsed time.
+
+### Changed
+
+- CI now fails on Swift formatting violations using the checked-in rules.
+
+### Fixed
+
+- App packaging restores prior artifacts on failed publication or handled interruptions, validates the checksum before promotion, and retains recovery files if restoration fails.
+- Distribution publication restores previous output on failed moves or handled interruptions and retains recovery data if restoration fails.
+- Updated the documentation site's DOMPurify sanitizer to 3.4.17.
+- Distribution assembly preserves the previous release directory when archiving, app packaging, copying, or checksum generation fails.
+- Packaging keeps previous app and ZIP artifacts until release validation succeeds; dev packaging preserves the release ZIP.
+- Workspace fingerprints use Git status and file metadata instead of serializing binary diffs, restoring the performance fix from #28. Staging and edits with restored modification times produce distinct fingerprints.
+- Removed Swift compiler warnings in history migrations and process-path decoding.
+- The suspended-client E2E check confirms queueing and process suspension before admission, and verifies the daemon's reclamation reason.
+- The top E2E check waits for job and terminal shutdown handshakes, and reports each failed condition separately.
+- E2E escaped-server checks and cleanup use a unique run marker, so concurrent runs cannot detect or stop each other's servers.
+- Release helpers reject unsupported options, empty arguments, and extra operands before building, signing, or publishing.
+
 ## 0.9.0
 
 ### Added

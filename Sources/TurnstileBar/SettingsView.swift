@@ -36,14 +36,19 @@ struct GeneralSettingsView: View {
             if monitor.canNotify {
                 Section("Notify me when") {
                     ForEach(MenuBarState.Event.Kind.allCases, id: \.self) { kind in
-                        Toggle(kind.title, isOn: Binding(get: { monitor.notifying.contains(kind) }, set: { monitor.setNotifying(kind, $0) }))
+                        Toggle(
+                            kind.title,
+                            isOn: Binding(
+                                get: { monitor.notifying.contains(kind) }, set: { monitor.setNotifying(kind, $0) }))
                     }
                 }
             }
 
             if monitor.canLaunchAtLogin {
                 Section {
-                    Toggle("Launch at login", isOn: Binding(get: { monitor.launchAtLogin }, set: { monitor.setLaunchAtLogin($0) }))
+                    Toggle(
+                        "Launch at login",
+                        isOn: Binding(get: { monitor.launchAtLogin }, set: { monitor.setLaunchAtLogin($0) }))
                 }
             }
 

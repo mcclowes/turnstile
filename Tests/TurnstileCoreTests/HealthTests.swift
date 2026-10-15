@@ -1,12 +1,15 @@
 import Foundation
 import Testing
+
 @testable import TurnstileCore
 
 struct HealthTests {
     let healthy = Health.Evidence(cliInstalled: true, shimsInstalled: true, configError: nil, lastGated: 100)
 
     func snapshot(version: String?) -> StatusSnapshot {
-        StatusSnapshot(memoryLevel: 40, physicalMemory: 16 * Bytes.gb, reserve: 0, limits: [:], running: [], queued: [], recent: [], daemonPid: 1, version: version)
+        StatusSnapshot(
+            memoryLevel: 40, physicalMemory: 16 * Bytes.gb, reserve: 0, limits: [:], running: [], queued: [],
+            recent: [], daemonPid: 1, version: version)
     }
 
     @Test func aHealthyInstallSaysNothing() {
@@ -40,7 +43,8 @@ struct HealthTests {
 
         var badConfig = healthy
         badConfig.configError = "~/.config/turnstile/config.json"
-        #expect(Health.findings(badConfig, snapshot: nil).first?.text.contains("~/.config/turnstile/config.json") == true)
+        #expect(
+            Health.findings(badConfig, snapshot: nil).first?.text.contains("~/.config/turnstile/config.json") == true)
         #expect(Health.findings(badConfig, snapshot: nil).first?.tone == .warning)
     }
 
@@ -83,7 +87,9 @@ struct HealthTests {
         noShims.shimsInstalled = false
         let findings = Health.findings(noShims, snapshot: nil)
         let busy = snapshot(version: Turnstile.version)
-        #expect(MenuBarState.indicator(busy, health: findings) == .init(symbol: Health.brokenSymbol, count: nil, tone: .danger))
+        #expect(
+            MenuBarState.indicator(busy, health: findings)
+                == .init(symbol: Health.brokenSymbol, count: nil, tone: .danger))
         #expect(MenuBarState.indicator(nil, health: []) == MenuBarState.indicator(nil))
 
         var neverGated = healthy
@@ -101,11 +107,15 @@ struct HealthTests {
 
         var noShims = healthy
         noShims.shimsInstalled = false
-        #expect(MenuBarState.indicator(nil, health: Health.findings(noShims, snapshot: nil), disabled: true).symbol == Health.brokenSymbol)
+        #expect(
+            MenuBarState.indicator(nil, health: Health.findings(noShims, snapshot: nil), disabled: true).symbol
+                == Health.brokenSymbol)
     }
 
     @Test func gathersEvidenceWithoutCreatingAnything() throws {
-        let home = FileManager.default.temporaryDirectory.appendingPathComponent("turnstile-health-\(UUID().uuidString)").path
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "turnstile-health-\(UUID().uuidString)"
+        ).path
         defer { try? FileManager.default.removeItem(atPath: home) }
         let paths = Paths(home: home)
         let environment = ["HOME": home, "TURNSTILE_CONFIG_DIR": home + "/config"]
@@ -116,12 +126,17 @@ struct HealthTests {
 
         try paths.ensure()
         try FileManager.default.createDirectory(atPath: paths.bin, withIntermediateDirectories: true)
-        FileManager.default.createFile(atPath: paths.bin + "/turnstile", contents: Data("#!/bin/sh\n".utf8), attributes: [.posixPermissions: 0o755])
-        try FileManager.default.createSymbolicLink(atPath: paths.shims + "/swift", withDestinationPath: paths.bin + "/turnstile")
+        FileManager.default.createFile(
+            atPath: paths.bin + "/turnstile", contents: Data("#!/bin/sh\n".utf8), attributes: [.posixPermissions: 0o755]
+        )
+        try FileManager.default.createSymbolicLink(
+            atPath: paths.shims + "/swift", withDestinationPath: paths.bin + "/turnstile")
         try FileManager.default.createDirectory(atPath: home + "/config", withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: home + "/config/config.json", contents: Data("{ nope".utf8))
         let store = try Store(path: paths.database)
-        _ = store.insertJob(state: "queued", resourceClass: .compile, key: "swift build", root: "/a", cwd: "/a", argv: ["swift", "build"], agent: true, clientPid: 1, estimate: 0, now: 42)
+        _ = store.insertJob(
+            state: "queued", resourceClass: .compile, key: "swift build", root: "/a", cwd: "/a",
+            argv: ["swift", "build"], agent: true, clientPid: 1, estimate: 0, now: 42)
 
         let full = Health.gather(paths: paths, environment: environment)
         #expect(full.cliInstalled && full.shimsInstalled)
@@ -130,12 +145,16 @@ struct HealthTests {
     }
 
     @Test func aShimPointingElsewhereDoesNotCount() throws {
-        let home = FileManager.default.temporaryDirectory.appendingPathComponent("turnstile-health-\(UUID().uuidString)").path
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "turnstile-health-\(UUID().uuidString)"
+        ).path
         defer { try? FileManager.default.removeItem(atPath: home) }
         let paths = Paths(home: home)
         try paths.ensure()
         try FileManager.default.createDirectory(atPath: paths.bin, withIntermediateDirectories: true)
-        FileManager.default.createFile(atPath: paths.bin + "/turnstile", contents: Data("#!/bin/sh\n".utf8), attributes: [.posixPermissions: 0o755])
+        FileManager.default.createFile(
+            atPath: paths.bin + "/turnstile", contents: Data("#!/bin/sh\n".utf8), attributes: [.posixPermissions: 0o755]
+        )
         try FileManager.default.createSymbolicLink(atPath: paths.shims + "/swift", withDestinationPath: "/usr/bin/true")
         #expect(!Health.gather(paths: paths, environment: ["HOME": home]).shimsInstalled)
     }

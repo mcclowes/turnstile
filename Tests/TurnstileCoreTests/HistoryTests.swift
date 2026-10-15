@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import TurnstileCore
 
 struct HistoryTests {
@@ -7,7 +8,9 @@ struct HistoryTests {
         _ root: String = "/code/api", _ key: String = "swift test", outcome: String = "ok",
         peak: UInt64? = Bytes.gb, duration: Double? = 60, wait: Double? = 0, agent: Bool = true, finishedAt: Double = 0
     ) -> HistoryRow {
-        HistoryRow(root: root, key: key, agent: agent, outcome: outcome, peak: peak, duration: duration, wait: wait, finishedAt: finishedAt)
+        HistoryRow(
+            root: root, key: key, agent: agent, outcome: outcome, peak: peak, duration: duration, wait: wait,
+            finishedAt: finishedAt)
     }
 
     @Test func summarizesEachCommandPerProject() throws {
@@ -39,7 +42,8 @@ struct HistoryTests {
     @Test func theEstimateRemembersColdRuns() throws {
         var rows = [row(peak: 9 * Bytes.gb, finishedAt: 0)]
         rows += (1...5).map { row(peak: Bytes.gb, finishedAt: Double($0)) }
-        #expect(try #require(HistorySummary.summarize(rows, days: 30, limit: 20).commands.first).estimate == 9 * Bytes.gb)
+        #expect(
+            try #require(HistorySummary.summarize(rows, days: 30, limit: 20).commands.first).estimate == 9 * Bytes.gb)
 
         rows += (6...20).map { row(peak: Bytes.gb, finishedAt: Double($0)) }
         let command = try #require(HistorySummary.summarize(rows, days: 30, limit: 20).commands.first)
@@ -124,7 +128,8 @@ struct HistoryTests {
     @Test func nothingRanIsSaidPlainly() {
         let summary = HistorySummary.summarize([], days: 14, limit: 20)
         #expect(HistoryFormatter.render(summary, here: nil) == "history: nothing ran in the last 14 days")
-        #expect(HistoryFormatter.render(summary, here: "/code/api") == "history: nothing ran in api in the last 14 days")
+        #expect(
+            HistoryFormatter.render(summary, here: "/code/api") == "history: nothing ran in api in the last 14 days")
     }
 
     @Test func troubleIsCalledOut() {
@@ -144,10 +149,13 @@ struct HistoryTests {
         store.markStarted(id, childPid: 2, now: 1030)
         store.markFinished(id, outcome: "ok", exitCode: 0, signal: nil, peak: 3 * Bytes.gb, ranFor: 42, now: 1100)
 
-        #expect(store.history(since: 0, root: nil) == [HistoryRow(
-            root: "/code/api", key: "swift test", agent: true, outcome: "ok",
-            peak: 3 * Bytes.gb, duration: 42, wait: 30, finishedAt: 1100
-        )])
+        #expect(
+            store.history(since: 0, root: nil) == [
+                HistoryRow(
+                    root: "/code/api", key: "swift test", agent: true, outcome: "ok",
+                    peak: 3 * Bytes.gb, duration: 42, wait: 30, finishedAt: 1100
+                )
+            ])
         #expect(store.history(since: 0, root: "/code/web").isEmpty)
         #expect(store.history(since: 1200, root: nil).isEmpty)
     }

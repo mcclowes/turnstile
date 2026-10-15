@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import TurnstileCore
 
 struct LimitSettingsTests {
@@ -20,7 +21,9 @@ struct LimitSettingsTests {
     }
 
     @Test func readsMachineAndThrottleValues() throws {
-        let data = Data(#"{"concurrency":{"test":5},"reserve":"4GB","throttle":{"pause":false,"inject":false,"killMultiplier":5,"maxMemory":"8GB"}}"#.utf8)
+        let data = Data(
+            #"{"concurrency":{"test":5},"reserve":"4GB","throttle":{"pause":false,"inject":false,"killMultiplier":5,"maxMemory":"8GB"}}"#
+                .utf8)
         let settings = LimitSettings(file: try ConfigFile.decode(data))
 
         #expect(settings.concurrency == [.test: 5])
@@ -33,7 +36,9 @@ struct LimitSettingsTests {
     }
 
     @Test func writesOnlyWhatChanged() throws {
-        let original = Data(#"{"$schema":"config.schema.json","reserve":"2GB","concurrency":{"test":3,"gpu":1},"shims":{"add":["bazel"]},"throttle":{"nodeHeap":"4GB"}}"#.utf8)
+        let original = Data(
+            #"{"$schema":"config.schema.json","reserve":"2GB","concurrency":{"test":3,"gpu":1},"shims":{"add":["bazel"]},"throttle":{"nodeHeap":"4GB"}}"#
+                .utf8)
         var settings = LimitSettings(file: try ConfigFile.decode(original))
         settings.concurrency[.compile] = 2
         settings.pause = .never
@@ -50,7 +55,9 @@ struct LimitSettingsTests {
     }
 
     @Test func restoringDefaultsRemovesKeys() throws {
-        let original = Data(#"{"concurrency":{"test":3},"reserve":"4GB","throttle":{"pause":false,"killMultiplier":5,"maxMemory":"8GB"}}"#.utf8)
+        let original = Data(
+            #"{"concurrency":{"test":3},"reserve":"4GB","throttle":{"pause":false,"killMultiplier":5,"maxMemory":"8GB"}}"#
+                .utf8)
 
         let updated = try json(try LimitSettings().updatingConfig(original))
 

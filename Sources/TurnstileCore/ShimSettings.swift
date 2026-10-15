@@ -26,12 +26,16 @@ public struct ShimSettings: Equatable, Sendable {
 
     public static func normalize(_ name: String) -> String? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed != ".", trimmed != "..", !trimmed.contains("/"), !trimmed.contains("\0") else { return nil }
+        guard !trimmed.isEmpty, trimmed != ".", trimmed != "..", !trimmed.contains("/"), !trimmed.contains("\0") else {
+            return nil
+        }
         return trimmed
     }
 
     private var normalizedCustom: [String] {
         var seen = Set<String>()
-        return custom.compactMap(Self.normalize).filter { !Classifier.defaultShims.contains($0) && seen.insert($0).inserted }
+        return custom.compactMap(Self.normalize).filter {
+            !Classifier.defaultShims.contains($0) && seen.insert($0).inserted
+        }
     }
 }

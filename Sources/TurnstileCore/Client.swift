@@ -22,7 +22,10 @@ public final class Client {
         var address = sockaddr_un()
         address.sun_family = sa_family_t(AF_UNIX)
         let bytes = Array(socketPath.utf8)
-        guard bytes.count < MemoryLayout.size(ofValue: address.sun_path) else { close(fd); return nil }
+        guard bytes.count < MemoryLayout.size(ofValue: address.sun_path) else {
+            close(fd)
+            return nil
+        }
         withUnsafeMutableBytes(of: &address.sun_path) { buffer in
             buffer.copyBytes(from: bytes)
             buffer[bytes.count] = 0
@@ -32,7 +35,10 @@ public final class Client {
                 Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
             }
         }
-        guard result == 0 else { close(fd); return nil }
+        guard result == 0 else {
+            close(fd)
+            return nil
+        }
         return Client(fd: fd)
     }
 
@@ -71,7 +77,10 @@ public final class Client {
             var descriptor = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
             let ready = poll(&descriptor, 1, remaining)
             if ready < 0 {
-                if errno == EINTR { if let deadline, deadline.timeIntervalSinceNow <= 0 { return .timeout }; continue }
+                if errno == EINTR {
+                    if let deadline, deadline.timeIntervalSinceNow <= 0 { return .timeout }
+                    continue
+                }
                 return .closed
             }
             if ready == 0 { return .timeout }

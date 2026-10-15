@@ -11,13 +11,18 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      # Warns without failing until the codebase has been formatted once (#26); then add --strict.
       - name: swift format lint
-        run: swift format lint --recursive --parallel Sources Tests Package.swift
+        run: swift format lint --strict --recursive --parallel Sources Tests Package.swift
       - name: Dependency licenses
         run: |
           node --test scripts/license-check-tests.mjs
           node scripts/license-check.mjs
+      - name: Release helper checks
+        run: node --test scripts/release-args-tests.mjs scripts/package-tests.mjs scripts/dist-tests.mjs
+      - name: E2E server isolation
+        run: node --test scripts/e2e-server-tests.mjs
+      - name: E2E top driver
+        run: /usr/bin/python3 scripts/e2e-top-tests.py
 
   test:
     runs-on: macos-26

@@ -5,8 +5,11 @@ set -u
 cd "$(dirname "$0")/.."
 swift build -q || exit 1
 BIN="$(swift build --show-bin-path)/turnstile"
+SERVER_CONTROL="$PWD/scripts/e2e-server.sh"
+E2E_TOP_DRIVER="$PWD/scripts/e2e-top.py"
 
 T="$(mktemp -d /tmp/turnstile-e2e.XXXXXX)"
+export FAKE_SERVER_TAG="turnstile-e2e-server-${T##*.}"
 export TURNSTILE_HOME="$T/home"
 export TURNSTILE_CONFIG_DIR="$T/config"
 export TURNSTILE_MEMORY_LEVEL_FILE="$T/level"
@@ -27,7 +30,7 @@ echo "run $$ $*" >> "$FAKE_RUNS"
 [ -n "${FAKE_EXEC_SLEEP:-}" ] && exec sleep "$FAKE_EXEC_SLEEP"
 [ -n "${FAKE_LATE_OUTPUT:-}" ] && { (sleep 3; echo "late output") & exit 0; }
 # A build server: a short-lived client starts it in its own session, then exits, leaving it to launchd.
-[ -n "${FAKE_SERVER_MB:-}" ] && { bash -c '/usr/bin/python3 -c "import os, time; os.setsid(); time.sleep(2.5); b = bytearray(${FAKE_SERVER_MB} * 1024 * 1024); [b.__setitem__(i, 1) for i in range(0, len(b), 4096)]; time.sleep(30)" turnstile-e2e-server > /dev/null 2>&1 & sleep 1.5'; sleep 10; exit 0; }
+[ -n "${FAKE_SERVER_MB:-}" ] && { bash -c '/usr/bin/python3 -c "import os, time; os.setsid(); time.sleep(2.5); b = bytearray(${FAKE_SERVER_MB} * 1024 * 1024); [b.__setitem__(i, 1) for i in range(0, len(b), 4096)]; time.sleep(30)" "$FAKE_SERVER_TAG" > /dev/null 2>&1 & sleep 1.5'; sleep 10; exit 0; }
 [ -n "${FAKE_WAIT_FILE:-}" ] && while [ -e "$FAKE_WAIT_FILE" ]; do sleep 0.05; done
 sleep "${FAKE_SLEEP:-0}"
 echo "fake swift done" >&2
@@ -59,7 +62,12 @@ raise SystemExit(0 if any(j["project"] == project and j["key"] == key and (not s
   done
   return 1
 }
-cleanup() { turnstile stop > /dev/null 2>&1; rm -rf "$T"; }
+cleanup() {
+  [ -z "${frozen:-}" ] || kill -CONT "$frozen" > /dev/null 2>&1 || true
+  turnstile stop > /dev/null 2>&1
+  bash "$SERVER_CONTROL" stop "$FAKE_SERVER_TAG" > /dev/null 2>&1 || true
+  rm -rf "$T"
+}
 trap cleanup EXIT
 
 cd "$T/work"
@@ -140,8 +148,8 @@ check "late output from a background child isn't cut off" 'grep -q "late output"
 # A build server that escapes to launchd still counts against its job, and is killed with it.
 out="$(cd hungry && FAKE_SERVER_MB=400 swift build 2>&1)"; code=$?
 sleep 0.5
-check "escaped build servers are tracked and killed" 'echo "$out" | grep -q "killed swift build, exceeded 150 MB" && [ $code != 0 ] && ! pgrep -f turnstile-e2e-server > /dev/null'
-pkill -f turnstile-e2e-server
+check "escaped build servers are tracked and killed" 'echo "$out" | grep -q "killed swift build, exceeded 150 MB" && [ $code != 0 ] && ! bash "$SERVER_CONTROL" check "$FAKE_SERVER_TAG"'
+bash "$SERVER_CONTROL" stop "$FAKE_SERVER_TAG" || true
 
 # SIGTERM reaches the job, and the caller sees the signal.
 FAKE_SLEEP=10 swift build > /dev/null 2>&1 &
@@ -311,19 +319,52 @@ cd ..
 check "a cancelled run's joiner runs it itself" 'grep -q "joining an identical" "$T/joiner.out" && grep -q "running it here instead" "$T/joiner.out" && [ "$(cat "$T/joiner.code")" = 0 ] && [ $(( $(runs test) - before )) -ge 1 ]'
 
 # An admitted client that never starts (suspended) frees its slot.
-(cd a && FAKE_SLEEP=1 swift test > /dev/null 2>&1) &
-sleep 0.5
-(cd b && exec swift test > /dev/null 2>&1) &
+suspended_failures=$failures
+touch "$T/suspended-starter.wait"
+(cd a && FAKE_WAIT_FILE="$T/suspended-starter.wait" swift test > "$T/suspended-starter.out" 2>&1) &
+suspended_starter=$!
+check "suspended-client starter occupies the test slot" 'wait_for_job running a "swift test"'
+(cd b && exec swift test > "$T/suspended-client.out" 2>&1) &
 frozen=$!
-sleep 0.3
+check "client queues before suspension" 'wait_for_job queued b "swift test"'
+suspended_id="$(turnstile status --json | /usr/bin/python3 -c 'import json, sys; d = json.load(sys.stdin); print(next(j["id"] for j in d["queued"] if j["clientPid"] == int(sys.argv[1])))' "$frozen")"
 kill -STOP "$frozen"
-sleep 1.5
-start=$(date +%s)
-(swift test > "$T/unstick.out" 2>&1)
-elapsed=$(( $(date +%s) - start ))
+stopped=0
+for i in {1..100}; do
+  case "$(ps -o state= -p "$frozen")" in *T*) stopped=1; break ;; esac
+  sleep 0.05
+done
+check "client is stopped before its slot is released" '[ "$stopped" = 1 ]'
+rm -f "$T/suspended-starter.wait"
+wait "$suspended_starter"
+check "stopped client is admitted" 'wait_for_job running b "swift test"'
+suspended_status="$(turnstile status --json)"
+check "admitted stopped client has no child" 'echo "$suspended_status" | /usr/bin/python3 -c '\''import json, sys; d = json.load(sys.stdin); assert any(j["id"] == int(sys.argv[1]) and j.get("childPid") is None for j in d["running"])'\'' "$suspended_id"'
+(swift test > "$T/unstick.out" 2>&1; echo $? > "$T/unstick.code") &
+suspended_follower=$!
+check "follower queues behind the stopped client" 'wait_for_job queued work "swift test"'
+check "suspended client frees its slot within 25 seconds" '/usr/bin/python3 - "$T/unstick.code" <<'\''PY'\''
+import pathlib, sys, time
+result = pathlib.Path(sys.argv[1])
+deadline = time.monotonic() + 25
+while time.monotonic() < deadline:
+    if result.exists() and result.stat().st_size:
+        raise SystemExit(0)
+    time.sleep(0.05)
+raise SystemExit(1)
+PY'
+check "daemon reports reclaiming the unstarted client" 'grep -Fq "#$suspended_id b swift test: admitted 15s ago but never started; freeing its slot" "$TURNSTILE_HOME/daemon.log"'
+check "follower completes through the gate after reclamation" '[ "$(cat "$T/unstick.code" 2>/dev/null)" = 0 ] && grep -q "fake swift test" "$T/unstick.out" && ! grep -q ungated "$T/unstick.out"'
+if [ "$failures" != "$suspended_failures" ]; then
+  echo "suspended-client diagnostics: pid=$frozen job=$suspended_id"
+  turnstile status --json
+  tail -n 30 "$TURNSTILE_HOME/daemon.log"
+  cat "$T/suspended-starter.out" "$T/suspended-client.out" "$T/unstick.out"
+fi
 kill -CONT "$frozen"
-wait
-check "a suspended client's slot is reclaimed" '[ $elapsed -ge 5 ] && [ $elapsed -lt 25 ] && grep -q "fake swift test" "$T/unstick.out"'
+wait "$frozen"
+unset frozen
+wait "$suspended_follower"
 
 # `kill` drops a queued job and stops a running one; both callers are told not to retry.
 (cd a && FAKE_SLEEP=6 swift test > "$T/k1.out" 2>&1; echo $? > "$T/k1.code") &
@@ -361,55 +402,39 @@ wait
 check "manual pause holds until resumed" '[ -z "$early" ] && echo "$paused_json" | grep -q "\"pausedBy\" : \"you\"" && [ "$(cat "$T/mp.code")" = 0 ] && grep -q "paused by you" "$T/mp.out"'
 
 # `turnstile top` drives the same controls from a terminal, and quits cleanly.
-cat > "$T/top.py" <<'EOF'
-import json, os, pty, sys, time, select, subprocess
-pid, fd = pty.fork()
-if pid == 0:
-    os.execvp("turnstile", ["turnstile", "top"])
-out = b""
-def pump(seconds):
-    global out
-    end = time.time() + seconds
-    while time.time() < end:
-        r, _, _ = select.select([fd], [], [], 0.1)
-        if r:
-            try: out += os.read(fd, 65536)
-            except OSError: return
-def pump_until(needle, timeout=5):
-    end = time.time() + timeout
-    while needle not in out and time.time() < end:
-        pump(0.1)
-def status():
-    return json.loads(subprocess.run(["turnstile", "status", "--json"], capture_output=True, text=True).stdout)
-def wait_for_job(predicate, timeout=5):
-    end = time.time() + timeout
-    while time.time() < end:
-        if any(predicate(job) for job in status().get("running", [])): return True
-        time.sleep(0.05)
-    return False
-def wait_for_no_job(project, key, timeout=5):
-    end = time.time() + timeout
-    while time.time() < end:
-        jobs = status().get("running", [])
-        if not any(job["project"] == project and job["key"] == key for job in jobs): return True
-        time.sleep(0.05)
-    return False
-pump_until(b"a swift build")
-os.write(fd, b"p")
-paused = wait_for_job(lambda job: job["project"] == "a" and job["key"] == "swift build" and job.get("pausedBy") == "you")
-os.write(fd, b"x"); pump_until(b"? y/n")
-prompted = b"? y/n" in out
-os.write(fd, b"y")
-killed = wait_for_no_job("a", "swift build")
-os.write(fd, b"q"); pump(0.5)
-_, code = os.waitpid(pid, 0)
-print("paused=%s prompted=%s killed=%s exit=%d restored=%s" % (paused, prompted, killed, os.WEXITSTATUS(code), out.rstrip().endswith(b"\x1b[?1049l")))
-EOF
-(cd a && FAKE_SLEEP=8 swift build > "$T/top.out" 2>&1; echo $? > "$T/top.code") &
+touch "$T/top.wait"
+(cd a && FAKE_WAIT_FILE="$T/top.wait" swift build > "$T/top.out" 2>&1; echo $? > "$T/top.code") &
+top_job=$!
 wait_for_job running a "swift build"
-out="$(/usr/bin/python3 "$T/top.py")"
-wait
-check "top pauses and kills the selected job, then restores the terminal" '[ "$out" = "paused=True prompted=True killed=True exit=0 restored=True" ] && [ "$(cat "$T/top.code")" = 125 ]'
+out="$(/usr/bin/python3 "$E2E_TOP_DRIVER" a "swift build" "$T/top.pty")"
+# Release the fixture even if a handshake failed, so diagnostics cannot hang the suite.
+turnstile kill 'a swift build' > /dev/null 2>&1 || turnstile resume 'a swift build' > /dev/null 2>&1 || true
+rm -f "$T/top.wait"
+wait "$top_job"
+top_failures=$failures
+top_check() {
+  if /usr/bin/python3 -c 'import json, sys; d = json.loads(sys.argv[1]); raise SystemExit(0 if d.get(sys.argv[2]) == json.loads(sys.argv[3]) else 1)' "$out" "$2" "$3"; then
+    pass "$1"
+  else
+    fail "$1"
+  fi
+}
+top_check "top displays the target job before input" visible true
+top_check "top pauses the selected job" paused true
+top_check "top asks before killing the selected job" prompted true
+top_check "top removes the selected job after confirmation" killed true
+top_check "top exits successfully after q" exit 0
+top_check "top restores the terminal after exit" restored true
+top_check "top completes without driver errors" errors '[]'
+check "top tells the killed caller not to retry" '[ "$(cat "$T/top.code" 2>/dev/null)" = 125 ]'
+if [ "$failures" != "$top_failures" ]; then
+  printf 'top handshake diagnostics: %s\n' "$out"
+  echo 'top PTY output (last 2000 bytes):'
+  tail -c 2000 "$T/top.pty" 2>/dev/null
+  echo
+  echo 'top job output:'
+  cat "$T/top.out"
+fi
 
 # A deliberate stop releases waiting jobs to run ungated.
 (cd a && FAKE_SLEEP=3 swift test > /dev/null 2>&1) &

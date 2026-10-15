@@ -40,8 +40,12 @@ public struct LimitSettings: Equatable, Sendable {
             if reserve != current.reserve { root["reserve"] = reserve.map(Bytes.format) }
             if pause != current.pause { root.set(pause.configured, forKey: "pause", in: "throttle") }
             if inject != current.inject { root.set(inject ? nil : false, forKey: "inject", in: "throttle") }
-            if killMultiplier != current.killMultiplier { root.set(killMultiplier, forKey: "killMultiplier", in: "throttle") }
-            if maxMemory != current.maxMemory { root.set(maxMemory.map(Bytes.format), forKey: "maxMemory", in: "throttle") }
+            if killMultiplier != current.killMultiplier {
+                root.set(killMultiplier, forKey: "killMultiplier", in: "throttle")
+            }
+            if maxMemory != current.maxMemory {
+                root.set(maxMemory.map(Bytes.format), forKey: "maxMemory", in: "throttle")
+            }
         }
     }
 }

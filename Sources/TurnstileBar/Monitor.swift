@@ -32,14 +32,16 @@ final class Monitor: NSObject, ObservableObject, UNUserNotificationCenterDelegat
             launchAtLogin = SMAppService.mainApp.status == .enabled
             let center = UNUserNotificationCenter.current()
             center.delegate = self
-            center.setNotificationCategories(Set(MenuBarState.Event.Kind.allCases.filter { !$0.actions.isEmpty }.map(Monitor.category)))
+            center.setNotificationCategories(
+                Set(MenuBarState.Event.Kind.allCases.filter { !$0.actions.isEmpty }.map(Monitor.category)))
             center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
         }
         poll()
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.poll() }
         checkHealth()
         // None of what this checks changes quickly.
-        healthTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in self?.checkHealth() }
+        healthTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in self?.checkHealth()
+        }
     }
 
     /// A fixed snapshot for rendering the panel: no polling, no notifications, no daemon.
@@ -66,7 +68,8 @@ final class Monitor: NSObject, ObservableObject, UNUserNotificationCenterDelegat
 
     func poll() {
         queue.async { [paths] in
-            let status = Client.connect(socketPath: paths.socket)?.roundTrip(Message(type: "status"), timeout: 2)?.status
+            let status = Client.connect(socketPath: paths.socket)?.roundTrip(Message(type: "status"), timeout: 2)?
+                .status
             let disabled = paths.isDisabled
             let queuePaused = paths.isQueuePaused
             let pausedAll = paths.isPaused
@@ -80,7 +83,9 @@ final class Monitor: NSObject, ObservableObject, UNUserNotificationCenterDelegat
     }
 
     private func update(_ status: StatusSnapshot?) {
-        for event in MenuBarState.events(from: snapshot, to: status) where notifying.contains(event.kind) { notify(event) }
+        for event in MenuBarState.events(from: snapshot, to: status) where notifying.contains(event.kind) {
+            notify(event)
+        }
         snapshot = status
         // A running daemon usually means a shim just registered something, so don't wait five minutes to say so.
         if status != nil, let evidence, evidence.lastGated == nil { checkHealth() }
@@ -143,7 +148,8 @@ final class Monitor: NSObject, ObservableObject, UNUserNotificationCenterDelegat
 
     private static func category(_ kind: MenuBarState.Event.Kind) -> UNNotificationCategory {
         let actions = kind.actions.map {
-            UNNotificationAction(identifier: $0.message, title: $0.title, options: $0.message == "kill" ? [.destructive] : [])
+            UNNotificationAction(
+                identifier: $0.message, title: $0.title, options: $0.message == "kill" ? [.destructive] : [])
         }
         return UNNotificationCategory(identifier: kind.rawValue, actions: actions, intentIdentifiers: [])
     }
@@ -160,14 +166,20 @@ final class Monitor: NSObject, ObservableObject, UNUserNotificationCenterDelegat
         case .active: content.interruptionLevel = .active
         case .timeSensitive: content.interruptionLevel = .timeSensitive
         }
-        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
     }
 
     /// Resume or Kill from a notification goes through the same control path as the menu.
-    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
         let content = response.notification.request.content
         let kind = MenuBarState.Event.Kind(rawValue: content.categoryIdentifier)
-        if let job = content.userInfo["job"] as? Int64, kind?.actions.contains(where: { $0.message == response.actionIdentifier }) == true {
+        if let job = content.userInfo["job"] as? Int64,
+            kind?.actions.contains(where: { $0.message == response.actionIdentifier }) == true
+        {
             DispatchQueue.main.async { self.send(response.actionIdentifier, to: job) }
         }
         completionHandler()

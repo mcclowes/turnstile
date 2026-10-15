@@ -39,9 +39,13 @@ enum PanelFixtures {
         var pending: [(NSWindow, URL)] = []
         for fixture in fixtures {
             for (appearance, suffix) in [(NSAppearance.Name.aqua, "light"), (.darkAqua, "dark")] {
-                let panel = MenuPanel(monitor: Monitor(fixture: fixture.snapshot, disabled: fixture.disabled, queuePaused: fixture.queuePaused, pausedAll: fixture.pausedAll), expandRecent: fixture.name == "recent-expanded")
-                    .environment(\.previewHoveredJob, fixture.hovered)
-                    .background(.background)
+                let panel = MenuPanel(
+                    monitor: Monitor(
+                        fixture: fixture.snapshot, disabled: fixture.disabled, queuePaused: fixture.queuePaused,
+                        pausedAll: fixture.pausedAll), expandRecent: fixture.name == "recent-expanded"
+                )
+                .environment(\.previewHoveredJob, fixture.hovered)
+                .background(.background)
                 let window = NSWindow(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: false)
                 window.appearance = NSAppearance(named: appearance)
                 window.contentView = NSHostingView(rootView: panel)
@@ -77,14 +81,24 @@ enum PanelFixtures {
 
     private static let now = Date().timeIntervalSince1970
 
-    private static func snapshot(level: Int, running: [JobSnapshot] = [], queued: [JobSnapshot] = [], recent: [HistoryEntry] = []) -> StatusSnapshot {
-        StatusSnapshot(memoryLevel: level, physicalMemory: 32 * Bytes.gb, reserve: 3 * Bytes.gb, limits: ["compile": 1, "test": 2, "browser": 1], running: running, queued: queued, recent: recent, daemonPid: 1)
+    private static func snapshot(
+        level: Int, running: [JobSnapshot] = [], queued: [JobSnapshot] = [], recent: [HistoryEntry] = []
+    ) -> StatusSnapshot {
+        StatusSnapshot(
+            memoryLevel: level, physicalMemory: 32 * Bytes.gb, reserve: 3 * Bytes.gb,
+            limits: ["compile": 1, "test": 2, "browser": 1], running: running, queued: queued, recent: recent,
+            daemonPid: 1)
     }
 
     private static func busy(queued count: Int = 4) -> StatusSnapshot {
         let running = [
-            job(12, .compile, "payments-reconciliation-service", "swift build --configuration release --product ReconciliationWorker", estimate: 6, footprint: 3.4, started: 134, joiners: 2),
-            job(13, .test, "web", "npm run test:e2e -- --project=chromium --grep checkout", estimate: 2, footprint: 2.3, started: 48, pausedBy: "memory"),
+            job(
+                12, .compile, "payments-reconciliation-service",
+                "swift build --configuration release --product ReconciliationWorker", estimate: 6, footprint: 3.4,
+                started: 134, joiners: 2),
+            job(
+                13, .test, "web", "npm run test:e2e -- --project=chromium --grep checkout", estimate: 2, footprint: 2.3,
+                started: 48, pausedBy: "memory"),
         ]
         let reasons = [
             "waiting for memory, needs ~4 GB, ~1.2 GB spare, starts in ~1m (running: payments-reconciliation-service swift build)",
@@ -94,30 +108,52 @@ enum PanelFixtures {
         ]
         let keys = [
             ("api", "swift test --parallel --filter SchedulerTests"),
-            ("mobile-app-with-a-very-long-project-name", "xcodebuild -scheme App -destination 'platform=iOS Simulator,name=iPhone 17' build"),
+            (
+                "mobile-app-with-a-very-long-project-name",
+                "xcodebuild -scheme App -destination 'platform=iOS Simulator,name=iPhone 17' build"
+            ),
             ("docs", "npm run build"),
             ("infra", "cargo build --release"),
         ]
         let queued = (0..<count).map { index -> JobSnapshot in
             let (project, key) = keys[index % keys.count]
-            var queued = job(Int64(14 + index), index % 2 == 0 ? .test : .compile, project, key, estimate: Double(2 + index % 3), queuedAt: 30 + 25 * Double(index))
+            var queued = job(
+                Int64(14 + index), index % 2 == 0 ? .test : .compile, project, key, estimate: Double(2 + index % 3),
+                queuedAt: 30 + 25 * Double(index))
             queued.waiting = reasons[index % reasons.count]
             queued.held = index % reasons.count == 2
             return queued
         }
-        let outcomes: [(String, Int32?)] = [("ok", nil), ("failed", 1), ("ok", nil), ("killed", nil), ("superseded", nil)]
+        let outcomes: [(String, Int32?)] = [
+            ("ok", nil), ("failed", 1), ("ok", nil), ("killed", nil), ("superseded", nil),
+        ]
         let recent = outcomes.enumerated().map { index, outcome in
-            HistoryEntry(id: Int64(11 - index), project: ["api", "web", "docs", "mobile-app", "api"][index], key: ["swift test", "npm run lint -- --max-warnings 0", "npm run build", "xcodebuild build", "swift build"][index], outcome: outcome.0, exitCode: outcome.1, peak: UInt64(Double(Bytes.gb) * [1.8, 0.6, 1.1, 9.4, 3.2][index]), duration: [94, 21, 38, 612, 150][index], finishedAt: now - 60 * Double(index + 1), log: outcome.0 == "failed" ? "/tmp/\(11 - index).log" : nil)
+            HistoryEntry(
+                id: Int64(11 - index), project: ["api", "web", "docs", "mobile-app", "api"][index],
+                key: [
+                    "swift test", "npm run lint -- --max-warnings 0", "npm run build", "xcodebuild build",
+                    "swift build",
+                ][index], outcome: outcome.0, exitCode: outcome.1,
+                peak: UInt64(Double(Bytes.gb) * [1.8, 0.6, 1.1, 9.4, 3.2][index]),
+                duration: [94, 21, 38, 612, 150][index], finishedAt: now - 60 * Double(index + 1),
+                log: outcome.0 == "failed" ? "/tmp/\(11 - index).log" : nil)
         }
         return snapshot(level: 20, running: running, queued: queued, recent: recent)
     }
 
-    private static func job(_ id: Int64, _ resourceClass: ResourceClass, _ project: String, _ key: String, estimate: Double, footprint: Double? = nil, started: Double? = nil, queuedAt: Double = 200, joiners: Int = 0, pausedBy: String? = nil) -> JobSnapshot {
+    private static func job(
+        _ id: Int64, _ resourceClass: ResourceClass, _ project: String, _ key: String, estimate: Double,
+        footprint: Double? = nil, started: Double? = nil, queuedAt: Double = 200, joiners: Int = 0,
+        pausedBy: String? = nil
+    ) -> JobSnapshot {
         let gb = { (value: Double) in UInt64(value * Double(Bytes.gb)) }
         return JobSnapshot(
-            id: id, state: started == nil ? "queued" : (pausedBy == nil ? "running" : "paused"), resourceClass: resourceClass, project: project, key: key, cwd: "/Users/dev/\(project)",
-            agent: id % 2 == 0, estimate: gb(estimate), footprint: footprint.map(gb), peak: footprint.map(gb), paused: pausedBy != nil, clientPid: 1, childPid: nil,
-            queuedAt: now - (started ?? 0) - queuedAt, startedAt: started.map { now - $0 }, waiting: nil, joiners: joiners, pausedBy: pausedBy
+            id: id, state: started == nil ? "queued" : (pausedBy == nil ? "running" : "paused"),
+            resourceClass: resourceClass, project: project, key: key, cwd: "/Users/dev/\(project)",
+            agent: id % 2 == 0, estimate: gb(estimate), footprint: footprint.map(gb), peak: footprint.map(gb),
+            paused: pausedBy != nil, clientPid: 1, childPid: nil,
+            queuedAt: now - (started ?? 0) - queuedAt, startedAt: started.map { now - $0 }, waiting: nil,
+            joiners: joiners, pausedBy: pausedBy
         )
     }
 }

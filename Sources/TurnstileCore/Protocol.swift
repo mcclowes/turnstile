@@ -115,7 +115,13 @@ public struct JobSnapshot: Codable, Equatable, Sendable {
 
     public var label: String { "\(project) \(key)" }
 
-    public init(id: Int64, state: String, resourceClass: ResourceClass, project: String, key: String, cwd: String, agent: Bool, estimate: UInt64, footprint: UInt64?, peak: UInt64?, paused: Bool, clientPid: Int32, childPid: Int32?, queuedAt: Double, startedAt: Double?, waiting: String?, joiners: Int, held: Bool? = nil, pausedBy: String? = nil, estimateSource: String? = nil, tree: [Int32]? = nil, escapees: [Int32]? = nil, startsAt: Double? = nil, log: String? = nil, behindPaused: Bool? = nil) {
+    public init(
+        id: Int64, state: String, resourceClass: ResourceClass, project: String, key: String, cwd: String, agent: Bool,
+        estimate: UInt64, footprint: UInt64?, peak: UInt64?, paused: Bool, clientPid: Int32, childPid: Int32?,
+        queuedAt: Double, startedAt: Double?, waiting: String?, joiners: Int, held: Bool? = nil,
+        pausedBy: String? = nil, estimateSource: String? = nil, tree: [Int32]? = nil, escapees: [Int32]? = nil,
+        startsAt: Double? = nil, log: String? = nil, behindPaused: Bool? = nil
+    ) {
         self.id = id
         self.state = state
         self.resourceClass = resourceClass
@@ -158,7 +164,11 @@ public struct StatusSnapshot: Codable, Equatable, Sendable {
     /// Heavy processes seen running outside every job in the last hour.
     public var ungated: [EscapeRow] = []
 
-    public init(memoryLevel: Int, physicalMemory: UInt64, reserve: UInt64, limits: [String: Int], running: [JobSnapshot], queued: [JobSnapshot], recent: [HistoryEntry], daemonPid: Int32, version: String? = Turnstile.version, ungated: [EscapeRow] = []) {
+    public init(
+        memoryLevel: Int, physicalMemory: UInt64, reserve: UInt64, limits: [String: Int], running: [JobSnapshot],
+        queued: [JobSnapshot], recent: [HistoryEntry], daemonPid: Int32, version: String? = Turnstile.version,
+        ungated: [EscapeRow] = []
+    ) {
         self.memoryLevel = memoryLevel
         self.physicalMemory = physicalMemory
         self.reserve = reserve
@@ -184,7 +194,10 @@ public struct HistoryEntry: Codable, Equatable, Sendable {
     /// The run's captured output, set only while the file still exists.
     public var log: String?
 
-    public init(id: Int64, project: String, key: String, outcome: String, exitCode: Int32?, peak: UInt64?, duration: Double?, finishedAt: Double, log: String? = nil) {
+    public init(
+        id: Int64, project: String, key: String, outcome: String, exitCode: Int32?, peak: UInt64?, duration: Double?,
+        finishedAt: Double, log: String? = nil
+    ) {
         self.id = id
         self.project = project
         self.key = key

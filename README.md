@@ -36,7 +36,7 @@ You can also download the universal binary from [releases](https://github.com/mc
 - **A daemon** starts on the first gated command and exits after 30 idle minutes. There's nothing to launch or keep running.
 - **Admission** is per class (compile, test, and browser each get their own slots) and by memory. Each command's peak and run time are learned from its recent runs in that project.
 - **People go first.** Agent commands run at lower priority and queue behind the ones you type.
-- **Duplicate runs merge.** The same command on identical working-tree contents joins the run in progress.
+- **Duplicate runs merge.** The same command on an unchanged working tree joins the run in progress.
 - **Pressure relief.** When memory runs low, turnstile lowers each tool's parallelism, then pauses the newest agent compile if it gets critical.
 - **It fails open.** If the daemon is missing or broken, commands run ungated rather than failing.
 
@@ -66,6 +66,8 @@ The full list is in the [command reference](https://turnstile.marginalutility.de
 ## Privacy
 
 turnstile keeps its history (commands, working directories, memory peaks, and run times), its daemon log, and output from runs without a terminal (a day, or a week for failed runs) in `~/.turnstile`, on your machine. It sends nothing anywhere.
+
+The daemon log notes scheduler ticks lasting at least five seconds, naming their slowest phase, and gaps of at least 30 seconds between ticks. These timings help distinguish work inside a tick from delays between ticks, which can include other daemon callbacks or delays in scheduling the daemon.
 
 ## Contributing
 

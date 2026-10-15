@@ -1,19 +1,22 @@
 import Foundation
 import Testing
-@testable import turnstile
+
 @testable import TurnstileCore
+@testable import turnstile
 
 @Suite(.serialized)
 struct DaemonLogTests {
     func write(_ path: String, age: Double = 0) throws {
-        try FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
         try Data("output\n".utf8).write(to: URL(fileURLWithPath: path))
         try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-age)], ofItemAtPath: path)
     }
 
     @Test func aRunningJobCarriesItsLog() throws {
         let harness = try DaemonHarness()
-        let captured = FakeClient(), terminal = FakeClient()
+        let captured = FakeClient()
+        let terminal = FakeClient()
         let capturedID = harness.request(captured)
         let terminalID = harness.request(terminal, captures: false, root: "/other")
         harness.started(captured, childPid: getpid(), log: harness.daemon.paths.log(forJob: capturedID!))
@@ -26,7 +29,8 @@ struct DaemonLogTests {
 
     @Test func aRecentRunCarriesItsLogOnlyWhileTheFileExists() throws {
         let harness = try DaemonHarness()
-        let kept = FakeClient(), gone = FakeClient()
+        let kept = FakeClient()
+        let gone = FakeClient()
         let keptID = harness.request(kept)
         harness.finished(kept, exitCode: 1)
         let goneID = harness.request(gone, root: "/other")
@@ -40,7 +44,9 @@ struct DaemonLogTests {
 
     @Test func cleaningKeepsFailedRunsForAWeek() throws {
         let harness = try DaemonHarness()
-        let passed = FakeClient(), failed = FakeClient(), oldFailure = FakeClient()
+        let passed = FakeClient()
+        let failed = FakeClient()
+        let oldFailure = FakeClient()
         let passedID = harness.request(passed)
         harness.finished(passed)
         let failedID = harness.request(failed, root: "/b")

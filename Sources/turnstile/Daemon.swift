@@ -77,7 +77,12 @@ final class Daemon {
             didSet {
                 guard paused != oldValue else { return }
                 let now = Daemon.clock()
-                if paused { pausedTick = now } else if let since = pausedTick { pausedFor += now - since; pausedTick = nil }
+                if paused {
+                    pausedTick = now
+                } else if let since = pausedTick {
+                    pausedFor += now - since
+                    pausedTick = nil
+                }
             }
         }
         var pausedTick: Double?
@@ -169,6 +174,9 @@ final class Daemon {
     /// launchd's children, and who created them. Nil when unreadable (another user's).
     var orphanLineage: [pid_t: ProcessTree.Lineage?] = [:]
     var ticks = 0
+    var diagnosticClock: () -> Double = Daemon.clock
+    var diagnosticLog: ((String) -> Void)?
+    private var tickDiagnostics = TickDiagnostics()
     /// How the escape scan reads the process table; tests substitute their own.
     var probe = ProcessProbe.live
     /// Unique ids of processes already accounted for: a job's own, and escapes already recorded.
@@ -256,7 +264,8 @@ final class Daemon {
             for job in jobs.values {
                 // `release` tells clients this stop is deliberate, so they carry on rather than restart the daemon.
                 var message = Message(type: "release")
-                message.text = job.state == .queued ? "daemon stopped; running ungated" : "daemon stopped; continuing untracked"
+                message.text =
+                    job.state == .queued ? "daemon stopped; running ungated" : "daemon stopped; continuing untracked"
                 for connection in job.connections { connection.send(message) }
             }
         }
@@ -385,8 +394,13 @@ final class Daemon {
 
         // The same command on the same tree contents joins the run in progress.
         if let fingerprint = job.fingerprint,
-           let twin = jobs.values.first(where: { canJoin(job, $0, fingerprint: fingerprint) }) {
-            attach(connection, to: twin, text: "joining an identical \(twin.key) already \(twin.state == .queued ? "queued" : "running") in \(twin.project) (#\(twin.id))")
+            let twin = jobs.values.first(where: { canJoin(job, $0, fingerprint: fingerprint) })
+        {
+            attach(
+                connection, to: twin,
+                text:
+                    "joining an identical \(twin.key) already \(twin.state == .queued ? "queued" : "running") in \(twin.project) (#\(twin.id))"
+            )
             store.markJoined(id, to: twin.id, outcome: "joined", exitCode: nil, now: now)
             connection.job = twin.id
             return
@@ -396,11 +410,14 @@ final class Daemon {
         job.owner = connection
 
         // A newer request from the same worktree replaces its queued one; the older caller gets this run's result.
-        for stale in jobs.values where job.captures && stale.id != id && stale.state == .queued && stale.identity == job.identity {
+        for stale in jobs.values
+        where job.captures && stale.id != id && stale.state == .queued && stale.identity == job.identity {
             jobs.removeValue(forKey: stale.id)
             if stale.held { job.held = true }
             for follower in stale.connections {
-                attach(follower, to: job, text: "superseded by a newer \(job.key) from this worktree (#\(job.id)); reporting its result")
+                attach(
+                    follower, to: job,
+                    text: "superseded by a newer \(job.key) from this worktree (#\(job.id)); reporting its result")
             }
             store.markJoined(stale.id, to: id, outcome: "superseded", exitCode: nil, now: now)
         }
@@ -437,7 +454,9 @@ final class Daemon {
         if let typical = store.typicalPeak(key: key, excluding: root) {
             return Cost(estimate: typical, source: "other projects", highWaterPeak: highWater)
         }
-        return Cost(estimate: (request.resourceClass ?? .compile).defaultEstimate, source: "the class default", highWaterPeak: highWater)
+        return Cost(
+            estimate: (request.resourceClass ?? .compile).defaultEstimate, source: "the class default",
+            highWaterPeak: highWater)
     }
 
     /// Only merge with a run whose output can be followed, that behaves the same way, and that still has an owner.
@@ -481,7 +500,9 @@ final class Daemon {
         job.childPid = child
         job.log = request.log
         job.owner = connection
-        job.ceiling = Pressure.ceiling(highWaterPeak: cost.highWaterPeak, physicalMemory: physical, floorPercent: config.machine.killFloorPercent, config: job.throttle)
+        job.ceiling = Pressure.ceiling(
+            highWaterPeak: cost.highWaterPeak, physicalMemory: physical, floorPercent: config.machine.killFloorPercent,
+            config: job.throttle)
         jobs[id] = job
         connection.job = id
         log("#\(id) adopted \(job.project) \(job.key), pid \(child), after a daemon restart")
@@ -523,18 +544,29 @@ final class Daemon {
         guard jobs.removeValue(forKey: job.id) != nil else { return }
         let now = Daemon.now()
         let outcome: String
-        if job.cancelled { outcome = "cancelled" }
-        else if job.killReason != nil { outcome = "killed" }
-        else if lost { outcome = "lost" }
-        else if exitCode == 0 { outcome = "ok" }
-        else if signal != nil { outcome = "signaled" }
-        else { outcome = "failed" }
+        if job.cancelled {
+            outcome = "cancelled"
+        } else if job.killReason != nil {
+            outcome = "killed"
+        } else if lost {
+            outcome = "lost"
+        } else if exitCode == 0 {
+            outcome = "ok"
+        } else if signal != nil {
+            outcome = "signaled"
+        } else {
+            outcome = "failed"
+        }
         if job.paused { ProcessTree.signal(job.tree, SIGCONT) }
         let clock = Daemon.clock()
         let ranFor = job.adopted ? nil : job.ranFor(now: clock)
         let pausedFor = job.pausedFor + (job.pausedTick.map { clock - $0 } ?? 0)
-        let memory = JobMemory(minLevel: job.minLevel, maxPressure: job.maxPressure, pausedFor: pausedFor > 0 ? pausedFor : nil, wouldPause: job.wouldPause)
-        store.markFinished(job.id, outcome: outcome, exitCode: exitCode, signal: signal, peak: job.peak > 0 ? job.peak : nil, ranFor: ranFor, memory: memory, now: now)
+        let memory = JobMemory(
+            minLevel: job.minLevel, maxPressure: job.maxPressure, pausedFor: pausedFor > 0 ? pausedFor : nil,
+            wouldPause: job.wouldPause)
+        store.markFinished(
+            job.id, outcome: outcome, exitCode: exitCode, signal: signal, peak: job.peak > 0 ? job.peak : nil,
+            ranFor: ranFor, memory: memory, now: now)
         log("#\(job.id) \(job.project) \(job.key): \(outcome), peak \(Bytes.format(job.peak))")
 
         var done = Message(type: "done")
@@ -542,8 +574,11 @@ final class Daemon {
         done.exitCode = exitCode
         done.signal = signal
         if job.cancelled { done.cancelled = true }
-        if lost { done.text = "the run this joined ended without a result" }
-        else if let reason = job.killReason { done.text = reason }
+        if lost {
+            done.text = "the run this joined ended without a result"
+        } else if let reason = job.killReason {
+            done.text = reason
+        }
         for joiner in job.joiners { joiner.send(done) }
         job.joiners.removeAll()
         schedule()
@@ -585,7 +620,9 @@ final class Daemon {
         for cls in ResourceClass.allCases {
             limits[cls] = config.machine.concurrencyLimit(for: cls)
         }
-        return SchedulerPolicy(classLimits: limits, reserve: config.machine.reserveBytes, backfillMax: SchedulerPolicy.backfillMax(physicalMemory: physical))
+        return SchedulerPolicy(
+            classLimits: limits, reserve: config.machine.reserveBytes,
+            backfillMax: SchedulerPolicy.backfillMax(physicalMemory: physical))
     }
 
     func schedule() {
@@ -602,12 +639,20 @@ final class Daemon {
         let clock = Daemon.clock()
         let calmFor = clock - lastPressuredAt
         let decision = Scheduler.decide(
-            queue: queued.map { QueuedJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, agent: $0.agent, bumpedAt: $0.bumpedAt, queuedAt: $0.queuedTick, label: $0.label, held: $0.held, duration: $0.usualDuration) },
+            queue: queued.map {
+                QueuedJob(
+                    id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, agent: $0.agent,
+                    bumpedAt: $0.bumpedAt, queuedAt: $0.queuedTick, label: $0.label, held: $0.held,
+                    duration: $0.usualDuration)
+            },
             running: running.map {
-                RunningJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, footprint: $0.footprint, label: $0.label,
-                           usualDuration: $0.paused ? nil : $0.usualDuration, elapsed: $0.ranFor(now: clock) ?? 0,
-                           pausedForMemorySince: $0.paused && !$0.pausedByUser && !$0.pausedByPauseAll ? $0.firstPressurePauseTick ?? clock : nil,
-                           resumesIn: max(0, Pressure.resumeDelay(pressurePauses: $0.pressurePauses) - calmFor))
+                RunningJob(
+                    id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, footprint: $0.footprint,
+                    label: $0.label,
+                    usualDuration: $0.paused ? nil : $0.usualDuration, elapsed: $0.ranFor(now: clock) ?? 0,
+                    pausedForMemorySince: $0.paused && !$0.pausedByUser && !$0.pausedByPauseAll
+                        ? $0.firstPressurePauseTick ?? clock : nil,
+                    resumesIn: max(0, Pressure.resumeDelay(pressurePauses: $0.pressurePauses) - calmFor))
             },
             freeMemory: SystemMemory.free(level: memoryLevel),
             policy: policy,
@@ -625,7 +670,8 @@ final class Daemon {
             guard let job = jobs[id] else { continue }
             job.startsAt = reason.eta.map { now + $0 }
             if case .resuming = reason { job.behindPaused = true } else { job.behindPaused = false }
-            tellWaiting(job, reason == .held ? "held; `turnstile release #\(id)` lets it run" : Scheduler.message(for: reason))
+            tellWaiting(
+                job, reason == .held ? "held; `turnstile release #\(id)` lets it run" : Scheduler.message(for: reason))
         }
     }
 
@@ -644,10 +690,13 @@ final class Daemon {
         job.state = .running
         job.startedAt = now
         job.admittedTick = Daemon.clock()
-        job.ceiling = Pressure.ceiling(highWaterPeak: job.highWaterPeak, physicalMemory: physical, floorPercent: config.machine.killFloorPercent, config: job.throttle)
+        job.ceiling = Pressure.ceiling(
+            highWaterPeak: job.highWaterPeak, physicalMemory: physical, floorPercent: config.machine.killFloorPercent,
+            config: job.throttle)
         var reply = Message(type: "admitted")
         reply.job = job.id
-        reply.limits = Throttle.limits(memoryLevel: memoryLevel, pressure: memoryPressure, cpuCount: cpuCount, config: job.throttle)
+        reply.limits = Throttle.limits(
+            memoryLevel: memoryLevel, pressure: memoryPressure, cpuCount: cpuCount, config: job.throttle)
         let skipped = blocker.map { ", ahead of \($0), which is waiting for memory" } ?? ""
         reply.text = "starting after \(formatDuration(now - job.queuedAt))\(skipped)"
         job.owner?.send(reply)
@@ -660,23 +709,29 @@ final class Daemon {
     func readMemory() {
         let sample = SystemMemory.sample(at: Daemon.clock())
         memory.record(sample)
-        observe(MemoryReading(
-            level: sample.level,
-            pressure: MemoryPressure(level: Int64(sample.kernelPressure)),
-            swapUsed: sample.swapUsed
-        ))
+        observe(
+            MemoryReading(
+                level: sample.level,
+                pressure: MemoryPressure(level: Int64(sample.kernelPressure)),
+                swapUsed: sample.swapUsed
+            ))
         let effective = memory.pressure
         if effective != memoryPressure {
-            log("effective memory pressure is \(effective), \(sample.level)% free, \(Bytes.format(sample.swapUsed)) swapped")
+            log(
+                "effective memory pressure is \(effective), \(sample.level)% free, \(Bytes.format(sample.swapUsed)) swapped"
+            )
             memoryPressure = effective
         }
     }
 
     func tick() {
         let now = Daemon.clock()
+        let gap = tickDiagnostics.begin(at: diagnosticClock())
         readMemory()
+        tickDiagnostics.completePhase("memory observation", at: diagnosticClock())
         ticks += 1
         if ticks % 5 == 0 { reloadConfig() }
+        tickDiagnostics.completePhase("config reload", at: diagnosticClock())
 
         let active = jobs.values.filter { $0.state != .queued }
         if !active.isEmpty {
@@ -690,16 +745,25 @@ final class Daemon {
         } else {
             pauseAllSeen = []
         }
+        tickDiagnostics.completePhase("job monitoring", at: diagnosticClock())
         if ticks % Daemon.escapeScanTicks == 0 { watchForEscapes(now: Daemon.now()) }
+        tickDiagnostics.completePhase("escape scan", at: diagnosticClock())
         schedule()
+        tickDiagnostics.completePhase("scheduling", at: diagnosticClock())
 
         if jobs.isEmpty && connectionsAreIdle() {
-            if IdleExit.isDue(now: now, idleSince: idleSince, lastEscape: lastEscapeAt, idleExit: idleExit) { shutdown(reason: "idle") }
+            if IdleExit.isDue(now: now, idleSince: idleSince, lastEscape: lastEscapeAt, idleExit: idleExit) {
+                shutdown(reason: "idle")
+            }
         } else {
             idleSince = now
         }
         if ticks % 60 == 0, let runId { store.touchDaemonRun(runId, at: Daemon.now()) }
         if ticks % 3600 == 0 { cleanLogs() }
+        tickDiagnostics.completePhase("history and log maintenance", at: diagnosticClock())
+        for message in [gap, tickDiagnostics.finish(at: diagnosticClock())].compactMap({ $0 }) {
+            if let diagnosticLog { diagnosticLog(message) } else { log(message) }
+        }
     }
 
     /// Takes a memory reading, noting each running job's closest brush with pausing, and logs large moves while jobs run.
@@ -713,7 +777,9 @@ final class Daemon {
         }
         guard !active.isEmpty, reading.isWorthLogging(since: lastLoggedMemory) else { return }
         lastLoggedMemory = reading
-        log("memory \(reading.level)% free, pressure \(reading.pressure.name), swap \(Bytes.format(reading.swapUsed)) used, \(active.count) running")
+        log(
+            "memory \(reading.level)% free, pressure \(reading.pressure.name), swap \(Bytes.format(reading.swapUsed)) used, \(active.count) running"
+        )
     }
 
     func connectionsAreIdle() -> Bool {
@@ -733,9 +799,13 @@ final class Daemon {
         var tree = own
         var included = Set(own)
         for root in escaped where included.insert(root).inserted {
-            if job.escapees.insert(root).inserted { log("#\(job.id) pid \(root) left the job for launchd; still counting it") }
+            if job.escapees.insert(root).inserted {
+                log("#\(job.id) pid \(root) left the job for launchd; still counting it")
+            }
             tree.append(root)
-            for pid in ProcessTree.descendants(of: root, parents: parents) where included.insert(pid).inserted { tree.append(pid) }
+            for pid in ProcessTree.descendants(of: root, parents: parents) where included.insert(pid).inserted {
+                tree.append(pid)
+            }
         }
         job.tree = tree
         let fresh = tree.filter { !previous.contains($0) }
@@ -766,7 +836,8 @@ final class Daemon {
             // Skipping the children of something already recorded keeps one build to one row, since a
             // compiler driver forks a process per file.
             guard let lineage = probe.lineage(pid),
-                  !knownLineage.contains(lineage.id), !knownLineage.contains(lineage.creator) else { continue }
+                !knownLineage.contains(lineage.id), !knownLineage.contains(lineage.creator)
+            else { continue }
             knownLineage.insert(lineage.id)
             guard ProcessTree.ancestor(of: pid, among: roots, parents: parents) == nil else { continue }
             let executable = probe.executable(pid) ?? entry.name
@@ -839,7 +910,8 @@ final class Daemon {
             job.runawaySince = nil
             guard !job.warnedAboveCeiling else { return }
             job.warnedAboveCeiling = true
-            let text = "using \(Bytes.format(job.footprint)), more memory than usual (over \(Bytes.format(job.ceiling)));"
+            let text =
+                "using \(Bytes.format(job.footprint)), more memory than usual (over \(Bytes.format(job.ceiling)));"
                 + " left running because the machine has \(memoryLevel)% free"
             log("#\(job.id) \(job.project) \(job.key): \(text)")
             for connection in job.connections { connection.send(.notice(text)) }
@@ -851,13 +923,17 @@ final class Daemon {
             if job.firstPressurePauseTick == nil { job.firstPressurePauseTick = now }
             ProcessTree.signal(job.tree, SIGSTOP)
             lastPressureAction = now
-            log("#\(job.id) \(job.project) \(job.key): paused at \(Bytes.format(job.footprint)), over its \(Bytes.format(job.ceiling)) ceiling, at \(memoryLevel)% free")
-            let text = "paused, using \(Bytes.format(job.footprint)) with memory low (\(memoryLevel)% free);"
+            log(
+                "#\(job.id) \(job.project) \(job.key): paused at \(Bytes.format(job.footprint)), over its \(Bytes.format(job.ceiling)) ceiling, at \(memoryLevel)% free"
+            )
+            let text =
+                "paused, using \(Bytes.format(job.footprint)) with memory low (\(memoryLevel)% free);"
                 + " resumes when it recovers"
             for connection in job.connections { connection.send(.notice(text)) }
         case .kill?:
             let history = job.highWaterPeak.map { " (high-water ~\(Bytes.format($0)))" } ?? ""
-            let reason = "killed \(job.key), exceeded \(Bytes.format(job.ceiling))\(history)"
+            let reason =
+                "killed \(job.key), exceeded \(Bytes.format(job.ceiling))\(history)"
                 + ": turnstile's memory guard, not the command failing; retrying won't help unless the run needs less memory"
             job.killReason = reason
             job.killDeadline = now + 5
@@ -891,7 +967,9 @@ final class Daemon {
             job.pausedByPauseAll = true
             ProcessTree.signal(job.tree, SIGSTOP)
             log("#\(job.id) paused, Pause all is on")
-            for connection in job.connections { connection.send(.notice("paused by Pause all; enable turnstile from the menu bar to carry on")) }
+            for connection in job.connections {
+                connection.send(.notice("paused by Pause all; enable turnstile from the menu bar to carry on"))
+            }
         }
     }
 
@@ -905,8 +983,10 @@ final class Daemon {
         }
         guard now - lastPressureAction >= 3 else { return }
         let candidates = jobs.values.filter { $0.state != .queued && !$0.tree.isEmpty && $0.killReason == nil }.map {
-            Pressure.Candidate(id: $0.id, startedAt: $0.admittedTick ?? 0, paused: $0.paused, pausable: $0.pausable,
-                               manual: $0.pausedByUser || $0.pausedByPauseAll, runaway: $0.runawaySince != nil, pressurePauses: $0.pressurePauses)
+            Pressure.Candidate(
+                id: $0.id, startedAt: $0.admittedTick ?? 0, paused: $0.paused, pausable: $0.pausable,
+                manual: $0.pausedByUser || $0.pausedByPauseAll, runaway: $0.runawaySince != nil,
+                pressurePauses: $0.pressurePauses)
         }
         let action = Pressure.action(
             memoryLevel: memoryLevel, pressure: memoryPressure, calmFor: now - lastPressuredAt, jobs: candidates,
@@ -922,7 +1002,9 @@ final class Daemon {
             ProcessTree.signal(job.tree, SIGSTOP)
             lastPressureAction = now
             let calm = Int(Pressure.resumeDelay(pressurePauses: job.pressurePauses))
-            log("#\(id) paused at \(memoryLevel)% free\(swapping ? ", machine swapping" : ""); resumes after \(calm)s of calm")
+            log(
+                "#\(id) paused at \(memoryLevel)% free\(swapping ? ", machine swapping" : ""); resumes after \(calm)s of calm"
+            )
             let why = swapping ? "the machine is swapping" : "memory is low (\(memoryLevel)% free)"
             for connection in job.connections {
                 connection.send(.notice("paused, \(why); resumes when it recovers"))
@@ -936,10 +1018,16 @@ final class Daemon {
             for connection in job.connections { connection.send(.notice("resumed")) }
         case nil:
             let pauseBelow = config.machine.pauseBelowPercent
-            guard let id = Pressure.shadowPause(pressure: pressure, memoryLevel: memoryLevel, jobs: candidates, pauseBelow: pauseBelow, resumeAbove: config.machine.resumeAbovePercent),
-                  let job = jobs[id], !job.wouldPause else { return }
+            guard
+                let id = Pressure.shadowPause(
+                    pressure: pressure, memoryLevel: memoryLevel, jobs: candidates, pauseBelow: pauseBelow,
+                    resumeAbove: config.machine.resumeAbovePercent),
+                let job = jobs[id], !job.wouldPause
+            else { return }
             job.wouldPause = true
-            log("#\(id) would pause under \(pressure.name) pressure (\(memoryLevel)% free; pausing starts below \(pauseBelow)%)")
+            log(
+                "#\(id) would pause under \(pressure.name) pressure (\(memoryLevel)% free; pausing starts below \(pauseBelow)%)"
+            )
         }
     }
 
@@ -951,13 +1039,20 @@ final class Daemon {
         let matches: [Job]
         if let number = Int64(trimmed), let job = jobs[number] {
             matches = [job]
-        } else if let pid = Int32(trimmed), let job = jobs.values.first(where: { $0.clientPid == pid || $0.childPid == pid }) {
+        } else if let pid = Int32(trimmed),
+            let job = jobs.values.first(where: { $0.clientPid == pid || $0.childPid == pid })
+        {
             matches = [job]
         } else {
-            matches = trimmed.isEmpty ? [] : jobs.values.filter { "\($0.project) \($0.key)".localizedCaseInsensitiveContains(trimmed) }
+            matches =
+                trimmed.isEmpty
+                ? [] : jobs.values.filter { "\($0.project) \($0.key)".localizedCaseInsensitiveContains(trimmed) }
         }
         guard matches.count == 1, let job = matches.first else {
-            return .failure(ControlError(text: matches.isEmpty ? "no job matches \(target)" : "\(target) matches \(matches.count) jobs; use a job number"))
+            return .failure(
+                ControlError(
+                    text: matches.isEmpty
+                        ? "no job matches \(target)" : "\(target) matches \(matches.count) jobs; use a job number"))
         }
         return .success(job)
     }
@@ -976,15 +1071,20 @@ final class Daemon {
         case "bump": text = bump(job, name: name)
         case "kill": text = kill(job, name: name)
         case "pause":
-            guard job.state != .queued else { return .error("\(name) hasn't started; use `turnstile hold` to keep it from starting") }
+            guard job.state != .queued else {
+                return .error("\(name) hasn't started; use `turnstile hold` to keep it from starting")
+            }
             guard !job.tree.isEmpty else { return .error("\(name) is starting; try again in a moment") }
             let wasPaused = job.paused
             job.paused = true
             job.pausedByUser = true
             if !wasPaused { ProcessTree.signal(job.tree, SIGSTOP) }
             log("#\(job.id) paused by request")
-            for connection in job.connections { connection.send(.notice("paused by you; `turnstile resume #\(job.id)` to carry on")) }
-            text = wasPaused
+            for connection in job.connections {
+                connection.send(.notice("paused by you; `turnstile resume #\(job.id)` to carry on"))
+            }
+            text =
+                wasPaused
                 ? "\(name) was already paused; it now stays paused until you resume it"
                 : "paused \(name); holding \(Bytes.format(job.footprint)), reservation kept"
         case "resume":
@@ -997,7 +1097,9 @@ final class Daemon {
             for connection in job.connections { connection.send(.notice("resumed")) }
             text = "resumed \(name)"
         case "hold":
-            guard job.state == .queued else { return .error("\(name) is already running; use `turnstile pause` instead") }
+            guard job.state == .queued else {
+                return .error("\(name) is already running; use `turnstile pause` instead")
+            }
             guard !job.held else { return .error("\(name) is already held") }
             job.held = true
             job.lastWait = nil
@@ -1029,7 +1131,9 @@ final class Daemon {
             job.pausedByPauseAll = false
             ProcessTree.signal(job.tree, SIGCONT)
         }
-        guard job.resourceClass == .compile else { return "#\(job.id) is already running, at utility priority, which can't be raised" }
+        guard job.resourceClass == .compile else {
+            return "#\(job.id) is already running, at utility priority, which can't be raised"
+        }
         return "#\(job.id) is already running; raised it to normal priority"
     }
 
@@ -1067,9 +1171,13 @@ final class Daemon {
     }
 
     func snapshot() -> StatusSnapshot {
-        let ordered = Scheduler.order(jobs.values.filter { $0.state == .queued }.map {
-            QueuedJob(id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, agent: $0.agent, bumpedAt: $0.bumpedAt, queuedAt: $0.queuedTick, held: $0.held)
-        }).map(\.id)
+        let ordered = Scheduler.order(
+            jobs.values.filter { $0.state == .queued }.map {
+                QueuedJob(
+                    id: $0.id, resourceClass: $0.resourceClass, estimate: $0.estimate, agent: $0.agent,
+                    bumpedAt: $0.bumpedAt, queuedAt: $0.queuedTick, held: $0.held)
+            }
+        ).map(\.id)
         func describe(_ job: Job) -> JobSnapshot {
             JobSnapshot(
                 id: job.id, state: job.paused ? "paused" : job.state.rawValue, resourceClass: job.resourceClass,
@@ -1077,7 +1185,8 @@ final class Daemon {
                 footprint: job.state == .queued ? nil : job.footprint, peak: job.peak > 0 ? job.peak : nil,
                 paused: job.paused, clientPid: job.clientPid, childPid: job.childPid, queuedAt: job.queuedAt,
                 startedAt: job.startedAt, waiting: job.lastWait, joiners: job.joiners.count,
-                held: job.held, pausedBy: job.paused ? (job.pausedByUser || job.pausedByPauseAll ? "you" : "memory") : nil,
+                held: job.held,
+                pausedBy: job.paused ? (job.pausedByUser || job.pausedByPauseAll ? "you" : "memory") : nil,
                 estimateSource: job.estimateSource,
                 tree: job.state == .queued ? nil : job.tree,
                 escapees: job.escapees.isEmpty ? nil : job.escapees.sorted(),
@@ -1090,7 +1199,8 @@ final class Daemon {
         for (cls, limit) in policy.classLimits { limits[cls.rawValue] = limit }
         return StatusSnapshot(
             memoryLevel: memoryLevel, physicalMemory: physical, reserve: config.machine.reserveBytes, limits: limits,
-            running: jobs.values.filter { $0.state != .queued }.sorted { ($0.startedAt ?? 0) < ($1.startedAt ?? 0) }.map(describe),
+            running: jobs.values.filter { $0.state != .queued }.sorted { ($0.startedAt ?? 0) < ($1.startedAt ?? 0) }
+                .map(describe),
             queued: ordered.compactMap { jobs[$0] }.map(describe),
             recent: store.recent(limit: 10).map(withLog),
             daemonPid: getpid(),
@@ -1131,9 +1241,12 @@ final class Daemon {
         let files = (try? FileManager.default.contentsOfDirectory(atPath: paths.logs)) ?? []
         for file in files {
             let path = paths.logs + "/" + file
-            guard let modified = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date else { continue }
+            guard let modified = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+            else { continue }
             let outcome = RunLogs.job(fromFileName: file).flatMap(store.outcome)
-            if now.timeIntervalSince(modified) > RunLogs.retention(outcome: outcome) { try? FileManager.default.removeItem(atPath: path) }
+            if now.timeIntervalSince(modified) > RunLogs.retention(outcome: outcome) {
+                try? FileManager.default.removeItem(atPath: path)
+            }
         }
     }
 }

@@ -27,7 +27,9 @@ public enum Escapes {
     ]
 
     /// Runtimes that only count once you look at what they're running.
-    static let nodeScripts: Set<String> = ["vitest", "jest", "tsc", "next", "webpack", "playwright", "esbuild", "rollup", "turbo"]
+    static let nodeScripts: Set<String> = [
+        "vitest", "jest", "tsc", "next", "webpack", "playwright", "esbuild", "rollup", "turbo",
+    ]
 
     /// Whether a process name is worth reading arguments for. Cheap, so a scan can ask it of every process.
     public static func isCandidate(_ name: String) -> Bool { tools.contains(name) }
@@ -68,10 +70,14 @@ public enum Escapes {
     }
 
     /// Friendlier names for the processes that spawn build tools without a shell.
-    static let harnesses = ["XCBBuildService": "Xcode", "SWBBuildService": "Xcode", "Xcode": "Xcode", "sourcekit-lsp": "sourcekit-lsp"]
+    static let harnesses = [
+        "XCBBuildService": "Xcode", "SWBBuildService": "Xcode", "Xcode": "Xcode", "sourcekit-lsp": "sourcekit-lsp",
+    ]
 
     /// Names a build tool answers to, so the chain can be walked past them to whoever really started the work.
-    static let tools: Set<String> = heavy.union(["node", "bun", "deno", "java", "python", "python3", "clang", "clang++", "gcc", "g++"])
+    static let tools: Set<String> = heavy.union([
+        "node", "bun", "deno", "java", "python", "python3", "clang", "clang++", "gcc", "g++",
+    ])
 
     /// Who started it: a known harness anywhere up the chain, else the nearest ancestor that isn't a build tool itself.
     public static func via(chain: [String]) -> String {

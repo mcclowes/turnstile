@@ -63,5 +63,5 @@ Override classification per project or machine with [`commands` and `scripts`](.
 
 ## Duplicate and nested runs
 
-- **Duplicate runs merge.** The same command on identical working-tree contents joins the run in progress and gets its output and exit code. A newer request from the same worktree replaces its queued older one.
+- **Duplicate runs merge.** The same command on an unchanged working tree joins the run in progress and gets its output and exit code. The fingerprint includes HEAD, index state, and each changed or untracked file's size, timestamps, and inode. Root `.env` files are included even when ignored. A newer request from the same worktree replaces its queued older one.
 - **Nested calls pass through.** `swift test` calling `swift build` doesn't wait on itself.

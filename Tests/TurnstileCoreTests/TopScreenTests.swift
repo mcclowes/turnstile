@@ -1,18 +1,23 @@
 import Testing
+
 @testable import TurnstileCore
 
 struct TopScreenTests {
     func job(_ id: Int64, state: String = "running", paused: Bool = false, held: Bool = false) -> JobSnapshot {
         JobSnapshot(
             id: id, state: state, resourceClass: .test, project: "api", key: "swift test", cwd: "/api", agent: true,
-            estimate: Bytes.gb, footprint: state == "queued" ? nil : Bytes.gb / 2, peak: nil, paused: paused, clientPid: 1,
-            childPid: nil, queuedAt: 0, startedAt: state == "queued" ? nil : 10, waiting: state == "queued" ? "waiting for a test slot" : nil,
+            estimate: Bytes.gb, footprint: state == "queued" ? nil : Bytes.gb / 2, peak: nil, paused: paused,
+            clientPid: 1,
+            childPid: nil, queuedAt: 0, startedAt: state == "queued" ? nil : 10,
+            waiting: state == "queued" ? "waiting for a test slot" : nil,
             joiners: 0, held: held, pausedBy: paused ? "you" : nil
         )
     }
 
     func snapshot(_ running: [JobSnapshot], _ queued: [JobSnapshot] = []) -> StatusSnapshot {
-        StatusSnapshot(memoryLevel: 40, physicalMemory: 16 * Bytes.gb, reserve: 2 * Bytes.gb, limits: [:], running: running, queued: queued, recent: [], daemonPid: 1)
+        StatusSnapshot(
+            memoryLevel: 40, physicalMemory: 16 * Bytes.gb, reserve: 2 * Bytes.gb, limits: [:], running: running,
+            queued: queued, recent: [], daemonPid: 1)
     }
 
     @Test func showsWhatRanOutsideTurnstile() {
@@ -20,7 +25,10 @@ struct TopScreenTests {
         state.ungated = [EscapeRow(label: "swift-frontend", via: "Xcode", cwd: "/Users/me/app", count: 14, lastSeen: 0)]
         let lines = TopScreen.render(state, selected: nil, now: 20, width: 120, height: 40, footer: "")
         #expect(lines.contains { $0.contains("outside turnstile") && $0.contains("14 × swift-frontend under Xcode") })
-        #expect(!TopScreen.render(snapshot([job(1)]), selected: nil, now: 20, width: 120, height: 40, footer: "").contains { $0.contains("outside turnstile") })
+        #expect(
+            !TopScreen.render(snapshot([job(1)]), selected: nil, now: 20, width: 120, height: 40, footer: "").contains {
+                $0.contains("outside turnstile")
+            })
     }
 
     @Test func arrowsAndLettersMapToKeys() {
@@ -49,12 +57,20 @@ struct TopScreenTests {
         #expect(TopScreen.control(for: .hold, job: job(2, state: "queued")) == .success("hold"))
         #expect(TopScreen.control(for: .hold, job: job(2, state: "queued", held: true)) == .success("unhold"))
         #expect(TopScreen.control(for: .kill, job: job(2, state: "queued")) == .success("kill"))
-        guard case .failure = TopScreen.control(for: .pause, job: job(2, state: "queued")) else { Issue.record("pause on a queued job"); return }
-        guard case .failure = TopScreen.control(for: .hold, job: job(1)) else { Issue.record("hold on a running job"); return }
+        guard case .failure = TopScreen.control(for: .pause, job: job(2, state: "queued")) else {
+            Issue.record("pause on a queued job")
+            return
+        }
+        guard case .failure = TopScreen.control(for: .hold, job: job(1)) else {
+            Issue.record("hold on a running job")
+            return
+        }
     }
 
     @Test func rendersJobsAndMarksTheSelection() {
-        let lines = TopScreen.render(snapshot([job(1, paused: true)], [job(2, state: "queued", held: true)]), selected: 2, now: 70, width: 200, height: 20, footer: "")
+        let lines = TopScreen.render(
+            snapshot([job(1, paused: true)], [job(2, state: "queued", held: true)]), selected: 2, now: 70, width: 200,
+            height: 20, footer: "")
         #expect(lines.count == 20)
         #expect(lines.contains { $0.contains("paused (you)") && $0.contains("api swift test") })
         #expect(lines.contains { $0.contains("▸ 2") && $0.contains("held") && $0.hasPrefix("\u{1B}[7m") })
@@ -70,6 +86,9 @@ struct TopScreenTests {
     @Test func clipsToTheTerminalWidthKeepingEscapes() {
         #expect(TopScreen.clip("abcdef", to: 3) == "abc")
         #expect(TopScreen.clip("\u{1B}[7mabcdef\u{1B}[0m", to: 2) == "\u{1B}[7mab\u{1B}[0m")
-        #expect(TopScreen.render(snapshot([job(1)]), selected: 1, now: 0, width: 30, height: 12, footer: "").allSatisfy { TopScreen.clip($0, to: 30) == $0 })
+        #expect(
+            TopScreen.render(snapshot([job(1)]), selected: 1, now: 0, width: 30, height: 12, footer: "").allSatisfy {
+                TopScreen.clip($0, to: 30) == $0
+            })
     }
 }

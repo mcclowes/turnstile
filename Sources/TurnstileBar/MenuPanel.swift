@@ -82,7 +82,9 @@ struct MenuPanel: View {
             SectionHeader(title: title, count: jobs.count)
             VStack(spacing: 2) {
                 ForEach(jobs, id: \.id) { job in
-                    JobRow(job: job, now: now, hue: hues[job.id], canPromote: MenuBarState.canPromote(job, in: jobs)) { monitor.send($0, to: job.id) }
+                    JobRow(job: job, now: now, hue: hues[job.id], canPromote: MenuBarState.canPromote(job, in: jobs)) {
+                        monitor.send($0, to: job.id)
+                    }
                 }
             }
         }
@@ -219,11 +221,12 @@ struct MenuPanel: View {
     /// Shows the state; the menu offers the other modes as actions. A single job is paused from its own row.
     private var modePicker: some View {
         let mode = monitor.mode
-        let tint: Color = switch mode {
-        case .gating: .secondary
-        case .holding, .paused: MenuBarState.Tone.warning.color
-        case .disabled: MenuBarState.Tone.danger.color
-        }
+        let tint: Color =
+            switch mode {
+            case .gating: .secondary
+            case .holding, .paused: MenuBarState.Tone.warning.color
+            case .disabled: MenuBarState.Tone.danger.color
+            }
         return Menu {
             ForEach(GatingMode.allCases.filter { $0 != mode }, id: \.self) { option in
                 Button {
@@ -296,10 +299,14 @@ struct RecentRow: View {
             .contentShape(.rect)
         Group {
             if let log = entry.log {
-                Button { RunLogActions.open(log) } label: { icon }
-                    .buttonStyle(.borderless)
-                    .pointerStyle(.link)
-                    .accessibilityLabel("Open log")
+                Button {
+                    RunLogActions.open(log)
+                } label: {
+                    icon
+                }
+                .buttonStyle(.borderless)
+                .pointerStyle(.link)
+                .accessibilityLabel("Open log")
             } else {
                 icon
             }
@@ -317,8 +324,9 @@ struct RecentRow: View {
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .fixedSize()
-            .help([peak.map { "Peak memory \($0)" }, duration.map { "Ran for \($0)" }]
-                .compactMap { $0 }.joined(separator: " · "))
+            .help(
+                [peak.map { "Peak memory \($0)" }, duration.map { "Ran for \($0)" }]
+                    .compactMap { $0 }.joined(separator: " · "))
     }
 }
 
@@ -327,7 +335,9 @@ struct MemoryHeader: View {
     var snapshot: StatusSnapshot
 
     private var tone: MenuBarState.Tone { MenuBarState.memoryTone(snapshot.memoryLevel) }
-    private var used: UInt64 { snapshot.physicalMemory - SystemMemory.free(level: snapshot.memoryLevel, of: snapshot.physicalMemory) }
+    private var used: UInt64 {
+        snapshot.physicalMemory - SystemMemory.free(level: snapshot.memoryLevel, of: snapshot.physicalMemory)
+    }
 
     var body: some View {
         let meter = MemoryMeter(snapshot)
@@ -409,7 +419,8 @@ struct HealthBanner: View {
     }
 
     private func runInTerminal(_ command: String) {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("turnstile-fix-\(UUID().uuidString).command")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "turnstile-fix-\(UUID().uuidString).command")
         do {
             try Health.terminalScript(for: command).write(to: url, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)

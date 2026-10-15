@@ -86,6 +86,7 @@ struct ShimRun {
     let stdout: String
     let stderr: String
     let toolRuns: [String]
+    let toolPath: String
     /// Runs the shim recorded as ungated.
     let ungated: [UngatedLog.Entry]
 
@@ -96,7 +97,8 @@ struct ShimRun {
     /// `daemon` is built once the home, and so the socket path, exists.
     static func run(
         _ args: [String] = ["build"], cliArguments: [String]? = nil, environment extra: [String: String] = [:],
-        timeout: Double = 90, toolScript: String? = nil, daemon: (Paths) throws -> FakeDaemon
+        timeout: Double = 90, toolScript: String? = nil, cwd: String? = nil,
+        daemon: (Paths) throws -> FakeDaemon
     ) throws -> (ShimRun, FakeDaemon) {
         let root = NSTemporaryDirectory() + "ts-shim-" + UUID().uuidString.prefix(8)
         defer { try? FileManager.default.removeItem(atPath: root) }
@@ -128,7 +130,7 @@ struct ShimRun {
         ]
         environment.merge(extra) { $1 }
         process.environment = environment
-        process.currentDirectoryURL = URL(fileURLWithPath: root)
+        process.currentDirectoryURL = URL(fileURLWithPath: cwd ?? root)
         let out = Pipe()
         let err = Pipe()
         process.standardOutput = out
@@ -146,6 +148,7 @@ struct ShimRun {
             stderr: String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self),
             toolRuns: ((try? String(contentsOfFile: runs, encoding: .utf8)) ?? "").split(separator: "\n").map(
                 String.init),
+            toolPath: bin + "/swift",
             ungated: UngatedLog.parse((try? String(contentsOfFile: paths.ungatedLog, encoding: .utf8)) ?? "")
         )
         return (result, fake)
@@ -162,6 +165,50 @@ func reply(_ type: String, job: Int64? = nil, text: String? = nil, exitCode: Int
 
 @Suite(.serialized)
 struct SupervisorTests {
+    @Test(arguments: [false, true])
+    func differentExecutablesKeepSeparateIdentities(direct: Bool) throws {
+        let cwd = NSTemporaryDirectory() + "ts-identity-" + UUID().uuidString.prefix(8)
+        defer { try? FileManager.default.removeItem(atPath: cwd) }
+        try FileManager.default.createDirectory(atPath: cwd, withIntermediateDirectories: true)
+        for args in [
+            ["init", "--template="],
+            [
+                "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "-c", "user.name=Fixture",
+                "-c", "user.email=fixture@example.invalid", "commit", "--allow-empty", "-m", "Fixture",
+            ],
+        ] {
+            try #require(Workspace.git(args, cwd: cwd, deadline: Date().addingTimeInterval(10)) != nil)
+        }
+
+        var requests: [Message] = []
+        var tools: [String] = []
+        for _ in 0..<2 {
+            let (run, daemon) = try ShimRun.run(
+                cliArguments: direct ? ["run", "--class", "compile", "--", "swift", "build"] : nil, cwd: cwd
+            ) { paths in
+                FakeDaemon(socket: paths.socket) { message, _, send, _ in
+                    switch message.type {
+                    case "request": send(reply("admitted", job: 7))
+                    case "finished": send(reply("ok"))
+                    default: break
+                    }
+                }
+            }
+            #expect(run.exitCode == 0)
+            #expect(run.toolRuns.count == 1)
+            let request = try #require(daemon.received.first { $0.message.type == "request" }?.message)
+            try #require(request.fingerprint != nil)
+            #expect(request.argv == [run.toolPath, "build"])
+            #expect(request.tool == "swift")
+            #expect(request.key == "swift build")
+            requests.append(request)
+            tools.append(run.toolPath)
+        }
+        #expect(tools[0] != tools[1])
+        #expect(requests[0].root == requests[1].root)
+        #expect(requests[0].fingerprint != requests[1].fingerprint)
+    }
+
     @Test func onlyCompileJobsPauseByDefault() {
         #expect(Supervisor.isPausable(agent: true, resourceClass: .compile, configured: nil))
         #expect(!Supervisor.isPausable(agent: true, resourceClass: .test, configured: nil))
@@ -192,7 +239,7 @@ struct SupervisorTests {
 
         let request = try #require(daemon.received.first { $0.message.type == "request" }?.message)
         #expect(request.key == "swift build")
-        #expect(request.argv == ["swift", "build"])
+        #expect(request.argv == [run.toolPath, "build"])
         #expect(request.agent == true)
         #expect(daemon.received.first { $0.message.type == "started" }?.message.childPid ?? 0 > 0)
         #expect(daemon.received.first { $0.message.type == "finished" }?.message.exitCode == 3)

@@ -69,7 +69,7 @@ struct CLITests {
         #expect(run.toolRuns.first?.hasPrefix("run build token=8:") == true)
         let request = try #require(daemon.received.first { $0.message.type == "request" }?.message)
         #expect(request.resourceClass == .test)
-        #expect(request.argv == ["swift", "build"])
+        #expect(request.argv == [run.toolPath, "build"])
         #expect(daemon.types == ["request", "started", "finished"])
         #expect(run.ungated.isEmpty)
     }

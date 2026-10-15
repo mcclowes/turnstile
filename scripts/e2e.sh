@@ -137,6 +137,29 @@ wait
 check "duplicate run joins the one in progress" '[ $(( $(runs test) - before )) = 1 ] && grep -q "joining an identical swift test" "$T/m2.out"'
 check "joiner replays output and exit code" 'grep -q "fake swift test" "$T/m2.out" && [ "$(cat "$T/m2.code")" = 4 ] && [ "$(cat "$T/m1.code")" = 4 ]'
 
+# Same-basename executables at different paths run independently.
+mkdir -p "$T/alternate"
+cp "$T/bin/swift" "$T/alternate/swift"
+before=$(runs test)
+touch "$T/runtime.wait"
+(FAKE_WAIT_FILE="$T/runtime.wait" FAKE_EXIT=20 turnstile run --class test -- "$T/bin/swift" test > "$T/runtime1.out" 2>&1; echo $? > "$T/runtime1.code") &
+if wait_for_output "$T/runtime1.out" "fake swift test"; then pass "first executable starts"; else fail "first executable starts"; fi
+(FAKE_EXIT=24 turnstile run --class test -- "$T/alternate/swift" test > "$T/runtime2.out" 2>&1; echo $? > "$T/runtime2.code") &
+separate_queued=false
+wait_for_job queued repo "swift test" && separate_queued=true
+rm "$T/runtime.wait"
+wait
+if [ "$separate_queued" = true ] && ! grep -q "joining an identical" "$T/runtime2.out"; then
+  pass "different executables queue separately"
+else
+  fail "different executables queue separately"
+fi
+if [ $(( $(runs test) - before )) = 2 ] && [ "$(cat "$T/runtime1.code")" = 20 ] && [ "$(cat "$T/runtime2.code")" = 24 ]; then
+  pass "different executables keep their results"
+else
+  fail "different executables keep their results"
+fi
+
 # A newer request from the same worktree replaces its queued one.
 before=$(runs test)
 (cd ../a && FAKE_SLEEP=2 swift test > /dev/null 2>&1) &

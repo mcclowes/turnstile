@@ -199,6 +199,33 @@ struct DaemonMergingTests {
         #expect(stale.received().last?.exitCode == 1)
     }
 
+    @Test func differentExecutablePathsDoNotSupersedeQueuedRuns() throws {
+        let harness = try DaemonHarness()
+        let running = FakeClient()
+        let first = FakeClient()
+        let second = FakeClient()
+        harness.request(running, key: "swift test", resourceClass: .test, root: "/busy")
+        let firstID = harness.request(
+            first, key: "node --test", resourceClass: .test, fingerprint: "node20",
+            argv: ["/runtime20/node", "--test"])
+        let secondID = harness.request(
+            second, key: "node --test", resourceClass: .test, fingerprint: "node24",
+            argv: ["/runtime24/node", "--test"])
+        #expect(first.types() == ["queued"])
+        #expect(second.types() == ["queued"])
+        #expect(harness.job(firstID) != nil)
+        #expect(harness.job(secondID) != nil)
+
+        harness.finished(running)
+        #expect(first.types() == ["admitted"])
+        #expect(second.types() == ["queued"])
+        harness.finished(first, exitCode: 20)
+        #expect(second.types() == ["admitted"])
+        harness.finished(second, exitCode: 24)
+        #expect(harness.job(firstID) == nil)
+        #expect(harness.job(secondID) == nil)
+    }
+
     @Test func aQueuedOwnerLeavingTellsItsJoinersToRunThemselves() throws {
         let harness = try DaemonHarness()
         let running = FakeClient()

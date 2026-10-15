@@ -70,13 +70,13 @@ enum Supervisor {
                 cause: "the daemon was unavailable", tool: tool, real: real, args: args, paths: paths)
         }
         let cwd = FileManager.default.currentDirectoryPath
-        let workspace = Workspace.inspect(cwd: cwd, argv: [tool] + args, environment: environment)
+        let workspace = Workspace.inspect(cwd: cwd, argv: [real] + args, environment: environment)
         let throttle = config.throttle
         let agent = Agent.isAgent(
             environment: environment, extraMarkers: config.machine.agentEnv ?? [], interactive: interactive)
 
         var request = Message(type: "request")
-        request.argv = [tool] + args
+        request.argv = [real] + args
         request.tool = tool
         request.key = classification.key
         request.resourceClass = classification.resourceClass

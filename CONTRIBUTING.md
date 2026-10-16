@@ -17,12 +17,15 @@ swift build
 swift test             # unit tests
 ./scripts/e2e.sh       # end-to-end, with fake tools in a throwaway turnstile home
 ./scripts/coverage.sh  # unit tests with a coverage report
+node --test scripts/e2e-server-tests.mjs  # isolated escaped-server process checks
 /usr/bin/python3 scripts/e2e-top-tests.py  # daemon-free PTY driver checks
 node --test scripts/history-report-tests.mjs  # isolated history-report fixtures
 swift format lint --recursive Sources Tests Package.swift
 ```
 
 `swift format` ships with Xcode and reads `.swift-format`; `swift format --in-place <file>` fixes most of what the lint reports.
+
+The E2E server checks use disposable processes to verify that one run's lookup and cleanup leave other runs alive. They need process-list access; CI runs them on macOS. Each E2E run uses a unique server marker, including EXIT cleanup.
 
 The top driver checks exercise a fake CLI in a temporary home. Full E2E reports job visibility, pause, kill confirmation, target removal, UI exit, terminal restoration, driver errors, and caller status separately. Failures print the last status snapshot, PTY tail, and job output.
 

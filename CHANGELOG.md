@@ -6,6 +6,8 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ### Fixed
 
+- Concurrent E2E runs no longer detect or stop each other's escaped build servers.
+
 - The top E2E check holds its fixture job until control handshakes finish, drains terminal output through UI exit, and reports each failed condition separately.
 
 - The history report rejects invalid day counts and extra arguments before reading history.

@@ -5,6 +5,7 @@ set -u
 cd "$(dirname "$0")/.."
 swift build -q || exit 1
 BIN="$(swift build --show-bin-path)/turnstile"
+E2E_TOP_DRIVER="$PWD/scripts/e2e-top.py"
 
 T="$(mktemp -d /tmp/turnstile-e2e.XXXXXX)"
 export TURNSTILE_HOME="$T/home"
@@ -361,55 +362,49 @@ wait
 check "manual pause holds until resumed" '[ -z "$early" ] && echo "$paused_json" | grep -q "\"pausedBy\" : \"you\"" && [ "$(cat "$T/mp.code")" = 0 ] && grep -q "paused by you" "$T/mp.out"'
 
 # `turnstile top` drives the same controls from a terminal, and quits cleanly.
-cat > "$T/top.py" <<'EOF'
-import json, os, pty, sys, time, select, subprocess
-pid, fd = pty.fork()
-if pid == 0:
-    os.execvp("turnstile", ["turnstile", "top"])
-out = b""
-def pump(seconds):
-    global out
-    end = time.time() + seconds
-    while time.time() < end:
-        r, _, _ = select.select([fd], [], [], 0.1)
-        if r:
-            try: out += os.read(fd, 65536)
-            except OSError: return
-def pump_until(needle, timeout=5):
-    end = time.time() + timeout
-    while needle not in out and time.time() < end:
-        pump(0.1)
-def status():
-    return json.loads(subprocess.run(["turnstile", "status", "--json"], capture_output=True, text=True).stdout)
-def wait_for_job(predicate, timeout=5):
-    end = time.time() + timeout
-    while time.time() < end:
-        if any(predicate(job) for job in status().get("running", [])): return True
-        time.sleep(0.05)
-    return False
-def wait_for_no_job(project, key, timeout=5):
-    end = time.time() + timeout
-    while time.time() < end:
-        jobs = status().get("running", [])
-        if not any(job["project"] == project and job["key"] == key for job in jobs): return True
-        time.sleep(0.05)
-    return False
-pump_until(b"a swift build")
-os.write(fd, b"p")
-paused = wait_for_job(lambda job: job["project"] == "a" and job["key"] == "swift build" and job.get("pausedBy") == "you")
-os.write(fd, b"x"); pump_until(b"? y/n")
-prompted = b"? y/n" in out
-os.write(fd, b"y")
-killed = wait_for_no_job("a", "swift build")
-os.write(fd, b"q"); pump(0.5)
-_, code = os.waitpid(pid, 0)
-print("paused=%s prompted=%s killed=%s exit=%d restored=%s" % (paused, prompted, killed, os.WEXITSTATUS(code), out.rstrip().endswith(b"\x1b[?1049l")))
-EOF
-(cd a && FAKE_SLEEP=8 swift build > "$T/top.out" 2>&1; echo $? > "$T/top.code") &
+touch "$T/top.wait"
+(cd a && FAKE_WAIT_FILE="$T/top.wait" swift build > "$T/top.out" 2>&1; echo $? > "$T/top.code") &
+top_job=$!
 wait_for_job running a "swift build"
-out="$(/usr/bin/python3 "$T/top.py")"
-wait
-check "top pauses and kills the selected job, then restores the terminal" '[ "$out" = "paused=True prompted=True killed=True exit=0 restored=True" ] && [ "$(cat "$T/top.code")" = 125 ]'
+out="$(/usr/bin/python3 "$E2E_TOP_DRIVER" a "swift build" "$T/top.pty")"
+# Capture the caller result before fallback cleanup can change it.
+top_code=""
+for _ in {1..100}; do
+  top_code="$(cat "$T/top.code" 2>/dev/null)"
+  [ -n "$top_code" ] && break
+  sleep 0.05
+done
+# Release the fixture even if a handshake failed, so diagnostics cannot hang the suite.
+if [ -z "$top_code" ]; then
+  turnstile kill 'a swift build' > /dev/null 2>&1 || turnstile resume 'a swift build' > /dev/null 2>&1 || true
+fi
+rm -f "$T/top.wait"
+wait "$top_job"
+top_failures=$failures
+top_check() {
+  if /usr/bin/python3 -c 'import json, sys; d = json.loads(sys.argv[1]); raise SystemExit(0 if d.get(sys.argv[2]) == json.loads(sys.argv[3]) else 1)' "$out" "$2" "$3"; then
+    pass "$1"
+  else
+    fail "$1"
+  fi
+}
+top_check "top displays the target job before input" visible true
+top_check "top pauses the selected job" paused true
+top_check "top asks before killing the selected job" prompted true
+top_check "top removes the selected job after confirmation" killed true
+top_check "top exits successfully after q" exit 0
+top_check "top restores the terminal after exit" restored true
+top_check "top completes without driver errors" errors '[]'
+check "top tells the killed caller not to retry" '[ "$top_code" = 125 ]'
+if [ "$failures" != "$top_failures" ]; then
+  printf 'top handshake diagnostics: %s\n' "$out"
+  printf 'top caller status before cleanup: %s\n' "${top_code:-missing}"
+  echo 'top PTY output (last 2000 bytes):'
+  tail -c 2000 "$T/top.pty" 2>/dev/null
+  echo
+  echo 'top job output:'
+  cat "$T/top.out"
+fi
 
 # A deliberate stop releases waiting jobs to run ungated.
 (cd a && FAKE_SLEEP=3 swift test > /dev/null 2>&1) &

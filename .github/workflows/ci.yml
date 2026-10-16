@@ -22,6 +22,9 @@ jobs:
           node --test scripts/license-check-tests.mjs
           node scripts/license-check.mjs
 
+      - name: E2E top driver
+        run: /usr/bin/python3 scripts/e2e-top-tests.py
+
       - name: History report checks
         run: node --test scripts/history-report-tests.mjs
 

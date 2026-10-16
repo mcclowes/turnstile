@@ -2,6 +2,12 @@
 
 Notable changes to turnstile. Versions follow [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- The history report rejects invalid day counts and extra arguments before reading history.
+
 ## 0.9.0
 
 ### Added

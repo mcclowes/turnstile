@@ -8,7 +8,8 @@ The commands this repo already uses, from CONTRIBUTING.md, the CI workflows, and
 - Coverage: `./scripts/coverage.sh` — unit tests with a per-file report, writes .build/coverage.lcov #monitor
 - Lint: `swift format lint --recursive --parallel Sources Tests Package.swift` #quick
 - License check: `node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs` — ThirdParty/ records for every dependency #quick
-- CI checks: `swift format lint --recursive --parallel Sources Tests Package.swift && node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs && ./scripts/coverage.sh && ./scripts/e2e.sh && swift build -c release && ./scripts/package.sh --dev` — the lint and test jobs from ci.yml, in order #monitor #ci
+- History report checks: `node --test scripts/history-report-tests.mjs` — argument validation and read-only reports against temporary databases #quick #safe #ci
+- CI checks: `swift format lint --recursive --parallel Sources Tests Package.swift && node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs && node --test scripts/history-report-tests.mjs && ./scripts/coverage.sh && ./scripts/e2e.sh && swift build -c release && ./scripts/package.sh --dev` — the lint and test jobs from ci.yml, in order #monitor #ci
 - Release build: `swift build -c release` #quick
 - Menu bar app (dev): `./scripts/package.sh --dev` — ad-hoc signed Turnstile.app, not notarized #quick
 - Try local build: `.build/debug/turnstile init` — installs this build for real; `turnstile uninstall` when done #quick

@@ -299,11 +299,14 @@ enum Supervisor {
                     for message in client.takePending() where ["notice", "release", "cancelled"].contains(message.type) {
                         if let text = message.text { warn(text) }
                         if message.type == "release" { released = true }
-                        // The daemon signals the tree too; this covers a child it hasn't seen start yet.
-                        if message.type == "cancelled" && !cancelled && !exited {
+                        if message.type == "cancelled" && !cancelled {
+                            // Keep cancellation received after child exit while captured output drains.
                             cancelled = true
-                            kill(child, SIGTERM)
-                            resume(child)
+                            // The daemon signals the tree too; this covers a child it hasn't seen start yet.
+                            if !exited {
+                                kill(child, SIGTERM)
+                                resume(child)
+                            }
                         }
                     }
                 } else {

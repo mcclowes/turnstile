@@ -9,8 +9,9 @@ The commands this repo already uses, from CONTRIBUTING.md, the CI workflows, and
 - Lint: `swift format lint --recursive --parallel Sources Tests Package.swift` #quick #safe
 - License check: `node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs` — ThirdParty/ records for every dependency #quick #safe
 - E2E server scope checks: `node --test scripts/e2e-server-tests.mjs` — validated process matching and cleanup against disposable servers #quick #safe #ci
+- E2E top driver: `/usr/bin/python3 scripts/e2e-top-tests.py` — PTY handshakes and delayed restoration using a fake CLI, without a daemon #quick #safe #ci
 - History report checks: `node --test scripts/history-report-tests.mjs` — argument validation and read-only reports against temporary databases #quick #safe #ci
-- CI checks: `swift format lint --recursive --parallel Sources Tests Package.swift && node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs && node --test scripts/e2e-server-tests.mjs && node --test scripts/history-report-tests.mjs && ./scripts/coverage.sh && ./scripts/e2e.sh && swift build -c release && ./scripts/package.sh --dev` — the lint and test jobs from ci.yml, using isolated test state and scoped process cleanup #monitor #ci #safe
+- CI checks: `swift format lint --recursive --parallel Sources Tests Package.swift && node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs && node --test scripts/e2e-server-tests.mjs && /usr/bin/python3 scripts/e2e-top-tests.py && node --test scripts/history-report-tests.mjs && ./scripts/coverage.sh && ./scripts/e2e.sh && swift build -c release && ./scripts/package.sh --dev` — the lint and test jobs from ci.yml, using isolated test state and scoped process cleanup #monitor #ci #safe
 - Release build: `swift build -c release` #quick #safe
 - Menu bar app (dev): `./scripts/package.sh --dev` — builds and signs .build/Turnstile.app ad hoc; removes the previous app and release ZIP #quick #safe
 - Try local build: `.build/debug/turnstile init` — replaces the installed binary/shims and edits shell startup files; uninstall when done #quick #destructive

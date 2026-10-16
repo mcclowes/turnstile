@@ -25,6 +25,9 @@ jobs:
       - name: E2E server scope checks
         run: node --test scripts/e2e-server-tests.mjs
 
+      - name: E2E top driver
+        run: /usr/bin/python3 scripts/e2e-top-tests.py
+
       - name: History report checks
         run: node --test scripts/history-report-tests.mjs
 

@@ -6,6 +6,8 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ### Fixed
 
+- The top E2E check holds its fixture job until control handshakes finish, drains terminal output through UI exit, and reports each failed condition separately.
+
 - The history report rejects invalid day counts and extra arguments before reading history.
 
 ## 0.9.0

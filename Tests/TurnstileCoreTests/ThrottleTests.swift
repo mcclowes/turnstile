@@ -133,6 +133,15 @@ struct PressureTests {
         #expect(runaway(footprint: 2 * gb, memoryLevel: 3, pressuredFor: 30) == .kill)
     }
 
+    @Test(arguments: [
+        (Pressure.runawayGrace.nextDown, Pressure.Runaway.pause),
+        (Pressure.runawayGrace, .kill),
+        (Pressure.runawayGrace.nextUp, .kill),
+    ])
+    func aRunawayGetsItsFullGracePeriod(pressuredFor: Double, expected: Pressure.Runaway) {
+        #expect(runaway(footprint: 2 * gb, memoryLevel: 3, pressuredFor: pressuredFor) == expected)
+    }
+
     @Test func swappingMakesARunawayPauseWhileTheLevelLooksHealthy() {
         #expect(runaway(footprint: 2 * gb, memoryLevel: 35, pressure: .swapping) == .pause)
     }

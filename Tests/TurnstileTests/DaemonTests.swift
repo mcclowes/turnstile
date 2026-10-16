@@ -782,7 +782,9 @@ struct DaemonPressureTests {
         #expect(owner.received().filter { $0.text?.contains("more memory than usual") == true }.count == 1)
     }
 
-    @Test func aRunawayUnderPressureIsPausedBeforeItIsKilled() throws {
+    // Include clock origins where separately rounded offsets make a 15-second interval slightly shorter.
+    @Test(.bug(id: 114), arguments: [1_000.0, 21.0.nextUp, 1_048_565.0.nextUp])
+    func aRunawayUnderPressureIsPausedBeforeItIsKilled(now: Double) throws {
         let harness = try DaemonHarness(memoryLevel: 3)
         let owner = FakeClient()
         let tool = try harness.sleeper()
@@ -792,7 +794,6 @@ struct DaemonPressureTests {
         job.ceiling = 1
         job.footprint = 2
 
-        let now = Daemon.clock()
         harness.daemon.enforceCeiling(job, now: now)
         #expect(job.paused == true)
         #expect(job.killReason == nil)
@@ -804,14 +805,23 @@ struct DaemonPressureTests {
         harness.daemon.relievePressure(now: now + 5)
         #expect(job.paused == false)
         #expect(job.killReason == nil)
+        #expect(job.runawaySince == nil)
 
         // Back under pressure, and this time it doesn't lift.
         harness.daemon.memoryLevel = 3
-        harness.daemon.enforceCeiling(job, now: now + 10)
+        let pressureReturnsAt = now + 10
+        harness.daemon.enforceCeiling(job, now: pressureReturnsAt)
         #expect(job.paused == true)
-        harness.daemon.enforceCeiling(job, now: now + 25)
+        #expect(job.runawaySince == pressureReturnsAt)
+
+        // Cross the representable deadline instead of subtracting independently rounded clock offsets.
+        let graceDeadline = pressureReturnsAt + Pressure.runawayGrace
+        harness.daemon.enforceCeiling(job, now: graceDeadline.nextDown)
+        #expect(job.paused == true)
+        #expect(job.killReason == nil)
+        harness.daemon.enforceCeiling(job, now: graceDeadline.nextUp)
         #expect(job.killReason?.hasPrefix("killed swift build, exceeded") == true)
-        harness.daemon.enforceCeiling(job, now: now + 31)
+        harness.daemon.enforceCeiling(job, now: try #require(job.killDeadline))
         tool.waitUntilExit()
         #expect(tool.isRunning == false)
     }

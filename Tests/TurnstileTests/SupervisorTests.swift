@@ -91,7 +91,10 @@ struct ShimRun {
     }
 
     /// `daemon` is built once the home, and so the socket path, exists.
-    static func run(_ args: [String] = ["build"], cliArguments: [String]? = nil, environment extra: [String: String] = [:], timeout: Double = 90, daemon: (Paths) throws -> FakeDaemon) throws -> (ShimRun, FakeDaemon) {
+    static func run(
+        _ args: [String] = ["build"], cliArguments: [String]? = nil, environment extra: [String: String] = [:],
+        toolBody: String? = nil, timeout: Double = 90, daemon: (Paths) throws -> FakeDaemon
+    ) throws -> (ShimRun, FakeDaemon) {
         let root = NSTemporaryDirectory() + "ts-shim-" + UUID().uuidString.prefix(8)
         defer { try? FileManager.default.removeItem(atPath: root) }
         let paths = Paths(home: root + "/home")
@@ -100,12 +103,16 @@ struct ShimRun {
         try FileManager.default.createDirectory(atPath: bin, withIntermediateDirectories: true)
         let runs = root + "/runs"
         FileManager.default.createFile(atPath: runs, contents: nil)
+        let action =
+            toolBody ?? """
+                [ -n "${FAKE_SLEEP:-}" ] && exec sleep "$FAKE_SLEEP"
+                exit "${FAKE_EXIT:-0}"
+                """
         let tool = """
             #!/bin/bash
             echo "run $* token=${TURNSTILE_TOKEN:-none}" >> "\(runs)"
             echo "fake swift $*"
-            [ -n "${FAKE_SLEEP:-}" ] && exec sleep "$FAKE_SLEEP"
-            exit "${FAKE_EXIT:-0}"
+            \(action)
             """
         try tool.write(toFile: bin + "/swift", atomically: true, encoding: .utf8)
         chmod(bin + "/swift", 0o755)
@@ -292,6 +299,66 @@ struct SupervisorTests {
         #expect(!run.signaled)
         #expect(run.exitCode == Turnstile.cancelledExitCode)
         #expect(run.stderr.contains("don't retry"))
+    }
+
+    @Test(.bug("https://github.com/mcclowes/turnstile/issues/104"), arguments: [Int32(0), Int32(7)])
+    func cancellationReceivedWhileDrainingAnExitedChildStillCancels(childExitCode: Int32) throws {
+        // A background holder keeps both captured pipes open after the direct child exits.
+        // Its deadline is only cleanup protection; normal release waits for `finished`.
+        let holder = """
+            /usr/bin/python3 - "$TURNSTILE_HOME/drain.release" <<'PY' &
+            import pathlib, sys, time
+            release = pathlib.Path(sys.argv[1])
+            deadline = time.monotonic() + 10
+            while not release.exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            if release.exists():
+                print("late drained output")
+            else:
+                print("holder timed out", file=sys.stderr)
+            PY
+            exit "$FAKE_EXIT"
+            """
+        let (run, daemon) = try ShimRun.run(
+            environment: ["FAKE_EXIT": "\(childExitCode)"], toolBody: holder, timeout: 15
+        ) { paths in
+            FakeDaemon(socket: paths.socket) { message, _, send, _ in
+                switch message.type {
+                case "request": send(reply("admitted", job: 5))
+                case "started":
+                    if let child = message.childPid {
+                        let deadline = ProcessInfo.processInfo.systemUptime + 5
+                        var reaped = false
+                        while ProcessInfo.processInfo.systemUptime < deadline {
+                            if kill(child, 0) < 0 && errno == ESRCH {
+                                reaped = true
+                                break
+                            }
+                            usleep(10_000)
+                        }
+                        send(
+                            reply(
+                                "notice",
+                                text: reaped ? "fixture: child reaped before cancel" : "fixture: child still present"))
+                    }
+                    send(reply("cancelled", job: 5, text: Turnstile.cancelledText))
+                case "finished":
+                    try? "release".write(toFile: paths.home + "/drain.release", atomically: true, encoding: .utf8)
+                    send(reply("ok"))
+                default: break
+                }
+            }
+        }
+        #expect(run.signaled == false)
+        #expect(run.stderr.contains("fixture: child reaped before cancel"))
+        #expect(run.stderr.contains(Turnstile.cancelledText))
+        #expect(run.stdout.contains("late drained output"))
+        #expect(run.stderr.contains("holder timed out") == false)
+        #expect(run.toolRuns.count == 1)
+        let finished = try #require(daemon.received.last(where: { $0.message.type == "finished" })?.message)
+        #expect(finished.exitCode == childExitCode)
+        #expect(finished.signal == nil)
+        #expect(run.exitCode == Turnstile.cancelledExitCode)
     }
 
     @Test func aRunningJobReRegistersWhenItsDaemonDies() throws {

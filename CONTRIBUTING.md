@@ -20,6 +20,7 @@ swift test             # unit tests
 swift format lint --strict --recursive --parallel Sources Tests Package.swift
 node --test scripts/release-args-tests.mjs scripts/package-tests.mjs scripts/dist-tests.mjs # release helpers with isolated tools
 node --test scripts/e2e-server-tests.mjs   # run-scoped process detection and cleanup
+/usr/bin/python3 scripts/e2e-restart-tests.py # restart polling with a fake status CLI
 node --test scripts/history-report-tests.mjs # report arguments and isolated SQLite data
 /usr/bin/python3 scripts/e2e-top-tests.py # PTY handshakes and delayed terminal restoration
 ./scripts/fingerprint-timing.sh # isolated 60k-file fingerprint timings; FILES changes the size
@@ -54,6 +55,10 @@ Pressure and restart fixtures keep fake jobs alive with wait files until their
 state is observed. Allocation fixtures wait for a sampled peak and visible
 warning before release. Failed handshakes still release the owned gates and
 remain failed assertions.
+
+Restart polling treats invalid snapshots as unready and requires a successful
+status command with a new positive integer PID. Its fixture check stubs the CLI
+and retry sleeps without building or starting a daemon.
 
 `./scripts/fingerprint-timing.sh /path/to/repo` measures an existing repository without modifying it. The target is a p95 below 300 ms; the timing test uses a longer deadline so it can measure regressions beyond the production one-second limit.
 

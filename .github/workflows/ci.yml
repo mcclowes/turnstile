@@ -26,6 +26,8 @@ jobs:
         run: node --test scripts/history-report-tests.mjs
       - name: E2E server isolation
         run: node --test scripts/e2e-server-tests.mjs
+      - name: E2E restart handshake
+        run: /usr/bin/python3 scripts/e2e-restart-tests.py
       - name: E2E top driver
         run: /usr/bin/python3 scripts/e2e-top-tests.py
 

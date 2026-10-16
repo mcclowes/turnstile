@@ -83,9 +83,17 @@ wait_for_output() {
   return 1
 }
 wait_for_replacement() {
-  local previous="$1" i
+  local previous="$1" snapshot i
   for i in {1..100}; do
-    turnstile status --json | /usr/bin/python3 -c 'import json, sys; raise SystemExit(0 if json.load(sys.stdin)["daemonPid"] != int(sys.argv[1]) else 1)' "$previous" && return 0
+    snapshot="$(turnstile status --json)" && printf '%s\n' "$snapshot" | /usr/bin/python3 -c '
+import json, sys
+try:
+    snapshot = json.load(sys.stdin)
+except (json.JSONDecodeError, UnicodeDecodeError):
+    raise SystemExit(1)
+pid = snapshot.get("daemonPid") if isinstance(snapshot, dict) else None
+raise SystemExit(0 if type(pid) is int and pid > 0 and pid != int(sys.argv[1]) else 1)
+' "$previous" && return 0
     sleep 0.05
   done
   return 1

@@ -7,6 +7,13 @@ swift build -q || exit 1
 BIN="$(swift build --show-bin-path)/turnstile"
 
 T="$(mktemp -d /tmp/turnstile-e2e.XXXXXX)"
+SERVER_CONTROL="$PWD/scripts/e2e-server.sh"
+escaped_server_is_gone() {
+  local status=0
+  "$SERVER_CONTROL" exists || status=$?
+  [ "$status" -eq 1 ]
+}
+export TURNSTILE_E2E_SERVER_MARKER="turnstile-e2e-server-${T##*.}"
 export TURNSTILE_HOME="$T/home"
 export TURNSTILE_CONFIG_DIR="$T/config"
 export TURNSTILE_MEMORY_LEVEL_FILE="$T/level"
@@ -27,7 +34,7 @@ echo "run $$ $*" >> "$FAKE_RUNS"
 [ -n "${FAKE_EXEC_SLEEP:-}" ] && exec sleep "$FAKE_EXEC_SLEEP"
 [ -n "${FAKE_LATE_OUTPUT:-}" ] && { (sleep 3; echo "late output") & exit 0; }
 # A build server: a short-lived client starts it in its own session, then exits, leaving it to launchd.
-[ -n "${FAKE_SERVER_MB:-}" ] && { bash -c '/usr/bin/python3 -c "import os, time; os.setsid(); time.sleep(2.5); b = bytearray(${FAKE_SERVER_MB} * 1024 * 1024); [b.__setitem__(i, 1) for i in range(0, len(b), 4096)]; time.sleep(30)" turnstile-e2e-server > /dev/null 2>&1 & sleep 1.5'; sleep 10; exit 0; }
+[ -n "${FAKE_SERVER_MB:-}" ] && { bash -c '/usr/bin/python3 -c "import os, time; os.setsid(); time.sleep(2.5); b = bytearray(${FAKE_SERVER_MB} * 1024 * 1024); [b.__setitem__(i, 1) for i in range(0, len(b), 4096)]; time.sleep(30)" "$TURNSTILE_E2E_SERVER_MARKER" > /dev/null 2>&1 & sleep 1.5'; sleep 10; exit 0; }
 [ -n "${FAKE_WAIT_FILE:-}" ] && while [ -e "$FAKE_WAIT_FILE" ]; do sleep 0.05; done
 sleep "${FAKE_SLEEP:-0}"
 echo "fake swift done" >&2
@@ -59,7 +66,7 @@ raise SystemExit(0 if any(j["project"] == project and j["key"] == key and (not s
   done
   return 1
 }
-cleanup() { turnstile stop > /dev/null 2>&1; rm -rf "$T"; }
+cleanup() { turnstile stop > /dev/null 2>&1; "$SERVER_CONTROL" stop; rm -rf "$T"; }
 trap cleanup EXIT
 
 cd "$T/work"
@@ -140,8 +147,12 @@ check "late output from a background child isn't cut off" 'grep -q "late output"
 # A build server that escapes to launchd still counts against its job, and is killed with it.
 out="$(cd hungry && FAKE_SERVER_MB=400 swift build 2>&1)"; code=$?
 sleep 0.5
-check "escaped build servers are tracked and killed" 'echo "$out" | grep -q "killed swift build, exceeded 150 MB" && [ $code != 0 ] && ! pgrep -f turnstile-e2e-server > /dev/null'
-pkill -f turnstile-e2e-server
+check "escaped build servers are tracked and killed" 'echo "$out" | grep -q "killed swift build, exceeded 150 MB" && [ $code != 0 ] && escaped_server_is_gone'
+if "$SERVER_CONTROL" stop; then
+  pass "escaped server cleanup succeeds"
+else
+  fail "escaped server cleanup succeeds"
+fi
 
 # SIGTERM reaches the job, and the caller sees the signal.
 FAKE_SLEEP=10 swift build > /dev/null 2>&1 &

@@ -4,12 +4,13 @@ The commands this repo already uses, from CONTRIBUTING.md, the CI workflows, and
 
 - Build: `swift build` #quick #safe
 - Tests: `swift test` — unit tests #monitor #safe
-- E2E: `./scripts/e2e.sh` — the real binary with fake tools in a temporary home; cleanup can kill another E2E run's escaped server #monitor #destructive
+- E2E: `./scripts/e2e.sh` — the real binary with fake tools in a temporary home; escaped-server checks/cleanup use a unique run marker #monitor #safe
 - Coverage: `./scripts/coverage.sh` — unit tests with a per-file report, writes .build/coverage.lcov #monitor #safe
 - Lint: `swift format lint --recursive --parallel Sources Tests Package.swift` #quick #safe
 - License check: `node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs` — ThirdParty/ records for every dependency #quick #safe
+- E2E server scope checks: `node --test scripts/e2e-server-tests.mjs` — validated process matching and cleanup against disposable servers #quick #safe #ci
 - History report checks: `node --test scripts/history-report-tests.mjs` — argument validation and read-only reports against temporary databases #quick #safe #ci
-- CI checks: `swift format lint --recursive --parallel Sources Tests Package.swift && node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs && node --test scripts/history-report-tests.mjs && ./scripts/coverage.sh && ./scripts/e2e.sh && swift build -c release && ./scripts/package.sh --dev` — the lint and test jobs from ci.yml, including E2E's process-wide cleanup #monitor #ci #destructive
+- CI checks: `swift format lint --recursive --parallel Sources Tests Package.swift && node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs && node --test scripts/e2e-server-tests.mjs && node --test scripts/history-report-tests.mjs && ./scripts/coverage.sh && ./scripts/e2e.sh && swift build -c release && ./scripts/package.sh --dev` — the lint and test jobs from ci.yml, using isolated test state and scoped process cleanup #monitor #ci #safe
 - Release build: `swift build -c release` #quick #safe
 - Menu bar app (dev): `./scripts/package.sh --dev` — builds and signs .build/Turnstile.app ad hoc; removes the previous app and release ZIP #quick #safe
 - Try local build: `.build/debug/turnstile init` — replaces the installed binary/shims and edits shell startup files; uninstall when done #quick #destructive

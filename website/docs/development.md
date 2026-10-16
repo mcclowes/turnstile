@@ -9,8 +9,11 @@ slug: /development
 ```sh
 swift test             # unit tests
 ./scripts/e2e.sh       # end-to-end, with fake tools in a throwaway turnstile home
+node --test scripts/e2e-server-tests.mjs  # isolated escaped-server process checks
 node --test scripts/history-report-tests.mjs  # isolated history-report fixtures
 ```
+
+The E2E server checks use disposable processes to verify that one run's lookup and cleanup leave other runs alive. They need process-list access; CI runs them on macOS. Each E2E run uses a unique server marker, including EXIT cleanup.
 
 The history-report fixtures check argument validation and read-only reports using temporary SQLite databases. They don't read installed history or control the daemon.
 

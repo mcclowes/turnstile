@@ -6,6 +6,8 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ### Fixed
 
+- Concurrent E2E runs no longer detect or stop each other's escaped build servers.
+
 - The history report rejects invalid day counts and extra arguments before reading history.
 
 ## 0.9.0

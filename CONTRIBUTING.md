@@ -17,10 +17,13 @@ swift build
 swift test             # unit tests
 ./scripts/e2e.sh       # end-to-end, with fake tools in a throwaway turnstile home
 ./scripts/coverage.sh  # unit tests with a coverage report
+node --test scripts/history-report-tests.mjs  # isolated history-report fixtures
 swift format lint --recursive Sources Tests Package.swift
 ```
 
 `swift format` ships with Xcode and reads `.swift-format`; `swift format --in-place <file>` fixes most of what the lint reports.
+
+The history-report fixtures use temporary SQLite databases and stub executables. They don't read installed history or control the daemon.
 
 The e2e script never touches your real `~/.turnstile`. To try a local build for real, run `.build/debug/turnstile init`, and `turnstile uninstall` when you're done.
 

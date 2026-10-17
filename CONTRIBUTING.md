@@ -70,6 +70,8 @@ The code is split into three targets:
 
 The docs site lives in `website/` (`npm install && npm start`).
 
+Its toolchain supports Node 22.18.0 or newer in the 22.x line, Node 24.x, or Node 26 or newer, matching the existing CSpell and Vitest requirements. Website CI uses Node 22.
+
 turnstile has no package dependencies. Adding one, or a new `.linkedLibrary`, needs a reviewed license record in `ThirdParty/`; `node scripts/license-check.mjs` fails CI until it has one. [ThirdParty/README.md](ThirdParty/README.md) has the steps.
 
 ## Pull requests

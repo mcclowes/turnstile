@@ -23,6 +23,8 @@ Jobs can be named by queue number, pid, or name.
 
 `turnstile history` reads the same history the scheduler estimates from, so it shows the numbers behind every admission decision. It works with the daemon asleep.
 
+`--days` and `--limit` require positive integers; a missing or invalid value exits with usage status `64`. The limit caps the command table, while period totals still cover all matching jobs.
+
 ```
 $ turnstile history --days 7
 history: 214 jobs in 4 projects over 7 days, 188 from agents

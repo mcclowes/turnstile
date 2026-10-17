@@ -412,6 +412,9 @@ enum CLI {
         do { parsed = try RunArguments.parse(args) } catch RunArguments.Problem.unknownClass(let value) {
             warn("unknown class \(value) (use compile, test, or browser)")
             exit(64)
+        } catch RunArguments.Problem.helpRequested {
+            print(usage)
+            exit(0)
         } catch {
             warn("usage: turnstile run [--class compile|test|browser] -- <command>")
             exit(64)

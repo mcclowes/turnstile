@@ -4,6 +4,44 @@ import Testing
 @testable import TurnstileCore
 
 struct CLITests {
+    @Test(
+        .bug("https://github.com/mcclowes/turnstile/issues/121"),
+        arguments: [
+            ["run", "--help"], ["run", "-h"],
+            ["run", "--class", "test", "--help"], ["run", "--class=browser", "-h"],
+        ])
+    func runHelpStopsBeforeExecutableLookup(_ arguments: [String]) throws {
+        let (run, daemon) = try ShimRun.run(cliArguments: arguments) { paths in
+            FakeDaemon(socket: paths.socket) { _, _, _, _ in }
+        }
+        #expect(run.exitCode == 0)
+        #expect(run.stdout.contains("turnstile run [--class compile|test|browser]"))
+        #expect(run.stderr.isEmpty)
+        #expect(run.toolRuns.isEmpty)
+        #expect(daemon.types.isEmpty)
+        #expect(run.ungated.isEmpty)
+    }
+
+    @Test(arguments: ["--help", "-h"])
+    func wrappedHelpFlagsStillReachTheTool(_ flag: String) throws {
+        let (run, daemon) = try ShimRun.run(
+            cliArguments: ["run", "--class", "test", "--", "swift", flag]
+        ) { paths in
+            FakeDaemon(socket: paths.socket) { message, _, send, _ in
+                if message.type == "request" { send(reply("admitted", job: 12)) }
+                if message.type == "finished" { send(reply("ok")) }
+            }
+        }
+        #expect(run.exitCode == 0)
+        #expect(run.stdout == "fake swift \(flag)\n")
+        #expect(run.stderr.isEmpty)
+        #expect(run.toolRuns.count == 1)
+        let request = try #require(daemon.received.first { $0.message.type == "request" }?.message)
+        #expect(request.argv == [run.toolPath, flag])
+        #expect(request.resourceClass == .test)
+        #expect(daemon.types == ["request", "started", "finished"])
+    }
+
     @Test(arguments: [["run", "--class"], ["run", "--class=test", "--class"]])
     func missingClassValueStopsBeforeExecutableLookup(_ arguments: [String]) throws {
         let (run, daemon) = try ShimRun.run(cliArguments: arguments) { paths in

@@ -14,6 +14,7 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ### Fixed
 
+- `run --help` and `run -h` show usage before executable lookup. Help flags after the command or `--` remain unchanged.
 - Corrected the documentation site's supported Node range to match CSpell and Vitest.
 - A missing value for `run --class` is rejected as a usage error instead of being looked up as a command.
 - E2E restart polling retries invalid snapshots quietly and requires a valid replacement PID from a successful status command.

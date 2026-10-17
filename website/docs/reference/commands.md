@@ -67,6 +67,8 @@ History is kept for 30 days in `~/.turnstile/state.sqlite`, on your machine.
 
 `run` exits with usage status `64` when the command or a `--class` value is missing, or the class is unknown. These failures occur before executable lookup or daemon contact. Turnstile only parses options before the command or `--`; later arguments are passed through unchanged.
 
+Use `turnstile run --help` or `turnstile run -h` to show help and exit successfully without running a command or contacting the daemon. Help also works after a valid `--class` option. To ask the wrapped command for help, put its help flag after the command, for example `turnstile run -- swift --help`.
+
 ## Setup and config
 
 | Command | What it does |

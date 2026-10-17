@@ -15,6 +15,15 @@ struct RunArgumentsTests {
         #expect(
             try RunArguments.parse(["--class=browser", "npx", "playwright"])
                 == RunArguments(forced: .browser, command: ["npx", "playwright"]))
+        #expect(
+            try RunArguments.parse(["swift", "--class"])
+                == RunArguments(forced: nil, command: ["swift", "--class"]))
+        #expect(
+            try RunArguments.parse(["--class=test", "swift", "--class"])
+                == RunArguments(forced: .test, command: ["swift", "--class"]))
+        #expect(
+            try RunArguments.parse(["--", "--class"])
+                == RunArguments(forced: nil, command: ["--class"]))
     }
 
     @Test func rejectsBadInput() {
@@ -22,5 +31,10 @@ struct RunArgumentsTests {
             try RunArguments.parse(["--class", "fast", "--", "make"])
         }
         #expect(throws: RunArguments.Problem.noCommand) { try RunArguments.parse(["--class", "test", "--"]) }
+    }
+
+    @Test(arguments: [["--class"], ["--class=test", "--class"]])
+    func missingClassValueIsAUsageError(_ args: [String]) {
+        #expect(throws: RunArguments.Problem.noCommand) { try RunArguments.parse(args) }
     }
 }

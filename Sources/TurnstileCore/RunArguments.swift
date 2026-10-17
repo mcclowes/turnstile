@@ -23,7 +23,8 @@ public struct RunArguments: Equatable, Sendable {
                 break
             }
             let value: String
-            if arg == "--class", index + 1 < args.count {
+            if arg == "--class" {
+                guard index + 1 < args.count else { throw Problem.noCommand }
                 value = args[index + 1]
                 index += 2
             } else if arg.hasPrefix("--class=") {

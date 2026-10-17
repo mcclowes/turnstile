@@ -4,6 +4,19 @@ import Testing
 @testable import TurnstileCore
 
 struct CLITests {
+    @Test(arguments: [["run", "--class"], ["run", "--class=test", "--class"]])
+    func missingClassValueStopsBeforeExecutableLookup(_ arguments: [String]) throws {
+        let (run, daemon) = try ShimRun.run(cliArguments: arguments) { paths in
+            FakeDaemon(socket: paths.socket) { _, _, _, _ in }
+        }
+        #expect(run.exitCode == 64)
+        #expect(run.stdout.isEmpty)
+        #expect(run.stderr.contains("usage: turnstile run"))
+        #expect(run.toolRuns.isEmpty)
+        #expect(daemon.types.isEmpty)
+        #expect(run.ungated.isEmpty)
+    }
+
     @Test(arguments: [
         ("{}", "{}", "only agent compiles may be paused"),
         (#"{"throttle":{"pause":true}}"#, "{}", "all agent jobs may be paused"),

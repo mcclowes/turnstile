@@ -65,6 +65,8 @@ History is kept for 30 days in `~/.turnstile/state.sqlite`, on your machine.
 | `turnstile restart` | Replace the daemon. Waiting jobs requeue, and running jobs continue under the new daemon |
 | `turnstile stop` | Stop the daemon and fail open. Waiting jobs run ungated, and running jobs continue untracked |
 
+`run` exits with usage status `64` when the command or a `--class` value is missing, or the class is unknown. These failures occur before executable lookup or daemon contact. Turnstile only parses options before the command or `--`; later arguments are passed through unchanged.
+
 ## Setup and config
 
 | Command | What it does |

@@ -14,6 +14,7 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ### Fixed
 
+- A missing value for `run --class` is rejected as a usage error instead of being looked up as a command.
 - E2E restart polling retries invalid snapshots quietly and requires a valid replacement PID from a successful status command.
 - Fixed rounding at the grace period boundary in the daemon test for runaway jobs.
 - Release publication rejects missing or whitespace-only changelog notes before checking GitHub releases.

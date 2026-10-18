@@ -1,0 +1,8 @@
+{
+  "related": [
+    {
+      "repo": "mcclowes/homebrew-turnstile",
+      "relation": "Homebrew distribution: scripts/publish.sh updates Formula/turnstile.rb (CLI) and Casks/turnstile-app.rb (menu bar app)."
+    }
+  ]
+}

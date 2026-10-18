@@ -9,6 +9,10 @@
 #   CODESIGN_IDENTITY   signing identity (default "Developer ID Application")
 #   NOTARY_PROFILE      notarytool keychain profile (default kiln-notary, the shared Apple-account profile)
 set -euo pipefail
+if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && [ "$1" != "--dev" ]; }; then
+  echo "Usage: scripts/package.sh [--dev]" >&2
+  exit 2
+fi
 cd "$(dirname "$0")/.."
 
 DEV=false

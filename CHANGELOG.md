@@ -11,6 +11,7 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 ### Fixed
 
 - Reject whitespace-only release notes before checking or publishing a release.
+- Reject invalid or extra release-helper arguments before building, signing, or publishing.
 
 ## 0.9.0
 

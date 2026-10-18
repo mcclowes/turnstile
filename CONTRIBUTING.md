@@ -18,9 +18,14 @@ swift test             # unit tests
 ./scripts/e2e.sh       # end-to-end, with fake tools in a throwaway turnstile home
 ./scripts/coverage.sh  # unit tests with a coverage report
 swift format lint --recursive Sources Tests Package.swift
+node --test scripts/release-args-tests.mjs scripts/release-notes-tests.mjs # blocked external tools
 ```
 
 `swift format` ships with Xcode and reads `.swift-format`; `swift format --in-place <file>` fixes most of what the lint reports.
+
+Release helpers accept only their documented modes: `package.sh` takes no arguments or `--dev`,
+`publish.sh` takes no arguments or `--check`, and `dist.sh` and `release.sh` take no arguments.
+Invalid, empty, or extra arguments exit 2 with usage before external tools run.
 
 The e2e script never touches your real `~/.turnstile`. To try a local build for real, run `.build/debug/turnstile init`, and `turnstile uninstall` when you're done.
 

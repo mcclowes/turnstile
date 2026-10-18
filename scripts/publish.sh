@@ -9,6 +9,10 @@
 # Env: GH_TOKEN      if gh isn't logged in, with contents write on this repo (and the tap, without TAP_GH_TOKEN)
 #      TAP_GH_TOKEN  optional, with contents write on the tap, used for the tap alone
 set -euo pipefail
+if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && [ "$1" != "--check" ]; }; then
+  echo "Usage: scripts/publish.sh [--check]" >&2
+  exit 2
+fi
 cd "$(dirname "$0")/.."
 
 REPO=mcclowes/turnstile

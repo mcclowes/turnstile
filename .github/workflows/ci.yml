@@ -18,8 +18,8 @@ jobs:
         run: |
           node --test scripts/license-check-tests.mjs
           node scripts/license-check.mjs
-      - name: Release helper arguments
-        run: node --test scripts/release-args-tests.mjs
+      - name: Release helper checks
+        run: node --test --test-concurrency=1 scripts/release-args-tests.mjs scripts/package-tests.mjs
       - name: Release note checks
         run: node --test scripts/release-notes-tests.mjs
 

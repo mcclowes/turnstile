@@ -20,8 +20,8 @@ DEV=false
 VERSION="$(sed -n 's/.*public static let version = "\(.*\)"/\1/p' Sources/TurnstileCore/Paths.swift)"
 IDENTITY="${CODESIGN_IDENTITY:-Developer ID Application}"
 PROFILE="${NOTARY_PROFILE:-kiln-notary}"
-APP=.build/Turnstile.app
-ZIP=".build/Turnstile-$VERSION.zip"
+FINAL_APP=.build/Turnstile.app
+FINAL_ZIP=".build/Turnstile-$VERSION.zip"
 
 if [ "$DEV" = false ] && [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   echo "package.sh: a release is packaged from a clean commit; commit first, or pass --dev" >&2
@@ -32,7 +32,62 @@ arch=(--arch arm64 --arch x86_64)
 swift build -c release --product TurnstileBar "${arch[@]}"
 bin="$(swift build -c release --product TurnstileBar "${arch[@]}" --show-bin-path)"
 
-rm -rf "$APP" "$ZIP"
+mkdir -p .build
+package_stage=$(mktemp -d .build/.turnstile-package.XXXXXX)
+previous_app="$package_stage/previous-app"
+previous_zip="$package_stage/previous.zip"
+app_promoting=false
+zip_promoting=false
+package_committed=false
+restore_package_artifact() {
+  local backup="$1" final="$2" promoting="$3"
+  if [ "$promoting" = true ] && ! rm -rf "$final"; then
+    return 1
+  fi
+  if [ -e "$backup" ] || [ -L "$backup" ]; then
+    mv "$backup" "$final" || return 1
+  fi
+  return 0
+}
+cleanup_package() {
+  local exit_status=$?
+  local retain_recovery=false
+  if [ "$package_committed" = false ]; then
+    if ! restore_package_artifact "$previous_zip" "$FINAL_ZIP" "$zip_promoting"; then
+      retain_recovery=true
+    fi
+    if ! restore_package_artifact "$previous_app" "$FINAL_APP" "$app_promoting"; then
+      retain_recovery=true
+    fi
+  fi
+  if [ "$retain_recovery" = true ]; then
+    echo "package.sh: rollback failed; recovery files retained in $package_stage" >&2
+    [ "$exit_status" -ne 0 ] || exit_status=1
+  else
+    rm -rf "$package_stage"
+  fi
+  return "$exit_status"
+}
+publish_package() {
+  if [ -e "$FINAL_APP" ] || [ -L "$FINAL_APP" ]; then
+    mv "$FINAL_APP" "$previous_app"
+  fi
+  if [ "$DEV" = false ] && { [ -e "$FINAL_ZIP" ] || [ -L "$FINAL_ZIP" ]; }; then
+    mv "$FINAL_ZIP" "$previous_zip"
+  fi
+  app_promoting=true
+  mv "$APP" "$FINAL_APP"
+  if [ "$DEV" = false ]; then
+    zip_promoting=true
+    mv "$ZIP" "$FINAL_ZIP"
+  fi
+  package_committed=true
+}
+trap cleanup_package EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+APP="$package_stage/Turnstile.app"
+ZIP="$package_stage/Turnstile-$VERSION.zip"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$bin/TurnstileBar" "$APP/Contents/MacOS/"
 cp assets/AppIcon.icns "$APP/Contents/Resources/"
@@ -58,7 +113,8 @@ PLIST
 
 if [ "$DEV" = true ]; then
   codesign --force --sign - "$APP"
-  echo "$APP (ad-hoc signed, not notarized)"
+  publish_package
+  echo "$FINAL_APP (ad-hoc signed, not notarized)"
   exit 0
 fi
 
@@ -82,4 +138,6 @@ spctl --assess --type execute --verbose=2 "$APP"
 # Re-zip so the zip carries the stapled ticket.
 rm "$ZIP"
 ditto -c -k --keepParent "$APP" "$ZIP"
-shasum -a 256 "$ZIP"
+checksum="$(shasum -a 256 "$ZIP")"
+publish_package
+printf '%s  %s\n' "${checksum%% *}" "$FINAL_ZIP"

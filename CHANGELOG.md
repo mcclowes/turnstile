@@ -13,6 +13,7 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 - Reject whitespace-only release notes before checking or publishing a release.
 - Reject invalid or extra release-helper arguments before building, signing, or publishing.
 - Keep prior app and ZIP artifacts after failed packaging or publication, preserve release ZIPs in dev mode, and retain recovery files if restoration fails.
+- Preserve the prior distribution through assembly and publication failures, restore it after handled interruptions, and report retained recovery data if restoration fails.
 
 ## 0.9.0
 

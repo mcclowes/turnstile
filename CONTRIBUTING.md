@@ -18,7 +18,8 @@ swift test             # unit tests
 ./scripts/e2e.sh       # end-to-end, with fake tools in a throwaway turnstile home
 ./scripts/coverage.sh  # unit tests with a coverage report
 swift format lint --recursive Sources Tests Package.swift
-node --test --test-concurrency=1 scripts/release-args-tests.mjs scripts/package-tests.mjs scripts/release-notes-tests.mjs # blocked external tools
+node --test --test-concurrency=1 scripts/release-args-tests.mjs scripts/package-tests.mjs \
+  scripts/dist-tests.mjs scripts/release-notes-tests.mjs # blocked external tools
 ```
 
 `swift format` ships with Xcode and reads `.swift-format`; `swift format --in-place <file>` fixes most of what the lint reports.
@@ -33,6 +34,12 @@ and handled interruptions restore the previous app and ZIP. If restoration fails
 the error identifies retained recovery files. `scripts/package.sh --dev` replaces
 only the app and preserves the release ZIP. Package tests use temporary projects
 without building, signing, or contacting a notary service.
+
+Distribution assembly stages the CLI tarball, app ZIP, and checksums before
+replacing `.build/dist`. Failed promotion or handled interruptions restore the
+previous directory; failed restoration reports retained recovery directories.
+A separately successful app package remains in place if distribution assembly
+later fails. Distribution tests use synthetic tools and real archives/checksums.
 
 The e2e script never touches your real `~/.turnstile`. To try a local build for real, run `.build/debug/turnstile init`, and `turnstile uninstall` when you're done.
 

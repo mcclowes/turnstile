@@ -8,10 +8,10 @@ The commands this repo already uses, from CONTRIBUTING.md, the CI workflows, and
 - Coverage: `./scripts/coverage.sh` — unit tests with a per-file report, writes .build/coverage.lcov #monitor #safe
 - Lint: `swift format lint --recursive --parallel Sources Tests Package.swift` #quick #safe
 - License check: `node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs` — ThirdParty/ records for every dependency #quick #safe
-- Release helper arguments: `node --test scripts/release-args-tests.mjs` — argument guards with temporary repositories and blocked external tools #quick #safe
+- Release helper checks: `node --test --test-concurrency=1 scripts/release-args-tests.mjs scripts/package-tests.mjs scripts/dist-tests.mjs` — argument, packaging, and distribution fixtures in temporary projects with fake tools #quick #safe
 - Package checks: `node --test scripts/package-tests.mjs` — artifact staging, publication, and recovery with temporary projects and fake signing tools #quick #safe
 - Release note checks: `node --test scripts/release-notes-tests.mjs` — publication helper with temporary repositories and recording tools #quick #safe
-- CI checks: `swift format lint --recursive --parallel Sources Tests Package.swift && node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs && node --test --test-concurrency=1 scripts/release-args-tests.mjs scripts/package-tests.mjs && node --test scripts/release-notes-tests.mjs && ./scripts/coverage.sh && ./scripts/e2e.sh && swift build -c release && ./scripts/package.sh --dev` — the lint and test jobs from ci.yml, in order #monitor #ci #destructive
+- CI checks: `swift format lint --recursive --parallel Sources Tests Package.swift && node --test scripts/license-check-tests.mjs && node scripts/license-check.mjs && node --test --test-concurrency=1 scripts/release-args-tests.mjs scripts/package-tests.mjs scripts/dist-tests.mjs && node --test scripts/release-notes-tests.mjs && ./scripts/coverage.sh && ./scripts/e2e.sh && swift build -c release && ./scripts/package.sh --dev` — the lint and test jobs from ci.yml, in order #monitor #ci #destructive
 - Release build: `swift build -c release` #quick #safe
 - Menu bar app (dev): `./scripts/package.sh --dev` — ad-hoc signed Turnstile.app, not notarized #quick #safe
 - Try local build: `.build/debug/turnstile init` — installs this build for real; `turnstile uninstall` when done #quick #destructive

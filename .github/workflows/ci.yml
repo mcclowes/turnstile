@@ -19,7 +19,7 @@ jobs:
           node --test scripts/license-check-tests.mjs
           node scripts/license-check.mjs
       - name: Release helper checks
-        run: node --test --test-concurrency=1 scripts/release-args-tests.mjs scripts/package-tests.mjs
+        run: node --test --test-concurrency=1 scripts/release-args-tests.mjs scripts/package-tests.mjs scripts/dist-tests.mjs
       - name: Release note checks
         run: node --test scripts/release-notes-tests.mjs
 

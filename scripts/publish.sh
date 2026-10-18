@@ -24,11 +24,11 @@ fail() { echo "publish.sh: $*" >&2; exit 1; }
 as_tap() { if [ -n "${TAP_GH_TOKEN:-}" ]; then GH_TOKEN="$TAP_GH_TOKEN" "$@"; else "$@"; fi; }
 for_repo() { if [ "$1" = "$TAP" ]; then shift; as_tap "$@"; else shift; "$@"; fi; }
 
+CHANGES="$(awk -v v="## $VERSION" '$0 == v {on=1; next} /^## / {on=0} on' CHANGELOG.md | sed '/./,$!d')"
+[[ "$CHANGES" =~ [^[:space:]] ]] || fail "CHANGELOG.md has no \"## $VERSION\" section with release notes"
 for repo in "$TAP" "$REPO"; do
   for_repo "$repo" gh release view "$TAG" --repo "$repo" >/dev/null 2>&1 && fail "$repo already has a $TAG release"
 done
-CHANGES="$(awk -v v="## $VERSION" '$0 == v {on=1; next} /^## / {on=0} on' CHANGELOG.md | sed '/./,$!d')"
-[ -n "$CHANGES" ] || fail "CHANGELOG.md has no \"## $VERSION\" section"
 [ "${1:-}" = "--check" ] && exit 0
 
 for f in "$TARBALL" "$ZIP" "$DIST/SHA256SUMS"; do

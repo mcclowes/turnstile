@@ -8,6 +8,10 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 - Correct the documentation toolchain's Node requirement to `^22.18.0 || ^24.0.0 || >=26.0.0`.
 
+### Fixed
+
+- Reject whitespace-only release notes before checking or publishing a release.
+
 ## 0.9.0
 
 ### Added

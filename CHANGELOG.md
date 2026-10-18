@@ -2,6 +2,12 @@
 
 Notable changes to turnstile. Versions follow [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+### Changed
+
+- Correct the documentation toolchain's Node requirement to `^22.18.0 || ^24.0.0 || >=26.0.0`.
+
 ## 0.9.0
 
 ### Added

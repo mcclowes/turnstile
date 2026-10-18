@@ -30,7 +30,8 @@ The code is split into three targets:
 - `turnstile`: the CLI, the shim's supervisor, and the daemon.
 - `TurnstileBar`: the menu bar app.
 
-The docs site lives in `website/` (`npm install && npm start`).
+The docs site lives in `website/` (`npm install && npm start`). Its locked toolchain
+supports Node `^22.18.0 || ^24.0.0 || >=26.0.0`; CI uses Node 22.
 
 turnstile has no package dependencies. Adding one, or a new `.linkedLibrary`, needs a reviewed license record in `ThirdParty/`; `node scripts/license-check.mjs` fails CI until it has one. [ThirdParty/README.md](ThirdParty/README.md) has the steps.
 

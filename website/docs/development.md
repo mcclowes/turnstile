@@ -9,6 +9,7 @@ slug: /development
 ```sh
 swift test             # unit tests
 ./scripts/e2e.sh       # end-to-end, with fake tools in a throwaway turnstile home
+/usr/bin/python3 scripts/e2e-top-tests.py # daemon-free PTY driver checks
 node --test scripts/history-report-tests.mjs # isolated report input and SQLite checks
 ```
 
@@ -19,6 +20,8 @@ databases.
 
 Pressure and restart E2E fixtures keep fake jobs alive until the required state
 is observed, then release their wait files and check completion.
+
+The top driver checks exercise a fake CLI in a temporary home. Full E2E reports job visibility, pause, kill confirmation, target removal, UI exit, terminal restoration, driver errors, and caller status separately. Failures print the last status snapshot, PTY tail, and job output.
 
 ## Docs
 

@@ -49,6 +49,8 @@ failed move or handled interruption restores the previous directory. If
 restoration fails, the error reports retained recovery directories rather than
 discarding the backup.
 
+The top driver checks exercise a fake CLI in a temporary home. Full E2E reports job visibility, pause, kill confirmation, target removal, UI exit, terminal restoration, driver errors, and caller status separately. Failures print the last status snapshot, PTY tail, and job output.
+
 The e2e script never touches your real `~/.turnstile`. To try a local build for real, run `.build/debug/turnstile init`, and `turnstile uninstall` when you're done.
 
 Pressure and restart fixtures keep fake jobs alive with wait files until their

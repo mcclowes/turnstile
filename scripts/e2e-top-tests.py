@@ -19,21 +19,35 @@ if sys.argv[1:] != ["top"]:
     sys.exit(64)
 saved = termios.tcgetattr(0)
 tty.setraw(0)
-sys.stdout.write("\x1b[?1049ha swift build\r\n")
-sys.stdout.flush()
+selected = json.loads(state.read_text())["running"][0]["id"]
+def draw(snapshot):
+    sys.stdout.write("\x1b[H")
+    for job in snapshot["running"] + snapshot.get("queued", []):
+        label = f'{job["id"]} {job["project"]} {job["key"]}'
+        sys.stdout.write(("\x1b[7m▸ " + label + "\x1b[0m" if job["id"] == selected else "  " + label) + "\r\n")
+    sys.stdout.flush()
+sys.stdout.write("\x1b[?1049h")
+draw(json.loads(state.read_text()))
 while True:
     key = sys.stdin.read(1)
     snapshot = json.loads(state.read_text())
-    if key == "p":
+    jobs = snapshot["running"] + snapshot.get("queued", [])
+    index = next((index for index, job in enumerate(jobs) if job["id"] == selected), 0)
+    if key in ("j", "k"):
+        index = max(0, min(len(jobs) - 1, index + (1 if key == "j" else -1)))
+        selected = jobs[index]["id"]
+    elif key == "p":
         if os.environ.get("FAKE_OTHER_JOB"):
             snapshot["running"].append(dict(id=99, project="other", key="swift build", pausedBy="you"))
         else:
-            snapshot["running"][0]["pausedBy"] = "you"
+            next(job for job in snapshot["running"] if job["id"] == selected)["pausedBy"] = "you"
     elif key == "x":
-        sys.stdout.write("kill #11 a swift build? y/n")
+        sys.stdout.write(f"kill #{selected}? y/n")
         sys.stdout.flush()
     elif key == "y":
-        snapshot["running"] = []
+        snapshot["running"] = [job for job in snapshot["running"] if job["id"] != selected]
+        if snapshot["running"]:
+            selected = snapshot["running"][0]["id"]
     elif key == "q":
         if os.environ.get("FAKE_IGNORE_QUIT"):
             continue
@@ -45,6 +59,7 @@ while True:
     pending = state.with_suffix(".pending")
     pending.write_text(json.dumps(snapshot))
     pending.replace(state)
+    draw(snapshot)
 '''
 
 
@@ -56,7 +71,10 @@ class TopDriverTests(unittest.TestCase):
             executable.write_text(FAKE_CLI)
             executable.chmod(0o755)
             state = root / "state.json"
-            state.write_text(json.dumps(dict(running=[dict(id=11, project="a", key="swift build")], queued=[])))
+            jobs = [dict(id=11, project="a", key="swift build")]
+            if overrides.get("FAKE_INITIAL_OTHER_JOB"):
+                jobs.insert(0, dict(id=99, project="other", key="swift build"))
+            state.write_text(json.dumps(dict(running=jobs, queued=[])))
             environment = dict(os.environ, PATH=f"{root}:/usr/bin:/bin", FAKE_TOP_STATE=str(state), **overrides)
             transcript = root / "transcript"
             response = subprocess.run(["/usr/bin/python3", str(DRIVER), "a", "swift build", str(transcript),
@@ -71,6 +89,17 @@ class TopDriverTests(unittest.TestCase):
         self.assertEqual(result["exit"], 0)
         self.assertEqual(result["errors"], [])
         self.assertTrue(transcript.endswith(b"\x1b[?1049l"))
+
+    def test_selects_the_target_before_controlling_a_row(self):
+        result, transcript = self.drive(FAKE_INITIAL_OTHER_JOB="1")
+        for field in ("visible", "paused", "prompted", "killed", "restored"):
+            self.assertTrue(result[field], (field, result))
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(result["exit"], 0)
+        self.assertEqual([job["id"] for job in result["status"]["running"]], [99])
+        self.assertNotIn("pausedBy", result["status"]["running"][0])
+        self.assertIn(b"kill #11? y/n", transcript)
+        self.assertNotIn(b"kill #99? y/n", transcript)
 
     def test_pausing_another_job_does_not_satisfy_the_target_handshake(self):
         result, _ = self.drive(FAKE_OTHER_JOB="1")

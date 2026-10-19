@@ -481,8 +481,17 @@ touch "$T/top.wait"
 top_job=$!
 wait_for_job running a "swift build"
 out="$(/usr/bin/python3 "$E2E_TOP_DRIVER" a "swift build" "$T/top.pty")"
+# Capture the caller result before fallback cleanup can change it.
+top_code=""
+for _ in {1..100}; do
+  top_code="$(cat "$T/top.code" 2>/dev/null)"
+  [ -n "$top_code" ] && break
+  sleep 0.05
+done
 # Release the fixture even if a handshake failed, so diagnostics cannot hang the suite.
-turnstile kill 'a swift build' > /dev/null 2>&1 || turnstile resume 'a swift build' > /dev/null 2>&1 || true
+if [ -z "$top_code" ]; then
+  turnstile kill 'a swift build' > /dev/null 2>&1 || turnstile resume 'a swift build' > /dev/null 2>&1 || true
+fi
 rm -f "$T/top.wait"
 wait "$top_job"
 top_failures=$failures
@@ -500,9 +509,10 @@ top_check "top removes the selected job after confirmation" killed true
 top_check "top exits successfully after q" exit 0
 top_check "top restores the terminal after exit" restored true
 top_check "top completes without driver errors" errors '[]'
-check "top tells the killed caller not to retry" '[ "$(cat "$T/top.code" 2>/dev/null)" = 125 ]'
+check "top tells the killed caller not to retry" '[ "$top_code" = 125 ]'
 if [ "$failures" != "$top_failures" ]; then
   printf 'top handshake diagnostics: %s\n' "$out"
+  printf 'top caller status before cleanup: %s\n' "${top_code:-missing}"
   echo 'top PTY output (last 2000 bytes):'
   tail -c 2000 "$T/top.pty" 2>/dev/null
   echo

@@ -11,3 +11,6 @@ updates:
     groups:
       docusaurus:
         patterns: ["@docusaurus/*"]
+      # react-dom pins an exact react peer; separate bumps fail npm ci.
+      react:
+        patterns: ["react", "react-dom"]

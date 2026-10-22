@@ -9,6 +9,7 @@ public enum MenuBarState {
     public static let pausedSymbol = "pause.circle"
     public static let pressureSymbol = "exclamationmark.triangle"
     public static let disabledSymbol = "shield.slash"
+    public static let overdueSymbol = "clock.badge.exclamationmark"
     /// Below this, the icon warns even if nothing has been paused yet.
     public static let lowMemoryPercent = 15
     /// Below this, memory is worth watching but nothing is wrong yet.
@@ -53,6 +54,9 @@ public enum MenuBarState {
         if snapshot.memoryLevel < lowMemoryPercent || snapshot.running.contains(where: { $0.pausedBy == "memory" }) {
             return Indicator(symbol: pressureSymbol, count: count, tone: .danger)
         }
+        if snapshot.running.contains(where: isOverdue) {
+            return Indicator(symbol: overdueSymbol, count: count, tone: .warning)
+        }
         if snapshot.running.contains(where: \.paused) {
             return Indicator(symbol: pausedSymbol, count: count, tone: .warning)
         }
@@ -93,7 +97,50 @@ public enum MenuBarState {
             return job.pausedBy == "memory"
                 ? Tag(text: "Paused for memory", tone: .warning) : Tag(text: "Paused", tone: .neutral)
         }
+        if isOverdue(job) { return Tag(text: "Stuck?", tone: .danger) }
         return nil
+    }
+
+    /// Past this, a run is overdue unless it usually takes longer.
+    public static let overdueCeiling: Double = 2 * 3600
+    /// Against history: this many times its usual run time...
+    public static let overdueMultiple: Double = 3
+    /// ...and at least this far past it, so a 20s test taking a minute isn't news.
+    public static let overdueMinimumGap: Double = 10 * 60
+
+    /// Running far longer than it should. Its unused estimate stays committed, so the queue waits behind it.
+    public static func isOverdue(_ job: JobSnapshot) -> Bool {
+        guard job.state != "queued", let ran = job.ranFor else { return false }
+        guard let usual = job.usualDuration, usual > 0 else { return ran >= overdueCeiling }
+        if ran >= overdueCeiling && ran > usual { return true }
+        return ran >= usual * overdueMultiple && ran - usual >= overdueMinimumGap
+    }
+
+    /// Memory the job is committed to but not using: what the queue is waiting on.
+    static func heldBack(by job: JobSnapshot) -> UInt64 {
+        job.estimate > (job.footprint ?? 0) ? job.estimate - (job.footprint ?? 0) : 0
+    }
+
+    /// "15h33m, usually 8m": how long it's run, against its history when there is one.
+    static func runSummary(_ job: JobSnapshot) -> String {
+        let ran = formatDuration(job.ranFor ?? 0)
+        return job.usualDuration.map { "\(ran), usually \(shortDuration($0))" } ?? ran
+    }
+
+    public static func overdueHelp(for job: JobSnapshot) -> String? {
+        guard isOverdue(job) else { return nil }
+        let held = heldBack(by: job)
+        let holding =
+            held > 0
+            ? " It still counts ~\(Bytes.format(held)) it isn't using against memory, so queued jobs may wait behind it."
+            : ""
+        return "Running \(runSummary(job)).\(holding) Kill it if it's stuck."
+    }
+
+    /// "usually 8m" beside the timing once a run has passed its usual time.
+    public static func usualText(for job: JobSnapshot) -> String? {
+        guard let usual = job.usualDuration, let ran = job.ranFor, ran > usual else { return nil }
+        return "usually \(shortDuration(usual))"
     }
 
     /// "25% of ~2 GB" once it's running, "~2 GB expected" while it waits. The share isn't clamped, so a job over its estimate says so.
@@ -226,7 +273,7 @@ public enum MenuBarState {
 
     public struct Event: Equatable, Sendable {
         public enum Kind: String, CaseIterable, Sendable {
-            case memoryPause, runawayKill, longWait, ownFailure, queueDrained
+            case memoryPause, runawayKill, longWait, ownFailure, overdue, queueDrained
 
             /// Menu label for the toggle.
             public var title: String {
@@ -235,6 +282,7 @@ public enum MenuBarState {
                 case .runawayKill: return "Killed as a runaway"
                 case .longWait: return "Your job started after a long wait"
                 case .ownFailure: return "Your run failed"
+                case .overdue: return "A job may be stuck"
                 case .queueDrained: return "Queue is clear"
                 }
             }
@@ -245,13 +293,16 @@ public enum MenuBarState {
             public var urgency: Urgency {
                 switch self {
                 case .memoryPause: return .timeSensitive
-                case .runawayKill, .longWait, .ownFailure: return .active
+                case .runawayKill, .longWait, .ownFailure, .overdue: return .active
                 case .queueDrained: return .passive
                 }
             }
 
             /// Buttons on the notification, sent as control messages to the event's job.
             public var actions: [Action] {
+                if self == .overdue {
+                    return [Action(title: "Kill", message: "kill", help: "Stop it and everything it started")]
+                }
                 guard self == .memoryPause else { return [] }
                 return [
                     Action(title: "Resume", message: "resume", help: "Resume it now, whatever memory is doing"),
@@ -280,6 +331,15 @@ public enum MenuBarState {
                 Event(
                     kind: .memoryPause, title: "Paused #\(job.id) \(job.label)",
                     body: "Memory is low (\(new.memoryLevel)% free). It resumes when memory recovers.", job: job.id))
+        }
+        let alreadyOverdue = Set(old.running.filter(isOverdue).map(\.id))
+        for job in new.running where isOverdue(job) && !alreadyOverdue.contains(job.id) {
+            let held = heldBack(by: job)
+            let holding = held > 0 ? " It's holding ~\(Bytes.format(held)) of memory the queue can't use." : ""
+            events.append(
+                Event(
+                    kind: .overdue, title: "#\(job.id) \(job.label) may be stuck",
+                    body: "Running \(runSummary(job)).\(holding)", job: job.id))
         }
         let wasQueued = Set(old.queued.map(\.id))
         for job in new.running where !job.agent && wasQueued.contains(job.id) {
@@ -312,6 +372,14 @@ public enum MenuBarState {
             events.append(Event(kind: .queueDrained, title: "Queue is clear", body: "Nothing is running or waiting."))
         }
         return events
+    }
+
+    /// "8m", "2h", "1h30m": a usual time is approximate, so seconds would be noise.
+    static func shortDuration(_ seconds: Double) -> String {
+        let minutes = Int((seconds / 60).rounded())
+        if seconds < 60 { return "\(Int(seconds.rounded()))s" }
+        if minutes < 60 { return "\(minutes)m" }
+        return minutes % 60 == 0 ? "\(minutes / 60)h" : "\(minutes / 60)h\(minutes % 60)m"
     }
 
     private static func duration(_ seconds: Double) -> String {

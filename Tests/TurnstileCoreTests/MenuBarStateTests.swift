@@ -245,7 +245,7 @@ struct MenuBarStateTests {
         #expect(Kind.allCases.filter { !$0.isOnByDefault } == [.queueDrained])
         #expect(Kind.memoryPause.urgency == .timeSensitive)
         #expect(Kind.queueDrained.urgency == .passive)
-        #expect([Kind.longWait, .ownFailure, .runawayKill].allSatisfy { $0.urgency == .active })
+        #expect([Kind.longWait, .ownFailure, .runawayKill, .overdue].allSatisfy { $0.urgency == .active })
         #expect(Kind.allCases.allSatisfy { !$0.title.isEmpty })
     }
 
@@ -254,6 +254,73 @@ struct MenuBarStateTests {
         #expect(MenuBarState.events(from: nil, to: now).isEmpty)
         #expect(MenuBarState.events(from: now, to: now).isEmpty)
         #expect(MenuBarState.events(from: now, to: nil).isEmpty)
+    }
+
+    func running(_ id: Int64, ranFor: Double?, usual: Double? = nil) -> JobSnapshot {
+        var job = job(id)
+        job.ranFor = ranFor
+        job.usualDuration = usual
+        job.estimate = 3 * Bytes.gb
+        job.footprint = Bytes.gb / 2
+        return job
+    }
+
+    @Test("A job far past its usual time is flagged, with a floor so short ones don't flap", .bug(id: 73))
+    func overdueAgainstHistory() {
+        #expect(!MenuBarState.isOverdue(running(1, ranFor: 20 * 60, usual: 8 * 60)))
+        #expect(MenuBarState.isOverdue(running(1, ranFor: 25 * 60, usual: 8 * 60)))
+        #expect(!MenuBarState.isOverdue(running(1, ranFor: 90, usual: 20)))
+        #expect(!MenuBarState.isOverdue(running(1, ranFor: nil, usual: 20)))
+        #expect(!MenuBarState.isOverdue(job(2, state: "queued")))
+    }
+
+    @Test("Hours in is overdue with or without history", .bug(id: 73))
+    func overdueWithoutHistory() {
+        #expect(!MenuBarState.isOverdue(running(1, ranFor: 90 * 60)))
+        #expect(MenuBarState.isOverdue(running(1, ranFor: MenuBarState.overdueCeiling)))
+        #expect(MenuBarState.isOverdue(running(1, ranFor: 15 * 3600, usual: 6 * 3600)))
+        #expect(!MenuBarState.isOverdue(running(1, ranFor: 3 * 3600, usual: 6 * 3600)))
+    }
+
+    @Test(.bug(id: 73)) func overdueRowsSayWhyAndWhatTheyHold() {
+        let stuck = running(1, ranFor: 15 * 3600 + 33 * 60, usual: 8 * 60)
+        #expect(MenuBarState.tag(for: stuck) == .init(text: "Stuck?", tone: .danger))
+        let help = MenuBarState.overdueHelp(for: stuck)
+        #expect(help?.contains("15h33m, usually 8m") == true)
+        #expect(help?.contains("2.5 GB") == true)
+        #expect(MenuBarState.overdueHelp(for: running(1, ranFor: 3 * 3600))?.contains("usually") == false)
+        #expect(MenuBarState.overdueHelp(for: running(1, ranFor: 60)) == nil)
+
+        var paused = stuck
+        paused.paused = true
+        paused.pausedBy = "you"
+        #expect(MenuBarState.tag(for: paused)?.text == "Paused")
+    }
+
+    @Test(.bug(id: 73)) func timingMentionsTheUsualOncePastIt() {
+        #expect(MenuBarState.usualText(for: running(1, ranFor: 5 * 60, usual: 8 * 60)) == nil)
+        #expect(MenuBarState.usualText(for: running(1, ranFor: 9 * 60, usual: 8 * 60)) == "usually 8m")
+        #expect(MenuBarState.usualText(for: running(1, ranFor: 9 * 60)) == nil)
+    }
+
+    @Test(.bug(id: 73)) func anOverdueJobColoursTheIcon() {
+        let indicator = MenuBarState.indicator(snapshot(running: [job(1), running(2, ranFor: 3 * 3600)]))
+        #expect(indicator == .init(symbol: MenuBarState.overdueSymbol, count: 2, tone: .warning))
+        #expect(
+            MenuBarState.indicator(snapshot(level: 10, running: [running(2, ranFor: 3 * 3600)])).symbol
+                == MenuBarState.pressureSymbol)
+    }
+
+    @Test(.bug(id: 73)) func notifiesOnceWhenAJobBecomesOverdue() {
+        let before = snapshot(running: [running(2, ranFor: 7000)])
+        let after = snapshot(running: [running(2, ranFor: 7300)])
+        let events = MenuBarState.events(from: before, to: after)
+        #expect(events.map(\.kind) == [.overdue])
+        #expect(events.first?.job == 2)
+        #expect(events.first?.title == "#2 api swift test may be stuck")
+        #expect(MenuBarState.events(from: after, to: snapshot(running: [running(2, ranFor: 7400)])).isEmpty)
+        #expect(MenuBarState.Event.Kind.overdue.actions.map(\.message) == ["kill"])
+        #expect(MenuBarState.Event.Kind.overdue.isOnByDefault)
     }
 
     @Test("A wait with a known end counts down between polls", .bug(id: 44))

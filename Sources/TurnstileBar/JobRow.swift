@@ -78,6 +78,7 @@ struct JobRow: View {
             }
             if let tag = MenuBarState.tag(for: job) {
                 TagLabel(tag: tag)
+                    .help(MenuBarState.overdueHelp(for: job) ?? "")
             }
             Spacer(minLength: 6)
             trailing
@@ -102,14 +103,17 @@ struct JobRow: View {
     }
 
     /// "1.2 GB · 9m17s" while running, so the absolute size sits beside the share its bar shows.
+    /// "· usually 8m" joins once it's past its usual time.
     private var timing: some View {
         let footprint = queued ? nil : job.footprint.map { Bytes.format($0) }
-        return Text([footprint, elapsed].compactMap { $0 }.joined(separator: " · "))
+        let usual = queued ? nil : MenuBarState.usualText(for: job)
+        return Text([footprint, elapsed, usual].compactMap { $0 }.joined(separator: " · "))
             .foregroundStyle(.secondary)
             .font(.system(size: 11).monospacedDigit())
             .lineLimit(1)
             .help(
-                (footprint.map { "\($0) in use. " } ?? "")
+                MenuBarState.overdueHelp(for: job)
+                    ?? (footprint.map { "\($0) in use. " } ?? "")
                     + (queued ? "Waiting for \(elapsed)" : "Running for \(elapsed)"))
     }
 

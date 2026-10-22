@@ -112,6 +112,10 @@ public struct JobSnapshot: Codable, Equatable, Sendable {
     public var log: String?
     /// Queued behind a job paused for memory. Nil from older daemons.
     public var behindPaused: Bool?
+    /// Median of its recent successful runs, in seconds. Nil without history, and from older daemons.
+    public var usualDuration: Double?
+    /// Seconds it has run, less time paused, as of the snapshot. Nil while queued, and from older daemons.
+    public var ranFor: Double?
 
     public var label: String { "\(project) \(key)" }
 
@@ -120,7 +124,8 @@ public struct JobSnapshot: Codable, Equatable, Sendable {
         estimate: UInt64, footprint: UInt64?, peak: UInt64?, paused: Bool, clientPid: Int32, childPid: Int32?,
         queuedAt: Double, startedAt: Double?, waiting: String?, joiners: Int, held: Bool? = nil,
         pausedBy: String? = nil, estimateSource: String? = nil, tree: [Int32]? = nil, escapees: [Int32]? = nil,
-        startsAt: Double? = nil, log: String? = nil, behindPaused: Bool? = nil
+        startsAt: Double? = nil, log: String? = nil, behindPaused: Bool? = nil, usualDuration: Double? = nil,
+        ranFor: Double? = nil
     ) {
         self.id = id
         self.state = state
@@ -147,6 +152,8 @@ public struct JobSnapshot: Codable, Equatable, Sendable {
         self.startsAt = startsAt
         self.log = log
         self.behindPaused = behindPaused
+        self.usualDuration = usualDuration
+        self.ranFor = ranFor
     }
 }
 

@@ -1192,7 +1192,9 @@ final class Daemon {
                 escapees: job.escapees.isEmpty ? nil : job.escapees.sorted(),
                 startsAt: job.state == .queued ? job.startsAt : nil,
                 log: job.log,
-                behindPaused: job.state == .queued && job.behindPaused ? true : nil
+                behindPaused: job.state == .queued && job.behindPaused ? true : nil,
+                usualDuration: job.usualDuration,
+                ranFor: job.adopted ? job.startedAt.map { Daemon.now() - $0 } : job.ranFor(now: Daemon.clock())
             )
         }
         var limits: [String: Int] = [:]

@@ -10,7 +10,9 @@ slug: /menu-bar-app
 
 turnstile works in the background, so there's also a menu bar app for when no terminal is open on it. The icon shows how many jobs are running or queued, and turns into a warning when memory is low or a job has been paused for it. Each job in the menu has bump, pause or hold, and kill, and right-clicking one opens its folder or, for a run with no terminal, its log. Pause queue, at the bottom of the menu, starts nothing new until you resume it, while running jobs carry on.
 
-You get a notification when a job is paused for memory, one is killed as a runaway, your job starts after a long wait, or your run fails. A notification when the queue clears is also available, off by default.
+A job that has run far longer than it should is tagged "Stuck?" and turns the icon orange: three times its usual run time and at least 10 minutes over, or past 2 hours unless it usually takes longer. Paused time doesn't count. It matters beyond that job, because a running job keeps its unused memory estimate committed, so the queue can sit waiting behind something that's hung. Hover the tag to see how long it's run, its usual time, and how much memory it's holding back.
+
+You get a notification when a job is paused for memory, one is killed as a runaway, your job starts after a long wait, a job may be stuck (with a Kill button), or your run fails. A notification when the queue clears is also available, off by default.
 
 ```sh
 brew install mcclowes/turnstile/turnstile mcclowes/turnstile/turnstile-app

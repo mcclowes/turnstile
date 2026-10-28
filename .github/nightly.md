@@ -15,3 +15,9 @@ The nightly conflicts with the stable package because they install the same app 
 The existing signing, notarization, and tap credentials used by `release.yml` are also required by the nightly. The nightly app depends on `turnstile-nightly`, so its CLI and app are updated in one tap commit. Missing credentials, failed checks, an unavailable runner, or rejected tap writes fail the run. They do not advance the delivery baseline. Cross-repository publication uses the existing token or tap deploy key; the source `GITHUB_TOKEN` needs deployments write permission. Concurrent stable and nightly packaging is serialized.
 
 Validate the automation with `node --test scripts/nightly-release.test.mjs` and `actionlint .github/workflows/nightly.yml .github/workflows/release.yml`. Signing and delivery still need a live run with configured credentials. Rollout tracking: mcclowes/workspace#10.
+
+## Cost controls
+
+Private nightly releases and their automation checks are off by default. Both scheduled and manual runs require the repository variable `NIGHTLY_PAID_USAGE_ENABLED` to equal `true`; the job condition is evaluated before allocating a runner. Keep this unset until the runner choice and expected spending have been reviewed. Public repositories use their existing standard runners without this opt-in.
+
+Planners and automation checks time out after five minutes. Superseded automation checks are canceled; publishing runs remain serialized so an in-progress release can finish safely. A source-change check avoids unchanged builds but does not impose a monthly spending limit. Keep the account's Actions stop-usage budget enabled. Existing CI and production releases have separate triggers and costs.

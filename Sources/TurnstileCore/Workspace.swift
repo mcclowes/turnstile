@@ -132,24 +132,10 @@ public struct Workspace: Equatable, Sendable {
     /// Streams git's output to `consume`, so a huge diff is never held in memory.
     /// Fails if git fails or is still going at `deadline`, when it's killed.
     static func git(_ args: [String], cwd: String, deadline: Date, consume: (Data) -> Void) -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["-C", cwd] + args
         var environment = ProcessInfo.processInfo.environment
         environment["GIT_OPTIONAL_LOCKS"] = "0"
         environment["TURNSTILE_DISABLE"] = "1"
-        process.environment = environment
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        process.standardInput = FileHandle.nullDevice
-        do { try process.run() } catch { return false }
-        let timeout = DispatchWorkItem { process.terminate() }
-        DispatchQueue.global().asyncAfter(deadline: .now() + max(0, deadline.timeIntervalSinceNow), execute: timeout)
-        let reader = output.fileHandleForReading
-        while case let chunk = reader.availableData, !chunk.isEmpty { consume(chunk) }
-        process.waitUntilExit()
-        timeout.cancel()
-        return process.terminationReason == .exit && process.terminationStatus == 0 && Date() < deadline
+        return Subprocess.run(
+            "/usr/bin/git", ["-C", cwd] + args, environment: environment, deadline: deadline, consume: consume) == 0
     }
 }

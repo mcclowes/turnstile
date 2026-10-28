@@ -99,22 +99,11 @@ public enum ShellCheck {
         -> String?
     {
         guard FileManager.default.isExecutableFile(atPath: probe.binary) else { return nil }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: probe.binary)
-        process.arguments = probe.arguments + [script(tools: tools)]
-        process.environment = environment
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        process.standardInput = FileHandle.nullDevice
-        guard (try? process.run()) != nil else { return nil }
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        let deadline = Date().addingTimeInterval(timeout)
-        while process.isRunning && Date() < deadline { usleep(20_000) }
-        if process.isRunning {
-            process.terminate()
-            return nil
-        }
+        var data = Data()
+        let status = Subprocess.run(
+            probe.binary, probe.arguments + [script(tools: tools)], environment: environment,
+            deadline: Date().addingTimeInterval(timeout), consume: { data.append($0) })
+        guard status != nil else { return nil }
         return String(decoding: data, as: UTF8.self)
     }
 

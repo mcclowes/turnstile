@@ -74,6 +74,15 @@ struct ShellCheckTests {
             tools: ["swift"], environment: ["PATH": "\(shims):/usr/bin:/bin"])
         #expect(ShellCheck.verdict(output: output ?? "", shimsDir: shims).shimmed == ["swift"])
     }
+
+    @Test func givesUpOnAShellThatHangs() {
+        let started = Date()
+        let output = ShellCheck.ask(
+            ShellCheck.Probe(name: "sh -c", binary: "/bin/sh", arguments: ["-c", "sleep 30"]),
+            tools: ["swift"], environment: ["PATH": "/usr/bin:/bin"], timeout: 0.5)
+        #expect(output == nil)
+        #expect(Date().timeIntervalSince(started) < 5)
+    }
 }
 
 struct AgentInstructionsTests {

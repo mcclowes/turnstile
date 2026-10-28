@@ -52,7 +52,13 @@ tool=$(basename "$0")
 printf '%s\\n' "$tool $*" >> "$FIXTURE_ROOT/calls"
 printf '%s\\0' "$tool" "$#" "$@" >> "$FIXTURE_ROOT/arguments"
 case "$tool" in
-  git) [ "$MODE" != dirty ] || printf ' M fixture\\n' ;;
+  git)
+    if [ "$MODE" = git-failure ] || [ "$MODE" = git-failure-output ]; then
+      [ "$MODE" != git-failure-output ] || printf ' M fixture\\n'
+      echo 'fixture Git inspection failed' >&2
+      exit 128
+    fi
+    [ "$MODE" != dirty ] || printf ' M fixture\\n' ;;
   swift)
     for argument in "$@"; do
       if [ "$argument" = --show-bin-path ]; then
@@ -208,6 +214,23 @@ function assertPrevious(current) {
   assert.equal(fs.statSync(current.app).mode & 0o777, 0o750);
   assert.equal(fs.statSync(current.zip).mode & 0o777, 0o640);
   assertCleanup(current);
+}
+
+for (const mode of ["git-failure", "git-failure-output"]) {
+  test(`release packaging stops when Git inspection fails: ${mode}`, (context) => {
+    const current = fixture(context);
+    const result = current.run(mode);
+    assert.equal(result.status, 1, result.stderr);
+    assert.equal(result.stdout, "");
+    assert.match(
+      result.stderr,
+      /package\.sh: cannot inspect the Git working tree/,
+    );
+    assert.deepEqual(recordedCommands(current), [
+      ["git", "status", "--porcelain", "--untracked-files=no"],
+    ]);
+    assertPrevious(current);
+  });
 }
 
 test("dev packaging preserves the previous release archive", (context) => {

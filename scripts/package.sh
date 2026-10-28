@@ -23,9 +23,15 @@ PROFILE="${NOTARY_PROFILE:-kiln-notary}"
 FINAL_APP=.build/Turnstile.app
 FINAL_ZIP=".build/Turnstile-$VERSION.zip"
 
-if [ "$DEV" = false ] && [ -n "$(git status --porcelain --untracked-files=no)" ]; then
-  echo "package.sh: a release is packaged from a clean commit; commit first, or pass --dev" >&2
-  exit 1
+if [ "$DEV" = false ]; then
+  if ! worktree_status="$(git status --porcelain --untracked-files=no)"; then
+    echo "package.sh: cannot inspect the Git working tree" >&2
+    exit 1
+  fi
+  if [ -n "$worktree_status" ]; then
+    echo "package.sh: a release is packaged from a clean commit; commit first, or pass --dev" >&2
+    exit 1
+  fi
 fi
 
 arch=(--arch arm64 --arch x86_64)

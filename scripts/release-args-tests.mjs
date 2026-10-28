@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-function runHelper(context, helper, args, metadata = true) {
+function runHelper(context, helper, args, metadata = true, gitStatus = {}) {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), "turnstile-release-args-"),
   );
@@ -62,7 +62,7 @@ function runHelper(context, helper, args, metadata = true) {
   ]) {
     fs.writeFileSync(
       path.join(tools, name),
-      '#!/bin/bash\nprintf "%s\\n" "$0 $*" >> "$RELEASE_ARGS_CALLS"\nexit 97\n',
+      '#!/bin/bash\nprintf "%s\\n" "$0 $*" >> "$RELEASE_ARGS_CALLS"\nif [ "${0##*/}" = git ] && [ "${1:-}" = status ]; then\n  printf "%s" "${RELEASE_ARGS_GIT_OUTPUT:-}"\n  exit "${RELEASE_ARGS_GIT_STATUS:-0}"\nfi\nexit 97\n',
       { mode: 0o755 },
     );
   }
@@ -71,6 +71,8 @@ function runHelper(context, helper, args, metadata = true) {
     HOME: path.join(root, "home"),
     TMPDIR: path.join(root, "tmp"),
     RELEASE_ARGS_CALLS: calls,
+    RELEASE_ARGS_GIT_STATUS: String(gitStatus.code ?? 0),
+    RELEASE_ARGS_GIT_OUTPUT: gitStatus.output ?? "",
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_CONFIG_GLOBAL: "/dev/null",
   };
@@ -128,6 +130,22 @@ function runHelper(context, helper, args, metadata = true) {
       ? fs.readFileSync(calls, "utf8").replaceAll(`${tools}/`, "")
       : "",
   };
+}
+
+for (const output of ["", " M fixture\n"]) {
+  test(`release stops after failed Git inspection with output ${JSON.stringify(output)}`, (context) => {
+    const result = runHelper(context, "release", [], true, {
+      code: 128,
+      output,
+    });
+    assert.equal(result.status, 1, result.stderr);
+    assert.equal(result.stdout, "");
+    assert.match(
+      result.stderr,
+      /release\.sh: cannot inspect the Git working tree/,
+    );
+    assert.equal(result.calls, "git status --porcelain\n");
+  });
 }
 
 test("package rejects a misspelled dev option before invoking external tools", (context) => {

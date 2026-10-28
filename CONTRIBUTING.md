@@ -28,6 +28,10 @@ Release helpers accept only their documented modes: `package.sh` takes no argume
 `publish.sh` takes no arguments or `--check`, and `dist.sh` and `release.sh` take no arguments.
 Invalid, empty, or extra arguments exit 2 with usage before external tools run.
 
+The local release driver and release-mode app packaging stop before further
+checks or artifact changes if Git cannot inspect the working tree. Development
+app packaging skips its release-only cleanliness check.
+
 Packaging stages replacements until signing and release validation succeed.
 The release checksum is computed before publication. Backup or promotion failures
 and handled interruptions restore the previous app and ZIP. If restoration fails,

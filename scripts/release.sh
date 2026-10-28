@@ -19,7 +19,8 @@ TAG="v$VERSION"
 
 fail() { echo "release.sh: $*" >&2; exit 1; }
 
-[ -z "$(git status --porcelain)" ] || fail "the tree isn't clean; commit or remove changes first"
+worktree_status="$(git status --porcelain)" || fail "cannot inspect the Git working tree"
+[ -z "$worktree_status" ] || fail "the tree isn't clean; commit or remove changes first"
 git rev-parse -q --verify "refs/tags/$TAG" >/dev/null && fail "$TAG is already tagged; bump Turnstile.version first"
 ./scripts/publish.sh --check
 node scripts/license-check.mjs

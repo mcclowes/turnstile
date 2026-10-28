@@ -347,7 +347,7 @@ public enum MenuBarState {
             events.append(
                 Event(
                     kind: .longWait, title: "Started #\(job.id) \(job.label)",
-                    body: "After waiting \(duration(startedAt - job.queuedAt))."))
+                    body: "After waiting \(shortDuration(startedAt - job.queuedAt))."))
         }
         let yours = Set((old.running + old.queued).filter { !$0.agent }.map(\.id))
         let newest = old.recent.map(\.id).max() ?? 0
@@ -380,10 +380,6 @@ public enum MenuBarState {
         if seconds < 60 { return "\(Int(seconds.rounded()))s" }
         if minutes < 60 { return "\(minutes)m" }
         return minutes % 60 == 0 ? "\(minutes / 60)h" : "\(minutes / 60)h\(minutes % 60)m"
-    }
-
-    private static func duration(_ seconds: Double) -> String {
-        seconds < 60 ? "\(Int(seconds))s" : "\(Int((seconds / 60).rounded()))m"
     }
 
     /// The daemon's reason for a wait, with its coarse "starts in" replaced by one that ticks locally.

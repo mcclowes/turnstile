@@ -487,12 +487,7 @@ enum StatusFormatter {
 
     static func render(_ snapshot: StatusSnapshot, now: Double) -> String {
         var lines: [String] = []
-        let free = snapshot.physicalMemory / 100 * UInt64(snapshot.memoryLevel)
-        let limits = ResourceClass.allCases.map { "\($0.rawValue) \(snapshot.limits[$0.rawValue] ?? 1)" }.joined(
-            separator: ", ")
-        lines.append(
-            "memory: \(snapshot.memoryLevel)% free (~\(Bytes.format(free)) of \(Bytes.format(snapshot.physicalMemory))), slots: \(limits)"
-        )
+        lines.append("memory: \(snapshot.memorySummary), slots: \(snapshot.slotsSummary)")
 
         lines.append("")
         lines.append(snapshot.running.isEmpty ? "running: none" : "running:")
@@ -531,14 +526,6 @@ enum StatusFormatter {
     }
 
     static func recent(_ entries: [HistoryEntry]) -> String {
-        var lines = ["recent:"]
-        for entry in entries {
-            var detail = entry.outcome
-            if let code = entry.exitCode, entry.outcome == "failed" { detail += " (\(code))" }
-            if let peak = entry.peak { detail += ", peak \(Bytes.format(peak))" }
-            if let duration = entry.duration { detail += ", \(formatDuration(duration))" }
-            lines.append("  #\(entry.id)  \(entry.project) \(entry.key)  \(detail)")
-        }
-        return lines.joined(separator: "\n")
+        (["recent:"] + entries.map { "  " + $0.summary }).joined(separator: "\n")
     }
 }

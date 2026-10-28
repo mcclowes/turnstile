@@ -26,8 +26,7 @@ public enum RunLogs {
 
     /// A `.command` file's contents that follows a job's output in whichever terminal opens it.
     public static func followScript(executable: String, job id: Int64) -> String {
-        let quoted = "'" + executable.replacingOccurrences(of: "'", with: #"'\''"#) + "'"
-        return "#!/bin/sh\nexec \(quoted) logs \(id) -f\n"
+        "#!/bin/sh\nexec \(Health.shellQuoted(executable)) logs \(id) -f\n"
     }
 }
 

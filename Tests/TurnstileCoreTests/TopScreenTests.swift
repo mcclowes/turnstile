@@ -31,6 +31,23 @@ struct TopScreenTests {
             })
     }
 
+    @Test func recentRunsShowTheExitCodeOfAFailure() {
+        var state = snapshot([job(1)])
+        state.recent = [
+            HistoryEntry(
+                id: 4, project: "api", key: "swift test", outcome: "failed", exitCode: 2, peak: nil, duration: 5,
+                finishedAt: 0)
+        ]
+        let lines = TopScreen.render(state, selected: nil, now: 20, width: 120, height: 40, footer: "")
+        #expect(lines.contains("  #4  api swift test  failed (2), 5s"))
+    }
+
+    @Test func headerClampsAnOutOfRangeLevel() {
+        var state = snapshot([job(1)])
+        state.memoryLevel = 140
+        #expect(state.memorySummary == "140% free (~16 GB of 16 GB)")
+    }
+
     @Test func arrowsAndLettersMapToKeys() {
         #expect(TopScreen.keys([0x1B, 0x5B, 0x41, 0x6A, 0x78, 0x71]) == [.up, .down, .kill, .quit])
         #expect(TopScreen.keys([0x03]) == [.quit])

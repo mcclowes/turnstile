@@ -95,12 +95,7 @@ public enum TopScreen {
             lines.append("Nothing is running or queued. This screen picks the daemon up when it starts.")
             return fit(lines, footer: footer, width: width, height: height)
         }
-        let free = snapshot.physicalMemory / 100 * UInt64(snapshot.memoryLevel)
-        let slots = ResourceClass.allCases.map { "\($0.rawValue) \(snapshot.limits[$0.rawValue] ?? 1)" }.joined(
-            separator: ", ")
-        lines.append(
-            "turnstile top · memory \(snapshot.memoryLevel)% free (~\(Bytes.format(free)) of \(Bytes.format(snapshot.physicalMemory))) · slots \(slots)"
-        )
+        lines.append("turnstile top · memory \(snapshot.memorySummary) · slots \(snapshot.slotsSummary)")
         lines.append("")
 
         let jobs = rows(snapshot)
@@ -122,12 +117,7 @@ public enum TopScreen {
         if !snapshot.recent.isEmpty {
             lines.append("")
             lines.append("recent:")
-            for entry in snapshot.recent {
-                var detail = entry.outcome
-                if let peak = entry.peak { detail += ", peak \(Bytes.format(peak))" }
-                if let duration = entry.duration { detail += ", \(formatDuration(duration))" }
-                lines.append("  #\(entry.id)  \(entry.project) \(entry.key)  \(detail)")
-            }
+            for entry in snapshot.recent { lines.append("  " + entry.summary) }
         }
         if let report = Escapes.report(snapshot.ungated, home: homeDirectory(ProcessInfo.processInfo.environment)) {
             lines.append("")

@@ -11,7 +11,9 @@ const neighbors = [
 ];
 
 function fixture(context) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "turnstile dist "));
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "turnstile package dist "),
+  );
   context.after(() => fs.rmSync(root, { recursive: true, force: true }));
   for (const directory of [
     "scripts",
@@ -309,9 +311,9 @@ for (const [mode, expected] of [
         "archive-failure",
       ].includes(mode)
     ) {
-      assert.doesNotMatch(
-        fs.readFileSync(path.join(current.root, "calls"), "utf8"),
-        /package/,
+      assert.deepEqual(
+        recordedCommands(current).filter(([tool]) => tool === "package"),
+        [],
       );
     }
   });

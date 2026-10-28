@@ -16,6 +16,19 @@ turnstile sits underneath the shell, so it works the same for Claude Code, Codex
 
 **[Read the docs](https://turnstile.marginalutility.dev)**
 
+## Related repos and prerequisites
+
+**This repo:** macOS build/test admission CLI, daemon, and menu bar app.
+
+**Account prerequisite:** No Marginal Utility account is required for local use.
+
+| Related repository | Relationship |
+| --- | --- |
+| [homebrew-turnstile](https://github.com/mcclowes/homebrew-turnstile) | Homebrew distribution; app/CLI source lives here. |
+| [saggar](https://github.com/mcclowes/saggar) | Can gate builds started in Saggar; not required to use the CLI. |
+
+See the [project reference](https://github.com/mcclowes/marginal-utility/blob/main/ECOSYSTEM.md) for the full repository map. Some source repositories require access; public product homes and Homebrew taps remain the entry points for downloads and support.
+
 ## Install
 
 Requires macOS 26 or later.

@@ -17,7 +17,7 @@ cd "$(dirname "$0")/.."
 
 DEV=false
 [ "${1:-}" = "--dev" ] && DEV=true
-VERSION="$(sed -n 's/.*public static let version = "\(.*\)"/\1/p' Sources/TurnstileCore/Paths.swift)"
+VERSION="$(scripts/version.sh)"
 IDENTITY="${CODESIGN_IDENTITY:-Developer ID Application}"
 PROFILE="${NOTARY_PROFILE:-kiln-notary}"
 FINAL_APP=.build/Turnstile.app

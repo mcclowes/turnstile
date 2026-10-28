@@ -40,7 +40,7 @@ function runHelper(context, helper, args, metadata = true, gitStatus = {}) {
   ];
   for (const file of artifacts)
     fs.writeFileSync(path.join(root, file), "existing artifact\n");
-  for (const name of ["package", "dist", "release", "publish"]) {
+  for (const name of ["package", "dist", "release", "publish", "version"]) {
     fs.copyFileSync(
       new URL(`./${name}.sh`, import.meta.url),
       path.join(root, "scripts", `${name}.sh`),

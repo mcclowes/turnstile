@@ -68,7 +68,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAP_GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
         run: |
-          version="$(sed -n 's/.*public static let version = "\(.*\)"/\1/p' Sources/TurnstileCore/Paths.swift)"
+          version="$(scripts/version.sh)"
           if [ "$GITHUB_REF_NAME" != "v$version" ]; then
             echo "::error::$GITHUB_REF_NAME doesn't match Turnstile.version $version"
             exit 1

@@ -12,7 +12,7 @@ if [ "$#" -ne 0 ]; then
 fi
 cd "$(dirname "$0")/.."
 
-VERSION="$(sed -n 's/.*public static let version = "\(.*\)"/\1/p' Sources/TurnstileCore/Paths.swift)"
+VERSION="$(scripts/version.sh)"
 DIST=.build/dist
 ZIP=".build/Turnstile-$VERSION.zip"
 

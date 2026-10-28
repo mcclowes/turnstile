@@ -14,7 +14,7 @@ if [ "$#" -ne 0 ]; then
 fi
 cd "$(dirname "$0")/.."
 
-VERSION="$(sed -n 's/.*public static let version = "\(.*\)"/\1/p' Sources/TurnstileCore/Paths.swift)"
+VERSION="$(scripts/version.sh)"
 TAG="v$VERSION"
 
 fail() { echo "release.sh: $*" >&2; exit 1; }

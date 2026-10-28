@@ -17,7 +17,7 @@ cd "$(dirname "$0")/.."
 
 REPO=mcclowes/turnstile
 TAP=mcclowes/homebrew-turnstile
-VERSION="$(sed -n 's/.*public static let version = "\(.*\)"/\1/p' Sources/TurnstileCore/Paths.swift)"
+VERSION="$(scripts/version.sh)"
 TAG="v$VERSION"
 DIST=.build/dist
 TARBALL="$DIST/turnstile-$VERSION-macos.tar.gz"

@@ -40,6 +40,10 @@ function fixture(context, changelog) {
     fs.mkdirSync(path.join(root, dir), { recursive: true });
   }
   fs.copyFileSync(publishScript, path.join(root, "scripts/publish.sh"));
+  fs.copyFileSync(
+    new URL("./version.sh", import.meta.url),
+    path.join(root, "scripts/version.sh"),
+  );
   fs.writeFileSync(
     path.join(root, "Sources/TurnstileCore/Paths.swift"),
     `public static let version = "${version}"\n`,

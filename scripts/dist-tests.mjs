@@ -30,6 +30,10 @@ function fixture(context) {
     new URL("./dist.sh", import.meta.url),
     path.join(root, "scripts/dist.sh"),
   );
+  fs.copyFileSync(
+    new URL("./version.sh", import.meta.url),
+    path.join(root, "scripts/version.sh"),
+  );
   fs.writeFileSync(
     path.join(root, "Sources/TurnstileCore/Paths.swift"),
     'public static let version = "9.8.7"\n',

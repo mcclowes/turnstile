@@ -216,9 +216,15 @@ public enum HistoryFormatter {
             ])
         }
         if !showProject { rows = rows.map { Array($0.dropFirst()) } }
-        // Numbers right, names left, so the columns that get compared line up on their last digit.
         let alignRight = Array(repeating: false, count: rows[0].count - 4) + [true, true, true, true]
-        let widths = (0..<rows[0].count).map { column in rows.map { $0[column].count }.max() ?? 0 }
+        return TextTable.render(rows, alignRight: alignRight)
+    }
+}
+
+enum TextTable {
+    /// Indented columns. Numbers go right and names left, so the columns that get compared line up on their last digit.
+    static func render(_ rows: [[String]], alignRight: [Bool]) -> [String] {
+        let widths = (0..<(rows.first?.count ?? 0)).map { column in rows.map { $0[column].count }.max() ?? 0 }
         return rows.map { row in
             "  "
                 + row.enumerated().map { column, cell in

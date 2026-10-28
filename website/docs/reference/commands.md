@@ -16,6 +16,7 @@ Jobs can be named by queue number, pid, or name.
 | `turnstile top` | Interactive view of the queue. Select a job with ↑↓ or `j`/`k`, then `b` bump, `p` pause/resume, `h` hold/release, `x` kill, `q` quit |
 | `turnstile logs <job> [-f]` | Output captured from a run with no terminal, such as an agent's, by job number. `-f` follows it until the run ends |
 | `turnstile history [--days 30] [--here] [--limit 20] [--json]` | What each command costs and how long jobs waited. `--here` narrows it to this project |
+| `turnstile apps [--days 7] [--limit 10] [--json]` | Which apps usually hold memory outside turnstile's jobs, so you can see what your builds are queuing behind |
 
 ![turnstile status with two running jobs and recent runs](/img/screenshots/status.webp)
 
@@ -47,6 +48,23 @@ Commands are grouped by project and command, the pair the scheduler learns from,
 Waits over two minutes are called out because an agent harness usually gives a command about that long in total, queue time included. If there are many, the machine is oversubscribed: see [scheduling](/scheduling).
 
 History is kept for 30 days in `~/.turnstile/state.sqlite`, on your machine.
+
+## Other apps
+
+Admission already accounts for everything else on the machine, since it reads how much memory is free right now. `turnstile apps` names what's using the rest. While the daemon runs, it samples every minute, groups helper processes under their app (Chrome's renderers count as Chrome), and keeps the 15 biggest apps above 50 MB. One reading says little, so the report averages across all of them.
+
+```
+$ turnstile apps
+apps: sampled every minute while turnstile ran, 14h12m over the last 7 days
+
+  app                 average    peak  present
+  Google Chrome        4.1 GB    7 GB     100%
+  Virtual machines     3.8 GB  3.8 GB      61%
+  Slack                1.1 GB  1.6 GB      92%
+  Spotify              600 MB  900 MB      42%
+```
+
+`average` counts the samples an app was missing from as zero, so it reads as the memory that app usually takes away from your builds. `present` is the share of samples it was running in. Figures are physical footprint, the "Memory" column in Activity Monitor, which includes compressed and swapped memory. Processes owned by root or other users, such as WindowServer, can't be read without root and are left out.
 
 ## Controlling jobs
 

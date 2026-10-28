@@ -90,6 +90,19 @@ public final class Store {
         try execute(
             "CREATE TABLE IF NOT EXISTS daemon_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, started_at REAL NOT NULL, seen_at REAL NOT NULL)"
         )
+        try execute(
+            "CREATE TABLE IF NOT EXISTS memory_samples (id INTEGER PRIMARY KEY AUTOINCREMENT, at REAL NOT NULL, total INTEGER NOT NULL)"
+        )
+        try execute("CREATE INDEX IF NOT EXISTS memory_samples_at ON memory_samples(at)")
+        try execute(
+            """
+            CREATE TABLE IF NOT EXISTS app_memory (
+              sample_id INTEGER NOT NULL,
+              app TEXT NOT NULL,
+              bytes INTEGER NOT NULL
+            )
+            """)
+        try execute("CREATE INDEX IF NOT EXISTS app_memory_sample ON app_memory(sample_id)")
     }
 
     deinit { sqlite3_close(db) }
@@ -297,6 +310,52 @@ public final class Store {
         run("DELETE FROM jobs WHERE state = 'finished' AND finished_at < ?", [cutoff])
         run("DELETE FROM escapes WHERE seen_at < ?", [cutoff])
         run("DELETE FROM daemon_runs WHERE seen_at < ?", [cutoff])
+        run("DELETE FROM app_memory WHERE sample_id IN (SELECT id FROM memory_samples WHERE at < ?)", [cutoff])
+        run("DELETE FROM memory_samples WHERE at < ?", [cutoff])
+    }
+
+    // MARK: What else held memory
+
+    public func insertMemorySample(at: Double, total: UInt64, apps: [AppFootprint]) {
+        run("BEGIN", [])
+        run("INSERT INTO memory_samples (at, total) VALUES (?, ?)", [at, Int64(clamping: total)])
+        let id = sqlite3_last_insert_rowid(db)
+        for app in apps {
+            run(
+                "INSERT INTO app_memory (sample_id, app, bytes) VALUES (?, ?, ?)",
+                [id, app.app, Int64(clamping: app.bytes)])
+        }
+        run("COMMIT", [])
+    }
+
+    /// The biggest apps since `since` by average. `days` and `physical` are left for the caller.
+    public func appMemory(since: Double, limit: Int) -> AppMemoryReport {
+        var samples = 0
+        var averageTotal: UInt64 = 0
+        query("SELECT COUNT(*), AVG(total) FROM memory_samples WHERE at >= ?", [since]) { row in
+            samples = Int(row.int(0) ?? 0)
+            averageTotal = UInt64(max(0, row.double(1) ?? 0))
+        }
+        var apps: [AppUsage] = []
+        if samples > 0 {
+            query(
+                """
+                SELECT app, SUM(bytes), MAX(bytes), COUNT(*) FROM app_memory
+                JOIN memory_samples ON memory_samples.id = app_memory.sample_id
+                WHERE at >= ? GROUP BY app ORDER BY SUM(bytes) DESC, app
+                """, [since]
+            ) { row in
+                apps.append(
+                    AppUsage(
+                        app: row.text(0) ?? "?",
+                        average: UInt64(max(0, row.int(1) ?? 0)) / UInt64(samples),
+                        peak: UInt64(max(0, row.int(2) ?? 0)),
+                        presence: Double(row.int(3) ?? 0) / Double(samples)))
+            }
+        }
+        return AppMemoryReport(
+            days: 0, samples: samples, averageTotal: averageTotal, physical: 0, apps: Array(apps.prefix(limit)),
+            more: max(0, apps.count - limit))
     }
 
     // MARK: When the daemon was up to watch

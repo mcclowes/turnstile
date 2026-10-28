@@ -13,6 +13,7 @@ enum CLI {
           turnstile doctor [--shells]                        check the install, PATH, config, and daemon
           turnstile status [--json] [--watch]                running and queued jobs, memory, recent runs
           turnstile history [--days 30] [--limit 20] [--here] [--json]   what each command has cost, and how long jobs waited
+          turnstile apps [--days 7] [--limit 10] [--json]   which apps usually hold memory outside turnstile's jobs
           turnstile logs <job> [-f]                          a run's captured output; -f follows it until the run ends
           turnstile top                                      interactive view: select a job to bump, pause, hold, or kill
           turnstile bump <job>                               move a job (number, pid, or name) to the front
@@ -45,6 +46,7 @@ enum CLI {
         case "init": initialize(rest)
         case "status": status(rest)
         case "history": history(rest)
+        case "apps": apps(rest)
         case "logs": logs(rest)
         case "top": Top.main(rest)
         case "bump", "kill", "pause", "resume", "hold", "release": control(command, rest)
@@ -316,6 +318,29 @@ enum CLI {
             print(String(decoding: (try? encoder.encode(summary)) ?? Data(), as: UTF8.self))
         } else {
             print(HistoryFormatter.render(summary, here: here))
+        }
+        exit(0)
+    }
+
+    /// The apps that usually hold memory, from samples the daemon takes each minute it's up.
+    static func apps(_ args: [String]) -> Never {
+        guard let days = number("--days", in: args, default: 7), let limit = number("--limit", in: args, default: 10)
+        else {
+            warn("usage: turnstile apps [--days 7] [--limit 10] [--json]")
+            exit(64)
+        }
+        let store = FileManager.default.fileExists(atPath: paths.database) ? try? Store(path: paths.database) : nil
+        var report =
+            store?.appMemory(since: Date().timeIntervalSince1970 - Double(days) * 86400, limit: limit)
+            ?? AppMemoryReport(days: days, samples: 0, averageTotal: 0, physical: 0, apps: [], more: 0)
+        report.days = days
+        report.physical = SystemMemory.physical
+        if args.contains("--json") {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            print(String(decoding: (try? encoder.encode(report)) ?? Data(), as: UTF8.self))
+        } else {
+            print(AppMemoryFormatter.render(report))
         }
         exit(0)
     }

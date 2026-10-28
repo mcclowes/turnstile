@@ -754,6 +754,7 @@ final class Daemon {
             idleSince = now
         }
         if ticks % 60 == 0, let runId { store.touchDaemonRun(runId, at: Daemon.now()) }
+        if ticks % Int(AppMemory.interval) == 0 { sampleAppMemory() }
         if ticks % 3600 == 0 { cleanLogs() }
         tickDiagnostics.completePhase("history and log maintenance", at: diagnosticClock())
         for message in [gap, tickDiagnostics.finish(at: diagnosticClock())].compactMap({ $0 }) {
@@ -847,6 +848,12 @@ final class Daemon {
                 log("\(label) ran outside turnstile, under \(via) in \(cwd)")
             }
         }
+    }
+
+    /// What else is holding memory, for `turnstile apps`. Jobs are left out, since they're turnstile's own.
+    func sampleAppMemory() {
+        let (total, apps) = AppMemory.snapshot(excluding: Set(jobs.values.flatMap(\.tree)).union([getpid()]))
+        store.insertMemorySample(at: Daemon.now(), total: total, apps: apps)
     }
 
     /// Children of launchd previously sampled inside a running job, matched by their stable process identity.

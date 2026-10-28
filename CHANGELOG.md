@@ -6,6 +6,7 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ### Added
 
+- `turnstile apps` shows which apps usually hold memory outside turnstile's jobs. While it runs, the daemon samples every minute, grouping helpers under their app and dropping the long tail (#140).
 - Daemon logs report slow scheduler ticks with their longest phase and long gaps between ticks, using monotonic elapsed time.
 - The menu bar flags a job running far longer than usual, or for hours with no history, as "Stuck?": the row says how long it usually takes and how much memory it's holding back from the queue, the icon turns orange, and a notification offers to kill it (#73).
 

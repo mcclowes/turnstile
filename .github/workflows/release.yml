@@ -6,6 +6,23 @@ name: Release
 # to check the signing secrets. The secrets are listed in website/docs/development.md.
 
 on:
+  workflow_call:
+    inputs:
+      nightly:
+        type: boolean
+        default: false
+      candidate:
+        type: string
+        default: ""
+      fingerprint:
+        type: string
+        default: ""
+      nightly_tag:
+        type: string
+        default: ""
+      nightly_version:
+        type: string
+        default: ""
   push:
     tags: ["v*"]
   workflow_dispatch:
@@ -23,15 +40,27 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write
+      deployments: write
       id-token: write
       attestations: write
     env:
       PUBLISH: ${{ github.event_name == 'push' }}
+      GITHUB_TOKEN: ${{ github.token }}
+      NIGHTLY_SHA: ${{ inputs.candidate }}
+      NIGHTLY_FINGERPRINT: ${{ inputs.fingerprint }}
+      NIGHTLY_TAG: ${{ inputs.nightly_tag }}
+      NIGHTLY_VERSION: ${{ inputs.nightly_version }}
+      NIGHTLY_TAP_PATH: ${{ github.workspace }}/nightly-tap
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.candidate || github.sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
 
       - name: Check the tag and the changelog
         if: env.PUBLISH == 'true'
@@ -101,7 +130,7 @@ jobs:
             ${{ runner.temp }}/cli/turnstile
 
       - name: Publish
-        if: env.PUBLISH == 'true'
+        if: ${{ !inputs.nightly && (env.PUBLISH == 'true') }}
         env:
           GH_TOKEN: ${{ github.token }}
           TAP_GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
@@ -119,6 +148,21 @@ jobs:
         with:
           name: dist
           path: .build/dist/
+
+      - name: Check out the nightly tap
+        if: ${{ inputs.nightly }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: mcclowes/homebrew-turnstile
+          path: nightly-tap
+          ref: main
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+
+      - name: Publish the verified nightly
+        if: ${{ inputs.nightly }}
+        env:
+          TAP_GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: node scripts/nightly-release.mjs publish
 
       - name: Remove the keychain
         if: always()

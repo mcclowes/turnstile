@@ -42,6 +42,10 @@ For a local menu bar app, run `./scripts/package.sh --dev`. It creates
 existing release ZIP. Packaging stages the replacement so a failed build, copy,
 or signing step keeps the previous app.
 
+Release maintainers can use `./scripts/dist.sh` to assemble the CLI tarball, app
+ZIP, and checksums under `.build/dist`, with configured signing and notarization
+credentials. Failed assembly before publication keeps the previous distribution.
+
 ## What `init` does
 
 `init` installs the binary in `~/.turnstile/bin` (linked, for Homebrew, so `brew upgrade` carries over), creates the shims, and adds them to the front of PATH in your shell's startup files (zsh, bash, or fish).

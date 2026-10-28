@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import TurnstileCore
 
 struct ShellCheckTests {
@@ -26,7 +27,8 @@ struct ShellCheckTests {
         let bin = NSTemporaryDirectory() + "bin-" + UUID().uuidString.prefix(8)
         try FileManager.default.createDirectory(atPath: bin, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(atPath: bin) }
-        FileManager.default.createFile(atPath: bin + "/swift", contents: Data("#!/bin/sh\n".utf8), attributes: [.posixPermissions: 0o755])
+        FileManager.default.createFile(
+            atPath: bin + "/swift", contents: Data("#!/bin/sh\n".utf8), attributes: [.posixPermissions: 0o755])
         let output = """
             Last login: yesterday
             /PATH\t/shims:\(bin)
@@ -65,9 +67,11 @@ struct ShellCheckTests {
         let shims = NSTemporaryDirectory() + "shims-" + UUID().uuidString.prefix(8)
         try FileManager.default.createDirectory(atPath: shims, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(atPath: shims) }
-        FileManager.default.createFile(atPath: shims + "/swift", contents: Data("#!/bin/sh\n".utf8), attributes: [.posixPermissions: 0o755])
-        let output = ShellCheck.ask(ShellCheck.Probe(name: "sh -c", binary: "/bin/sh", arguments: ["-c"]),
-                                    tools: ["swift"], environment: ["PATH": "\(shims):/usr/bin:/bin"])
+        FileManager.default.createFile(
+            atPath: shims + "/swift", contents: Data("#!/bin/sh\n".utf8), attributes: [.posixPermissions: 0o755])
+        let output = ShellCheck.ask(
+            ShellCheck.Probe(name: "sh -c", binary: "/bin/sh", arguments: ["-c"]),
+            tools: ["swift"], environment: ["PATH": "\(shims):/usr/bin:/bin"])
         #expect(ShellCheck.verdict(output: output ?? "", shimsDir: shims).shimmed == ["swift"])
     }
 }

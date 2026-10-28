@@ -27,7 +27,9 @@ public enum TopScreen {
         var result: [Key] = []
         var index = 0
         while index < bytes.count {
-            if bytes[index] == 0x1B, index + 2 < bytes.count, bytes[index + 1] == UInt8(ascii: "[") || bytes[index + 1] == UInt8(ascii: "O") {
+            if bytes[index] == 0x1B, index + 2 < bytes.count,
+                bytes[index + 1] == UInt8(ascii: "[") || bytes[index + 1] == UInt8(ascii: "O")
+            {
                 switch bytes[index + 2] {
                 case UInt8(ascii: "A"): result.append(.up)
                 case UInt8(ascii: "B"): result.append(.down)
@@ -83,7 +85,9 @@ public enum TopScreen {
 
     public static let help = "↑↓/jk select · b bump · p pause/resume · h hold/release · x kill · q quit"
 
-    public static func render(_ snapshot: StatusSnapshot?, selected: Int64?, now: Double, width: Int, height: Int, footer: String) -> [String] {
+    public static func render(
+        _ snapshot: StatusSnapshot?, selected: Int64?, now: Double, width: Int, height: Int, footer: String
+    ) -> [String] {
         var lines: [String] = []
         guard let snapshot else {
             lines.append("turnstile top · daemon idle (starts with the first gated command)")
@@ -92,8 +96,11 @@ public enum TopScreen {
             return fit(lines, footer: footer, width: width, height: height)
         }
         let free = snapshot.physicalMemory / 100 * UInt64(snapshot.memoryLevel)
-        let slots = ResourceClass.allCases.map { "\($0.rawValue) \(snapshot.limits[$0.rawValue] ?? 1)" }.joined(separator: ", ")
-        lines.append("turnstile top · memory \(snapshot.memoryLevel)% free (~\(Bytes.format(free)) of \(Bytes.format(snapshot.physicalMemory))) · slots \(slots)")
+        let slots = ResourceClass.allCases.map { "\($0.rawValue) \(snapshot.limits[$0.rawValue] ?? 1)" }.joined(
+            separator: ", ")
+        lines.append(
+            "turnstile top · memory \(snapshot.memoryLevel)% free (~\(Bytes.format(free)) of \(Bytes.format(snapshot.physicalMemory))) · slots \(slots)"
+        )
         lines.append("")
 
         let jobs = rows(snapshot)
@@ -134,7 +141,9 @@ public enum TopScreen {
     static func columns(_ cells: [String]) -> String {
         var line = ""
         for (index, cell) in cells.enumerated() {
-            line += index < widths.count ? cell.padding(toLength: max(widths[index], cell.count + 1), withPad: " ", startingAt: 0) : cell
+            line +=
+                index < widths.count
+                ? cell.padding(toLength: max(widths[index], cell.count + 1), withPad: " ", startingAt: 0) : cell
         }
         return line
     }

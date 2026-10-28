@@ -14,23 +14,28 @@ public struct JobLimits: Codable, Equatable, Sendable {
 public enum Throttle {
     /// Parallelism and heap sized from memory pressure. Nothing is injected at normal levels; macOS idles around 30–50% free.
     /// A swapping machine gets the tightest limits whatever the level reads, since the level is what swapping distorts.
-    public static func limits(memoryLevel: Int, pressure: EffectiveMemoryPressure = .normal, cpuCount: Int, config: ThrottleConfig) -> JobLimits {
+    public static func limits(
+        memoryLevel: Int, pressure: EffectiveMemoryPressure = .normal, cpuCount: Int, config: ThrottleConfig
+    ) -> JobLimits {
         guard config.inject ?? true else { return JobLimits() }
         let level = pressure > .normal ? Swift.min(memoryLevel, 14) : memoryLevel
         var jobs = config.jobs
         if jobs == nil {
-            if level < 15 { jobs = max(1, cpuCount / 4) }
-            else if level < 25 { jobs = max(1, cpuCount / 2) }
+            if level < 15 { jobs = max(1, cpuCount / 4) } else if level < 25 { jobs = max(1, cpuCount / 2) }
         }
         var heap = config.nodeHeap.map { Int($0 / Bytes.mb) }
         if heap == nil && level < 15 { heap = 2048 }
         return JobLimits(jobs: jobs, nodeHeapMB: heap)
     }
 
-    static let nodeTools: Set<String> = ["npm", "pnpm", "yarn", "npx", "vitest", "jest", "playwright", "tsc", "cypress"]
+    static let nodeTools: Set<String> = [
+        "npm", "pnpm", "yarn", "npx", "vitest", "jest", "playwright", "tsc", "cypress",
+    ]
 
     /// Adds each tool's own limits to its arguments and environment, never overriding what the caller set.
-    public static func inject(tool: String, args: [String], environment: [String: String], limits: JobLimits) -> (args: [String], environment: [String: String]) {
+    public static func inject(tool: String, args: [String], environment: [String: String], limits: JobLimits) -> (
+        args: [String], environment: [String: String]
+    ) {
         var args = args
         var env = environment
 
@@ -73,7 +78,8 @@ public enum Throttle {
         case "make", "gmake":
             // Only cap an unbounded `-j`; a make without -j is already serial.
             if let index = args.firstIndex(where: { $0 == "-j" || $0 == "--jobs" }),
-               index + 1 >= args.count || Int(args[index + 1]) == nil {
+                index + 1 >= args.count || Int(args[index + 1]) == nil
+            {
                 args[index] = "-j\(jobs)"
             }
         case "vitest", "jest":
@@ -97,7 +103,9 @@ public enum Pressure {
     /// mark rather than its recent average: a cold compile can be tens of times an incremental one, and
     /// a ceiling that forgets the cold runs turns the next one into a "runaway".
     /// The floor is a share of the machine, since a fixed one is far too small on a big Mac.
-    public static func ceiling(highWaterPeak: UInt64?, physicalMemory: UInt64, floorPercent: Int, config: ThrottleConfig) -> UInt64 {
+    public static func ceiling(
+        highWaterPeak: UInt64?, physicalMemory: UInt64, floorPercent: Int, config: ThrottleConfig
+    ) -> UInt64 {
         if let max = config.maxMemory { return max }
         let multiplier = config.killMultiplier ?? defaultKillMultiplier
         guard let peak = highWaterPeak else { return physicalMemory / 4 * 3 }
@@ -123,7 +131,8 @@ public enum Pressure {
     /// `hard` is an explicit `maxMemory`: the one case where a person asked for a kill.
     /// `pressuredFor` is how long the job has already been a runaway under pressure, nil if it hasn't.
     public static func runaway(
-        footprint: UInt64, ceiling: UInt64, hard: Bool, memoryLevel: Int, pressure: EffectiveMemoryPressure = .normal, pauseBelow: Int,
+        footprint: UInt64, ceiling: UInt64, hard: Bool, memoryLevel: Int, pressure: EffectiveMemoryPressure = .normal,
+        pauseBelow: Int,
         pressuredFor: Double?, grace: Double = runawayGrace
     ) -> Runaway? {
         guard footprint > ceiling else { return nil }
@@ -146,7 +155,10 @@ public enum Pressure {
         /// Times memory pressure has paused it. Each one makes it wait longer for calm before resuming.
         public var pressurePauses: Int
 
-        public init(id: Int64, startedAt: Double, paused: Bool, pausable: Bool = true, manual: Bool = false, runaway: Bool = false, pressurePauses: Int = 0) {
+        public init(
+            id: Int64, startedAt: Double, paused: Bool, pausable: Bool = true, manual: Bool = false,
+            runaway: Bool = false, pressurePauses: Int = 0
+        ) {
             self.id = id
             self.startedAt = startedAt
             self.paused = paused
@@ -177,24 +189,33 @@ public enum Pressure {
     /// so on a machine that is already swapping it never falls to `pauseBelow`. Resuming needs both
     /// a recovered level and quiet swap, unless nothing else is running and waiting can't help.
     /// `calmFor` is how long the machine has gone without pressure; see `resumeDelay`.
-    public static func action(memoryLevel: Int, pressure: EffectiveMemoryPressure = .normal, calmFor: Double = .infinity, jobs: [Candidate], pauseBelow: Int, resumeAbove: Int) -> Action? {
+    public static func action(
+        memoryLevel: Int, pressure: EffectiveMemoryPressure = .normal, calmFor: Double = .infinity, jobs: [Candidate],
+        pauseBelow: Int, resumeAbove: Int
+    ) -> Action? {
         let running = jobs.filter { !$0.paused }
         if memoryLevel < pauseBelow || pressure > .normal, running.count > 1,
-           let newest = running.filter(\.pausable).max(by: { $0.startedAt < $1.startedAt }),
-           newest.id != running.min(by: { $0.startedAt < $1.startedAt })?.id {
+            let newest = running.filter(\.pausable).max(by: { $0.startedAt < $1.startedAt }),
+            newest.id != running.min(by: { $0.startedAt < $1.startedAt })?.id
+        {
             return .pause(newest.id)
         }
         let settled = memoryLevel >= resumeAbove && pressure == .normal
-        func recovered(_ job: Candidate) -> Bool { settled && calmFor >= resumeDelay(pressurePauses: job.pressurePauses) }
+        func recovered(_ job: Candidate) -> Bool {
+            settled && calmFor >= resumeDelay(pressurePauses: job.pressurePauses)
+        }
         let resumable = jobs.filter { $0.paused && !$0.manual && (recovered($0) || (running.isEmpty && !$0.runaway)) }
         return resumable.min(by: { $0.startedAt < $1.startedAt }).map { .resume($0.id) }
     }
 
     /// The job that would be paused if the kernel's pressure verdict were the trigger, where the level threshold pauses
     /// nothing. Recorded but never acted on, to learn whether that trigger would fire at the right times.
-    public static func shadowPause(pressure: MemoryPressure, memoryLevel: Int, jobs: [Candidate], pauseBelow: Int, resumeAbove: Int) -> Int64? {
+    public static func shadowPause(
+        pressure: MemoryPressure, memoryLevel: Int, jobs: [Candidate], pauseBelow: Int, resumeAbove: Int
+    ) -> Int64? {
         guard pressure >= .warn, memoryLevel >= pauseBelow,
-              case let .pause(id)? = action(memoryLevel: pauseBelow - 1, jobs: jobs, pauseBelow: pauseBelow, resumeAbove: resumeAbove)
+            case let .pause(id)? = action(
+                memoryLevel: pauseBelow - 1, jobs: jobs, pauseBelow: pauseBelow, resumeAbove: resumeAbove)
         else { return nil }
         return id
     }

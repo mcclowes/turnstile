@@ -1,7 +1,8 @@
 import Darwin
 import Foundation
-@testable import turnstile
+
 @testable import TurnstileCore
+@testable import turnstile
 
 /// One end of a socketpair the daemon writes to, as a shim's connection would be.
 final class FakeClient {
@@ -65,7 +66,8 @@ final class DaemonHarness {
     func request(
         _ client: FakeClient, key: String = "swift build", resourceClass: ResourceClass = .compile,
         memory: UInt64? = Bytes.gb, agent: Bool = true, fingerprint: String? = nil, captures: Bool = true,
-        root: String = "/repo", home: String? = nil, cwd: String? = nil, argv: [String]? = nil, pid: Int32? = nil, pausable: Bool? = nil,
+        root: String = "/repo", home: String? = nil, cwd: String? = nil, argv: [String]? = nil, pid: Int32? = nil,
+        pausable: Bool? = nil,
         maxMemory: UInt64? = nil
     ) -> Int64? {
         var message = Message(type: "request")

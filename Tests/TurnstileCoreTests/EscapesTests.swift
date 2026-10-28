@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import TurnstileCore
 
 struct EscapesTests {
@@ -11,7 +12,10 @@ struct EscapesTests {
         ("/opt/homebrew/bin/node", ["/app/node_modules/.bin/vitest", "run"], "node vitest"),
         ("/opt/homebrew/bin/node", ["/app/node_modules/jest-cli/bin/jest.js"], "node jest"),
         ("/opt/homebrew/bin/node", ["/app/node_modules/typescript/bin/tsc", "-p", "."], "node tsc"),
-        ("/usr/bin/java", ["-cp", "/g/lib/gradle-launcher.jar", "org.gradle.launcher.daemon.bootstrap.GradleDaemon"], "gradle"),
+        (
+            "/usr/bin/java",
+            ["-cp", "/g/lib/gradle-launcher.jar", "org.gradle.launcher.daemon.bootstrap.GradleDaemon"], "gradle"
+        ),
         ("/usr/bin/python3", ["-m", "pytest", "tests"], "pytest"),
     ])
     func namesHeavyProcesses(executable: String, args: [String], label: String) {
@@ -43,8 +47,9 @@ struct EscapesTests {
             EscapeRow(label: "swift-frontend", via: "Xcode", cwd: "/Users/me/app", count: 14, lastSeen: 0),
             EscapeRow(label: "node vitest", via: "zsh", cwd: "/Users/me/web", count: 3, lastSeen: 0),
         ]
-        #expect(Escapes.report(rows, home: "/Users/me")
-            == "14 × swift-frontend under Xcode in ~/app, 3 × node vitest under zsh in ~/web")
+        #expect(
+            Escapes.report(rows, home: "/Users/me")
+                == "14 × swift-frontend under Xcode in ~/app, 3 × node vitest under zsh in ~/web")
         #expect(Escapes.report([], home: "/Users/me") == nil)
     }
 

@@ -1,10 +1,12 @@
 import Foundation
 import Testing
+
 @testable import TurnstileCore
 
 struct PathsTests {
     @Test func disablingWritesTheFlagAndEnablingRemovesIt() throws {
-        let home = FileManager.default.temporaryDirectory.appendingPathComponent("turnstile-paths-\(UUID().uuidString)").path
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("turnstile-paths-\(UUID().uuidString)")
+            .path
         defer { try? FileManager.default.removeItem(atPath: home) }
         let paths = Paths(home: home)
         #expect(!paths.isDisabled)
@@ -25,7 +27,8 @@ struct PathsTests {
     }
 
     @Test func pausingTheQueueWritesItsOwnFlag() throws {
-        let home = FileManager.default.temporaryDirectory.appendingPathComponent("turnstile-paths-\(UUID().uuidString)").path
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("turnstile-paths-\(UUID().uuidString)")
+            .path
         defer { try? FileManager.default.removeItem(atPath: home) }
         let paths = Paths(home: home)
         #expect(!paths.isQueuePaused)
@@ -40,7 +43,8 @@ struct PathsTests {
     }
 
     @Test func eachModeLeavesExactlyItsOwnFlag() throws {
-        let home = FileManager.default.temporaryDirectory.appendingPathComponent("turnstile-paths-\(UUID().uuidString)").path
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("turnstile-paths-\(UUID().uuidString)")
+            .path
         defer { try? FileManager.default.removeItem(atPath: home) }
         let paths = Paths(home: home)
         #expect(paths.mode == .gating)
@@ -63,7 +67,8 @@ struct PathsTests {
     }
 
     @Test func theStrongestFlagWinsWhenSeveralAreSet() throws {
-        let home = FileManager.default.temporaryDirectory.appendingPathComponent("turnstile-paths-\(UUID().uuidString)").path
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("turnstile-paths-\(UUID().uuidString)")
+            .path
         defer { try? FileManager.default.removeItem(atPath: home) }
         let paths = Paths(home: home)
         try paths.setQueuePaused(true)

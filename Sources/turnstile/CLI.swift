@@ -55,15 +55,23 @@ enum CLI {
         case "disable": setEnabled(false)
         case "enable": setEnabled(true)
         case "env": env(rest)
-        case "agents": print(AgentInstructions.snippet); exit(0)
-        case "shims", "rehash": rebuildShims(announce: true); exit(0)
+        case "agents":
+            print(AgentInstructions.snippet)
+            exit(0)
+        case "shims", "rehash":
+            rebuildShims(announce: true)
+            exit(0)
         case "restart": restart()
         case "stop": stop()
         case "uninstall": uninstall()
         case "daemon": daemon(rest)
         case "_relay": Supervisor.relay(rest)
-        case "--version", "-v", "version": print(version); exit(0)
-        case "help", "--help", "-h": print(usage); exit(0)
+        case "--version", "-v", "version":
+            print(version)
+            exit(0)
+        case "help", "--help", "-h":
+            print(usage)
+            exit(0)
         default:
             warn("unknown command \(command)\n\n\(usage)")
             exit(64)
@@ -104,7 +112,8 @@ enum CLI {
             let updated = ShellSetup.install(snippet, into: existing)
             guard updated != existing else { continue }
             do {
-                try FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(
+                    atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
                 try updated.write(toFile: path, atomically: true, encoding: .utf8)
                 print("Updated ~/\(file)")
             } catch {
@@ -123,7 +132,9 @@ enum CLI {
             return false
         }
         let target = paths.bin + "/turnstile"
-        let link = Resolver.homebrewLink(for: me).flatMap { FileManager.default.isExecutableFile(atPath: $0) ? $0 : nil }
+        let link = Resolver.homebrewLink(for: me).flatMap {
+            FileManager.default.isExecutableFile(atPath: $0) ? $0 : nil
+        }
         if link == nil && Resolver.canonical(target) == me { return true }
         do {
             try FileManager.default.createDirectory(atPath: paths.bin, withIntermediateDirectories: true)
@@ -146,8 +157,9 @@ enum CLI {
     /// Move jobs from an earlier daemon onto this version without releasing them ungated.
     static func retireOldDaemon(paths: Paths) {
         guard let client = Client.connect(socketPath: paths.socket),
-              let status = client.roundTrip(Message(type: "status"))?.status,
-              status.version != Turnstile.version else { return }
+            let status = client.roundTrip(Message(type: "status"))?.status,
+            status.version != Turnstile.version
+        else { return }
         if client.roundTrip(Message(type: "restart"))?.type == "ok" {
             print("Restarting the older daemon; jobs will reconnect")
         } else if status.running.isEmpty && status.queued.isEmpty {
@@ -165,7 +177,10 @@ enum CLI {
             warn("can't change \(paths.disabledFlag): \(error)")
             exit(1)
         }
-        print(enabled ? "turnstile is on: heavy commands are gated again" : "turnstile is off: every command runs ungated until `turnstile enable`")
+        print(
+            enabled
+                ? "turnstile is on: heavy commands are gated again"
+                : "turnstile is off: every command runs ungated until `turnstile enable`")
         exit(0)
     }
 
@@ -176,7 +191,9 @@ enum CLI {
     static func rebuildShims(announce: Bool) {
         let paths = self.paths
         try? paths.ensure()
-        let target = FileManager.default.fileExists(atPath: paths.bin + "/turnstile") ? paths.bin + "/turnstile" : (executablePath() ?? "")
+        let target =
+            FileManager.default.fileExists(atPath: paths.bin + "/turnstile")
+            ? paths.bin + "/turnstile" : (executablePath() ?? "")
         let config = Supervisor.loadConfig(environment: environment)
         let names = shimNames(config: config.machine) + ["turnstile"]
         let existing = (try? FileManager.default.contentsOfDirectory(atPath: paths.shims)) ?? []
@@ -190,7 +207,9 @@ enum CLI {
             try? FileManager.default.removeItem(atPath: staging)
             do {
                 try FileManager.default.createSymbolicLink(atPath: staging, withDestinationPath: target)
-                guard Darwin.rename(staging, link) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+                guard Darwin.rename(staging, link) == 0 else {
+                    throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+                }
             } catch {
                 warn("can't create \(link): \(error)")
             }
@@ -250,7 +269,8 @@ enum CLI {
 
     static func statusText(json: Bool) -> String {
         guard let client = Client.connect(socketPath: paths.socket),
-              let reply = client.roundTrip(Message(type: "status")), let snapshot = reply.status else {
+            let reply = client.roundTrip(Message(type: "status")), let snapshot = reply.status
+        else {
             if json { return #"{"daemon":false}"# }
             var lines = [
                 "turnstile: daemon not running (starts with the first gated command)",
@@ -274,7 +294,8 @@ enum CLI {
     /// What the scheduler has learned: each command's memory and run time, and the queue waits behind them.
     /// Read straight from the history, so it answers with the daemon asleep.
     static func history(_ args: [String]) -> Never {
-        guard let days = number("--days", in: args, default: 30), let limit = number("--limit", in: args, default: 20) else {
+        guard let days = number("--days", in: args, default: 30), let limit = number("--limit", in: args, default: 20)
+        else {
             warn("usage: turnstile history [--days 30] [--limit 20] [--here] [--json]")
             exit(64)
         }
@@ -356,7 +377,8 @@ enum CLI {
 
     static func isRunning(_ id: Int64) -> Bool {
         guard let client = Client.connect(socketPath: paths.socket),
-              let status = client.roundTrip(Message(type: "status"))?.status else { return false }
+            let status = client.roundTrip(Message(type: "status"))?.status
+        else { return false }
         return status.running.contains { $0.id == id }
     }
 
@@ -390,6 +412,9 @@ enum CLI {
         do { parsed = try RunArguments.parse(args) } catch RunArguments.Problem.unknownClass(let value) {
             warn("unknown class \(value) (use compile, test, or browser)")
             exit(64)
+        } catch RunArguments.Problem.helpRequested {
+            print(usage)
+            exit(0)
         } catch {
             warn("usage: turnstile run [--class compile|test|browser] -- <command>")
             exit(64)
@@ -398,9 +423,11 @@ enum CLI {
         let tool = parsed.command[0]
         let name = (tool as NSString).lastPathComponent
         let environment = self.environment
-        let real = tool.contains("/")
+        let real =
+            tool.contains("/")
             ? tool
-            : Resolver.realBinary(tool, path: environment["PATH"] ?? "", shimsDir: paths.shims, selfPath: executablePath())
+            : Resolver.realBinary(
+                tool, path: environment["PATH"] ?? "", shimsDir: paths.shims, selfPath: executablePath())
         guard let real else {
             warn("\(tool): command not found")
             exit(127)
@@ -411,10 +438,14 @@ enum CLI {
         }
         let interactive = isatty(0) == 1 && isatty(1) == 1
         let config = Supervisor.loadConfig(environment: environment)
-        var classification = Classifier.classify(tool: name, args: rest, context: ClassifierContext(config: config, interactive: interactive))
+        var classification =
+            Classifier.classify(
+                tool: name, args: rest, context: ClassifierContext(config: config, interactive: interactive))
             ?? Classification(forced ?? .compile, key: ([name] + rest.prefix(1)).joined(separator: " "))
         if let forced { classification.resourceClass = forced }
-        Supervisor.gate(tool: name, real: real, args: rest, classification: classification, config: config, interactive: interactive)
+        Supervisor.gate(
+            tool: name, real: real, args: rest, classification: classification, config: config, interactive: interactive
+        )
     }
 
     static func classify(_ args: [String]) -> Never {
@@ -457,8 +488,11 @@ enum StatusFormatter {
     static func render(_ snapshot: StatusSnapshot, now: Double) -> String {
         var lines: [String] = []
         let free = snapshot.physicalMemory / 100 * UInt64(snapshot.memoryLevel)
-        let limits = ResourceClass.allCases.map { "\($0.rawValue) \(snapshot.limits[$0.rawValue] ?? 1)" }.joined(separator: ", ")
-        lines.append("memory: \(snapshot.memoryLevel)% free (~\(Bytes.format(free)) of \(Bytes.format(snapshot.physicalMemory))), slots: \(limits)")
+        let limits = ResourceClass.allCases.map { "\($0.rawValue) \(snapshot.limits[$0.rawValue] ?? 1)" }.joined(
+            separator: ", ")
+        lines.append(
+            "memory: \(snapshot.memoryLevel)% free (~\(Bytes.format(free)) of \(Bytes.format(snapshot.physicalMemory))), slots: \(limits)"
+        )
 
         lines.append("")
         lines.append(snapshot.running.isEmpty ? "running: none" : "running:")
@@ -471,7 +505,9 @@ enum StatusFormatter {
             if job.agent { flags.append("agent") }
             if job.state != "running" { flags.append(job.pausedBy == "you" ? "paused by you" : job.state) }
             if job.joiners > 0 { flags.append("+\(job.joiners) joined") }
-            lines.append("  #\(job.id)  \(job.resourceClass.rawValue.padding(toLength: 7, withPad: " ", startingAt: 0)) \(job.label)  \(detail), \(elapsed)\(flags.isEmpty ? "" : "  [\(flags.joined(separator: ", "))]")")
+            lines.append(
+                "  #\(job.id)  \(job.resourceClass.rawValue.padding(toLength: 7, withPad: " ", startingAt: 0)) \(job.label)  \(detail), \(elapsed)\(flags.isEmpty ? "" : "  [\(flags.joined(separator: ", "))]")"
+            )
         }
 
         lines.append("")
@@ -479,7 +515,9 @@ enum StatusFormatter {
         for job in snapshot.queued {
             let waited = formatDuration(now - job.queuedAt)
             let flags = [job.agent ? "agent" : nil, job.held == true ? "held" : nil].compactMap { $0 }
-            lines.append("  #\(job.id)  \(job.resourceClass.rawValue.padding(toLength: 7, withPad: " ", startingAt: 0)) \(job.label)  ~\(Bytes.format(job.estimate))\(job.estimateSource.map { " from \($0)" } ?? ""), waiting \(waited)\(flags.isEmpty ? "" : "  [\(flags.joined(separator: ", "))]")")
+            lines.append(
+                "  #\(job.id)  \(job.resourceClass.rawValue.padding(toLength: 7, withPad: " ", startingAt: 0)) \(job.label)  ~\(Bytes.format(job.estimate))\(job.estimateSource.map { " from \($0)" } ?? ""), waiting \(waited)\(flags.isEmpty ? "" : "  [\(flags.joined(separator: ", "))]")"
+            )
             if let reason = job.waiting { lines.append("        \(reason)") }
         }
         if !snapshot.recent.isEmpty {

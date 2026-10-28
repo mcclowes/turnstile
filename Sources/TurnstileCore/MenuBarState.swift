@@ -9,6 +9,7 @@ public enum MenuBarState {
     public static let pausedSymbol = "pause.circle"
     public static let pressureSymbol = "exclamationmark.triangle"
     public static let disabledSymbol = "shield.slash"
+    public static let overdueSymbol = "clock.badge.exclamationmark"
     /// Below this, the icon warns even if nothing has been paused yet.
     public static let lowMemoryPercent = 15
     /// Below this, memory is worth watching but nothing is wrong yet.
@@ -53,6 +54,9 @@ public enum MenuBarState {
         if snapshot.memoryLevel < lowMemoryPercent || snapshot.running.contains(where: { $0.pausedBy == "memory" }) {
             return Indicator(symbol: pressureSymbol, count: count, tone: .danger)
         }
+        if snapshot.running.contains(where: isOverdue) {
+            return Indicator(symbol: overdueSymbol, count: count, tone: .warning)
+        }
         if snapshot.running.contains(where: \.paused) {
             return Indicator(symbol: pausedSymbol, count: count, tone: .warning)
         }
@@ -89,8 +93,54 @@ public enum MenuBarState {
     /// A job's state, only when its section heading doesn't already say it.
     public static func tag(for job: JobSnapshot) -> Tag? {
         if job.held == true { return Tag(text: "Held", tone: .warning) }
-        if job.paused { return job.pausedBy == "memory" ? Tag(text: "Paused for memory", tone: .warning) : Tag(text: "Paused", tone: .neutral) }
+        if job.paused {
+            return job.pausedBy == "memory"
+                ? Tag(text: "Paused for memory", tone: .warning) : Tag(text: "Paused", tone: .neutral)
+        }
+        if isOverdue(job) { return Tag(text: "Stuck?", tone: .danger) }
         return nil
+    }
+
+    /// Past this, a run is overdue unless it usually takes longer.
+    public static let overdueCeiling: Double = 2 * 3600
+    /// Against history: this many times its usual run time...
+    public static let overdueMultiple: Double = 3
+    /// ...and at least this far past it, so a 20s test taking a minute isn't news.
+    public static let overdueMinimumGap: Double = 10 * 60
+
+    /// Running far longer than it should. Its unused estimate stays committed, so the queue waits behind it.
+    public static func isOverdue(_ job: JobSnapshot) -> Bool {
+        guard job.state != "queued", let ran = job.ranFor else { return false }
+        guard let usual = job.usualDuration, usual > 0 else { return ran >= overdueCeiling }
+        if ran >= overdueCeiling && ran > usual { return true }
+        return ran >= usual * overdueMultiple && ran - usual >= overdueMinimumGap
+    }
+
+    /// Memory the job is committed to but not using: what the queue is waiting on.
+    static func heldBack(by job: JobSnapshot) -> UInt64 {
+        job.estimate > (job.footprint ?? 0) ? job.estimate - (job.footprint ?? 0) : 0
+    }
+
+    /// "15h33m, usually 8m": how long it's run, against its history when there is one.
+    static func runSummary(_ job: JobSnapshot) -> String {
+        let ran = formatDuration(job.ranFor ?? 0)
+        return job.usualDuration.map { "\(ran), usually \(shortDuration($0))" } ?? ran
+    }
+
+    public static func overdueHelp(for job: JobSnapshot) -> String? {
+        guard isOverdue(job) else { return nil }
+        let held = heldBack(by: job)
+        let holding =
+            held > 0
+            ? " It still counts ~\(Bytes.format(held)) it isn't using against memory, so queued jobs may wait behind it."
+            : ""
+        return "Running \(runSummary(job)).\(holding) Kill it if it's stuck."
+    }
+
+    /// "usually 8m" beside the timing once a run has passed its usual time.
+    public static func usualText(for job: JobSnapshot) -> String? {
+        guard let usual = job.usualDuration, let ran = job.ranFor, ran > usual else { return nil }
+        return "usually \(shortDuration(usual))"
     }
 
     /// "25% of ~2 GB" once it's running, "~2 GB expected" while it waits. The share isn't clamped, so a job over its estimate says so.
@@ -114,7 +164,8 @@ public enum MenuBarState {
     /// A full bar reads as "done" unless something says otherwise.
     public static func memoryHelp(for job: JobSnapshot) -> String? {
         guard memoryFraction(for: job) != nil else { return nil }
-        return "\(Bytes.format(job.footprint ?? 0)) in use of ~\(Bytes.format(job.estimate)) estimated. The bar fills toward the estimate. It shows memory, not progress."
+        return
+            "\(Bytes.format(job.footprint ?? 0)) in use of ~\(Bytes.format(job.estimate)) estimated. The bar fills toward the estimate. It shows memory, not progress."
     }
 
     /// Over its estimate is worth a look; well over is where the runaway killer lives.
@@ -193,16 +244,25 @@ public enum MenuBarState {
     }
 
     public static func actions(for job: JobSnapshot) -> [Action] {
-        let kill = Action(title: "Kill", message: "kill", help: job.state == "queued" ? "Drop #\(job.id) from the queue" : "Stop #\(job.id) and everything it started")
+        let kill = Action(
+            title: "Kill", message: "kill",
+            help: job.state == "queued" ? "Drop #\(job.id) from the queue" : "Stop #\(job.id) and everything it started"
+        )
         if job.state == "queued" {
-            let bump = Action(title: "Move to front", message: "bump", help: "Start #\(job.id) next, as soon as memory and a slot are free")
-            let hold = job.held == true
+            let bump = Action(
+                title: "Move to front", message: "bump",
+                help: "Start #\(job.id) next, as soon as memory and a slot are free")
+            let hold =
+                job.held == true
                 ? Action(title: "Release", message: "unhold", help: "Let #\(job.id) start when its turn comes")
                 : Action(title: "Hold", message: "hold", help: "Keep #\(job.id) queued until released")
             return [bump, hold, kill]
         }
-        let bump = Action(title: "Raise priority", message: "bump", help: "Run #\(job.id) at normal CPU priority, and resume it if paused")
-        let toggle = job.paused
+        let bump = Action(
+            title: "Raise priority", message: "bump",
+            help: "Run #\(job.id) at normal CPU priority, and resume it if paused")
+        let toggle =
+            job.paused
             ? Action(title: "Resume", message: "resume", help: "Resume #\(job.id)")
             : Action(title: "Pause", message: "pause", help: "Pause #\(job.id) until you resume it")
         return [bump, toggle, kill]
@@ -213,7 +273,7 @@ public enum MenuBarState {
 
     public struct Event: Equatable, Sendable {
         public enum Kind: String, CaseIterable, Sendable {
-            case memoryPause, runawayKill, longWait, ownFailure, queueDrained
+            case memoryPause, runawayKill, longWait, ownFailure, overdue, queueDrained
 
             /// Menu label for the toggle.
             public var title: String {
@@ -222,6 +282,7 @@ public enum MenuBarState {
                 case .runawayKill: return "Killed as a runaway"
                 case .longWait: return "Your job started after a long wait"
                 case .ownFailure: return "Your run failed"
+                case .overdue: return "A job may be stuck"
                 case .queueDrained: return "Queue is clear"
                 }
             }
@@ -232,13 +293,16 @@ public enum MenuBarState {
             public var urgency: Urgency {
                 switch self {
                 case .memoryPause: return .timeSensitive
-                case .runawayKill, .longWait, .ownFailure: return .active
+                case .runawayKill, .longWait, .ownFailure, .overdue: return .active
                 case .queueDrained: return .passive
                 }
             }
 
             /// Buttons on the notification, sent as control messages to the event's job.
             public var actions: [Action] {
+                if self == .overdue {
+                    return [Action(title: "Kill", message: "kill", help: "Stop it and everything it started")]
+                }
                 guard self == .memoryPause else { return [] }
                 return [
                     Action(title: "Resume", message: "resume", help: "Resume it now, whatever memory is doing"),
@@ -263,12 +327,27 @@ public enum MenuBarState {
         var events: [Event] = []
         let alreadyPaused = Set(old.running.filter { $0.pausedBy == "memory" }.map(\.id))
         for job in new.running where job.pausedBy == "memory" && !alreadyPaused.contains(job.id) {
-            events.append(Event(kind: .memoryPause, title: "Paused #\(job.id) \(job.label)", body: "Memory is low (\(new.memoryLevel)% free). It resumes when memory recovers.", job: job.id))
+            events.append(
+                Event(
+                    kind: .memoryPause, title: "Paused #\(job.id) \(job.label)",
+                    body: "Memory is low (\(new.memoryLevel)% free). It resumes when memory recovers.", job: job.id))
+        }
+        let alreadyOverdue = Set(old.running.filter(isOverdue).map(\.id))
+        for job in new.running where isOverdue(job) && !alreadyOverdue.contains(job.id) {
+            let held = heldBack(by: job)
+            let holding = held > 0 ? " It's holding ~\(Bytes.format(held)) of memory the queue can't use." : ""
+            events.append(
+                Event(
+                    kind: .overdue, title: "#\(job.id) \(job.label) may be stuck",
+                    body: "Running \(runSummary(job)).\(holding)", job: job.id))
         }
         let wasQueued = Set(old.queued.map(\.id))
         for job in new.running where !job.agent && wasQueued.contains(job.id) {
             guard let startedAt = job.startedAt, startedAt - job.queuedAt >= longWait else { continue }
-            events.append(Event(kind: .longWait, title: "Started #\(job.id) \(job.label)", body: "After waiting \(duration(startedAt - job.queuedAt))."))
+            events.append(
+                Event(
+                    kind: .longWait, title: "Started #\(job.id) \(job.label)",
+                    body: "After waiting \(duration(startedAt - job.queuedAt))."))
         }
         let yours = Set((old.running + old.queued).filter { !$0.agent }.map(\.id))
         let newest = old.recent.map(\.id).max() ?? 0
@@ -277,7 +356,10 @@ public enum MenuBarState {
             switch entry.outcome {
             case "killed":
                 let peak = entry.peak.map { " at \(Bytes.format($0))" } ?? ""
-                events.append(Event(kind: .runawayKill, title: "Killed \(title)", body: "It used far more memory than usual\(peak)."))
+                events.append(
+                    Event(
+                        kind: .runawayKill, title: "Killed \(title)", body: "It used far more memory than usual\(peak)."
+                    ))
             case "failed" where yours.contains(entry.id), "signaled" where yours.contains(entry.id):
                 let how = entry.exitCode.map { "It exited with code \($0)." } ?? "It was stopped by a signal."
                 events.append(Event(kind: .ownFailure, title: "Failed \(title)", body: how))
@@ -292,6 +374,14 @@ public enum MenuBarState {
         return events
     }
 
+    /// "8m", "2h", "1h30m": a usual time is approximate, so seconds would be noise.
+    static func shortDuration(_ seconds: Double) -> String {
+        let minutes = Int((seconds / 60).rounded())
+        if seconds < 60 { return "\(Int(seconds.rounded()))s" }
+        if minutes < 60 { return "\(minutes)m" }
+        return minutes % 60 == 0 ? "\(minutes / 60)h" : "\(minutes / 60)h\(minutes % 60)m"
+    }
+
     private static func duration(_ seconds: Double) -> String {
         seconds < 60 ? "\(Int(seconds))s" : "\(Int((seconds / 60).rounded()))m"
     }
@@ -299,7 +389,9 @@ public enum MenuBarState {
     /// The daemon's reason for a wait, with its coarse "starts in" replaced by one that ticks locally.
     public static func waitingText(for job: JobSnapshot, now: Double) -> String? {
         guard let waiting = job.waiting, let startsAt = job.startsAt else { return job.waiting }
-        return waiting.replacingOccurrences(of: #", starts in (under a minute|~\d+m)"#, with: ", " + countdown(to: startsAt, now: now), options: .regularExpression)
+        return waiting.replacingOccurrences(
+            of: #", starts in (under a minute|~\d+m)"#, with: ", " + countdown(to: startsAt, now: now),
+            options: .regularExpression)
     }
 
     /// What a row shows of a wait: the reason and when it ends. The full text belongs in a tooltip.
@@ -313,8 +405,10 @@ public enum MenuBarState {
 
     private static func countdown(to startsAt: Double, now: Double) -> String {
         let remaining = startsAt - now
-        return remaining <= 0 ? "should start any moment"
-            : remaining < 60 ? "starts in \(Int(remaining.rounded(.up)))s"
-            : "starts in ~\(Int((remaining / 60).rounded(.up)))m"
+        return remaining <= 0
+            ? "should start any moment"
+            : remaining < 60
+                ? "starts in \(Int(remaining.rounded(.up)))s"
+                : "starts in ~\(Int((remaining / 60).rounded(.up)))m"
     }
 }

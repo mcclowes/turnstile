@@ -78,6 +78,7 @@ struct JobRow: View {
             }
             if let tag = MenuBarState.tag(for: job) {
                 TagLabel(tag: tag)
+                    .help(MenuBarState.overdueHelp(for: job) ?? "")
             }
             Spacer(minLength: 6)
             trailing
@@ -102,13 +103,18 @@ struct JobRow: View {
     }
 
     /// "1.2 GB · 9m17s" while running, so the absolute size sits beside the share its bar shows.
+    /// "· usually 8m" joins once it's past its usual time.
     private var timing: some View {
         let footprint = queued ? nil : job.footprint.map { Bytes.format($0) }
-        return Text([footprint, elapsed].compactMap { $0 }.joined(separator: " · "))
+        let usual = queued ? nil : MenuBarState.usualText(for: job)
+        return Text([footprint, elapsed, usual].compactMap { $0 }.joined(separator: " · "))
             .foregroundStyle(.secondary)
             .font(.system(size: 11).monospacedDigit())
             .lineLimit(1)
-            .help((footprint.map { "\($0) in use. " } ?? "") + (queued ? "Waiting for \(elapsed)" : "Running for \(elapsed)"))
+            .help(
+                MenuBarState.overdueHelp(for: job)
+                    ?? (footprint.map { "\($0) in use. " } ?? "")
+                    + (queued ? "Waiting for \(elapsed)" : "Running for \(elapsed)"))
     }
 
     private var promoteVisible: Bool { canPromote && (queued || hovering) }
@@ -118,10 +124,16 @@ struct JobRow: View {
     private var promoteButton: some View {
         let bump = actions[0]
         let visible = promoteVisible
-        iconButton(bump, symbol: MenuBarState.symbol(for: bump), tint: queued ? .accentColor : Color(nsColor: .secondaryLabelColor)) {
+        iconButton(
+            bump, symbol: MenuBarState.symbol(for: bump),
+            tint: queued ? .accentColor : Color(nsColor: .secondaryLabelColor)
+        ) {
             send(bump.message)
         }
-        .background(queued && visible ? Color.accentColor.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .background(
+            queued && visible ? Color.accentColor.opacity(0.12) : .clear,
+            in: RoundedRectangle(cornerRadius: 5, style: .continuous)
+        )
         .opacity(visible ? 1 : 0)
         .disabled(!visible)
         .pointerStyle(visible ? .link : nil)
@@ -157,7 +169,9 @@ struct JobRow: View {
         }
     }
 
-    private func iconButton(_ action: MenuBarState.Action, symbol: String, tint: Color, perform: @escaping () -> Void) -> some View {
+    private func iconButton(_ action: MenuBarState.Action, symbol: String, tint: Color, perform: @escaping () -> Void)
+        -> some View
+    {
         Button(action: perform) {
             Image(systemName: symbol)
                 .font(.system(size: 10, weight: .semibold))

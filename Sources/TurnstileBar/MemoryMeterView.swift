@@ -86,7 +86,9 @@ struct MemoryMeterView: View {
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
                 .fixedSize()
-                .help("Free memory, less the reserve and what running jobs are still expected to claim. What a new job can have.")
+                .help(
+                    "Free memory, less the reserve and what running jobs are still expected to claim. What a new job can have."
+                )
         }
         .font(.system(size: 10))
     }
@@ -141,7 +143,8 @@ struct MemoryMeterView: View {
 
     static func help(for segment: MemoryMeter.Segment) -> String {
         let more = segment.committed > 0 ? ", ~\(Bytes.format(segment.committed)) more expected" : ""
-        return "#\(segment.id) \(segment.label): \(Bytes.format(segment.used)) in use\(more)\(segment.paused ? ", paused" : "")"
+        return
+            "#\(segment.id) \(segment.label): \(Bytes.format(segment.used)) in use\(more)\(segment.paused ? ", paused" : "")"
     }
 }
 
@@ -162,7 +165,10 @@ struct SlotChips: View {
                 .foregroundStyle(blocking ? MenuBarState.Tone.warning.color : Color.secondary)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1)
-                .background(blocking ? MenuBarState.Tone.warning.color.opacity(0.14) : Color(nsColor: .quaternaryLabelColor), in: Capsule())
+                .background(
+                    blocking ? MenuBarState.Tone.warning.color.opacity(0.14) : Color(nsColor: .quaternaryLabelColor),
+                    in: Capsule()
+                )
                 .fixedSize()
                 .hoverTip(Self.help(for: slot, blocking: blocking))
             }
@@ -182,6 +188,7 @@ struct SlotChips: View {
         let limit = slot.limit == 1 ? "1 \(name) job runs" : "\(slot.limit) \(name) jobs run"
         let queued = slot.queued > 0 ? ", \(slot.queued) waiting" : ""
         let waiting = blocking ? " The next job is waiting on this, not memory." : ""
-        return "\(name.capitalized) slots: \(slot.running) of \(slot.limit) in use\(queued). At most \(limit) at once, however much memory is spare.\(waiting) Click to change."
+        return
+            "\(name.capitalized) slots: \(slot.running) of \(slot.limit) in use\(queued). At most \(limit) at once, however much memory is spare.\(waiting) Click to change."
     }
 }

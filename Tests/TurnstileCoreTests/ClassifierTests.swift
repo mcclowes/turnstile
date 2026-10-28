@@ -1,10 +1,13 @@
 import Testing
+
 @testable import TurnstileCore
 
 struct ClassifierTests {
     func classify(_ command: String, interactive: Bool = false, config: Config = Config()) -> Classification? {
         let words = command.split(separator: " ").map(String.init)
-        return Classifier.classify(tool: words[0], args: Array(words.dropFirst()), context: ClassifierContext(config: config, interactive: interactive))
+        return Classifier.classify(
+            tool: words[0], args: Array(words.dropFirst()),
+            context: ClassifierContext(config: config, interactive: interactive))
     }
 
     @Test(arguments: [
@@ -61,7 +64,8 @@ struct ClassifierTests {
         "vitest watch", "vitest --watch", "jest --watch", "playwright install", "tsc --watch",
         "git status", "ls -la",
         "xcrun", "xcrun --version", "xcrun --find swift", "xcrun -f clang", "xcrun --show-sdk-path",
-        "corepack enable", "corepack prepare pnpm@9 --activate", "corepack use pnpm@9", "corepack pnpm install", "corepack",
+        "corepack enable", "corepack prepare pnpm@9 --activate", "corepack use pnpm@9", "corepack pnpm install",
+        "corepack",
         "xcrun --sdk macosx --show-sdk-path", "xcrun simctl list", "xcrun swift --version", "xcrun clang -c a.c",
     ])
     func passesThrough(command: String) {
@@ -80,7 +84,10 @@ struct ClassifierTests {
 
     @Test func projectRulesOverrideTheBuiltInTable() {
         let project = ConfigFile(
-            commands: ["swift test": .gate(.test, memory: 6 * Bytes.gb), "make": .pass, "go list": .gate(.compile, memory: nil)],
+            commands: [
+                "swift test": .gate(.test, memory: 6 * Bytes.gb), "make": .pass,
+                "go list": .gate(.compile, memory: nil),
+            ],
             scripts: ["verify": .gate(.test, memory: nil), "build": .pass]
         )
         let config = Config(project: project)

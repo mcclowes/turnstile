@@ -14,4 +14,7 @@ Exit codes are the tool's own. turnstile adds three:
 | `126` | The tool couldn't start |
 | `127` | The tool isn't installed |
 
+An explicit cancellation still returns `125` if the tool exits before the
+cancellation message arrives while turnstile is draining its output.
+
 If a run you joined is cancelled, your command runs on its own instead.

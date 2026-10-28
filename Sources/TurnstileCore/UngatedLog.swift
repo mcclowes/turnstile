@@ -58,7 +58,8 @@ public enum UngatedLog {
     public static func describe(_ entries: [Entry], now: Double, home: String) -> String? {
         guard let (count, latest) = summary(entries, since: now - 86400) else { return nil }
         let cwd = latest.cwd.hasPrefix(home + "/") ? "~" + latest.cwd.dropFirst(home.count) : latest.cwd
-        return "\(count) run\(count == 1 ? "" : "s") went ungated in the last day; the latest, `\(latest.command)` in \(cwd) "
+        return
+            "\(count) run\(count == 1 ? "" : "s") went ungated in the last day; the latest, `\(latest.command)` in \(cwd) "
             + "\(formatDuration(now - latest.time)) ago, because \(latest.cause)"
     }
 }

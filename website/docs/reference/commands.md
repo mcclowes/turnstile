@@ -23,6 +23,8 @@ Jobs can be named by queue number, pid, or name.
 
 `turnstile history` reads the same history the scheduler estimates from, so it shows the numbers behind every admission decision. It works with the daemon asleep.
 
+`--days` and `--limit` require positive integers; a missing or invalid value exits with usage status `64`. The limit caps the command table, while period totals still cover all matching jobs.
+
 ```
 $ turnstile history --days 7
 history: 214 jobs in 4 projects over 7 days, 188 from agents
@@ -64,6 +66,10 @@ History is kept for 30 days in `~/.turnstile/state.sqlite`, on your machine.
 | `turnstile disable` / `enable` | Turn gating off and on for every shell, without uninstalling |
 | `turnstile restart` | Replace the daemon. Waiting jobs requeue, and running jobs continue under the new daemon |
 | `turnstile stop` | Stop the daemon and fail open. Waiting jobs run ungated, and running jobs continue untracked |
+
+`run` exits with usage status `64` when the command or a `--class` value is missing, or the class is unknown. These failures occur before executable lookup or daemon contact. Turnstile only parses options before the command or `--`; later arguments are passed through unchanged.
+
+Use `turnstile run --help` or `turnstile run -h` to show help and exit successfully without running a command or contacting the daemon. Help also works after a valid `--class` option. To ask the wrapped command for help, put its help flag after the command, for example `turnstile run -- swift --help`.
 
 ## Setup and config
 

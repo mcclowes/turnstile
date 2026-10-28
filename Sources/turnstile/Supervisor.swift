@@ -16,7 +16,10 @@ enum Supervisor {
     static func shim(tool: String, args: [String]) -> Never {
         let environment = ProcessInfo.processInfo.environment
         let paths = Paths(environment: environment)
-        guard let real = Resolver.realBinary(tool, path: environment["PATH"] ?? "", shimsDir: paths.shims, selfPath: executablePath()) else {
+        guard
+            let real = Resolver.realBinary(
+                tool, path: environment["PATH"] ?? "", shimsDir: paths.shims, selfPath: executablePath())
+        else {
             warn("\(tool): command not found (outside turnstile's shims)")
             exit(127)
         }
@@ -29,13 +32,16 @@ enum Supervisor {
         guard let classification = Classifier.classify(tool: tool, args: args, context: context) else {
             execReal(real, args)
         }
-        gate(tool: tool, real: real, args: args, classification: classification, config: config, interactive: interactive)
+        gate(
+            tool: tool, real: real, args: args, classification: classification, config: config, interactive: interactive
+        )
     }
 
     /// Nested calls inside an admitted job pass straight through.
     static func insideAdmittedJob(_ environment: [String: String]) -> Bool {
         guard let token = environment["TURNSTILE_TOKEN"],
-              let pid = token.split(separator: ":").last.flatMap({ pid_t($0) }) else { return false }
+            let pid = token.split(separator: ":").last.flatMap({ pid_t($0) })
+        else { return false }
         return ProcessTree.isAlive(pid)
     }
 
@@ -48,23 +54,29 @@ enum Supervisor {
         }
     }
 
-    static func gate(tool: String, real: String, args: [String], classification: Classification, config: Config, interactive: Bool) -> Never {
+    static func gate(
+        tool: String, real: String, args: [String], classification: Classification, config: Config, interactive: Bool
+    ) -> Never {
         let environment = ProcessInfo.processInfo.environment
         let paths = Paths(environment: environment)
         guard var client = Client.connectOrStart(paths: paths) else {
             if Sandbox.isActive {
-                runUngated("can't reach the daemon from inside this sandbox, running \(tool) ungated (`turnstile doctor` says how to allow it)",
-                           cause: "a sandbox blocked the daemon's socket", tool: tool, real: real, args: args, paths: paths)
+                runUngated(
+                    "can't reach the daemon from inside this sandbox, running \(tool) ungated (`turnstile doctor` says how to allow it)",
+                    cause: "a sandbox blocked the daemon's socket", tool: tool, real: real, args: args, paths: paths)
             }
-            runUngated("daemon unavailable, running \(tool) ungated (see \(paths.daemonLog))", cause: "the daemon was unavailable", tool: tool, real: real, args: args, paths: paths)
+            runUngated(
+                "daemon unavailable, running \(tool) ungated (see \(paths.daemonLog))",
+                cause: "the daemon was unavailable", tool: tool, real: real, args: args, paths: paths)
         }
         let cwd = FileManager.default.currentDirectoryPath
-        let workspace = Workspace.inspect(cwd: cwd, argv: [tool] + args, environment: environment)
+        let workspace = Workspace.inspect(cwd: cwd, argv: [real] + args, environment: environment)
         let throttle = config.throttle
-        let agent = Agent.isAgent(environment: environment, extraMarkers: config.machine.agentEnv ?? [], interactive: interactive)
+        let agent = Agent.isAgent(
+            environment: environment, extraMarkers: config.machine.agentEnv ?? [], interactive: interactive)
 
         var request = Message(type: "request")
-        request.argv = [tool] + args
+        request.argv = [real] + args
         request.tool = tool
         request.key = classification.key
         request.resourceClass = classification.resourceClass
@@ -74,7 +86,8 @@ enum Supervisor {
         request.home = workspace.home
         request.fingerprint = workspace.fingerprint
         request.agent = agent
-        request.pausable = isPausable(agent: agent, resourceClass: classification.resourceClass, configured: throttle.pause)
+        request.pausable = isPausable(
+            agent: agent, resourceClass: classification.resourceClass, configured: throttle.pause)
         request.maxMemory = throttle.maxMemory
         request.killMultiplier = throttle.killMultiplier
         request.throttleJobs = throttle.jobs
@@ -84,7 +97,9 @@ enum Supervisor {
         request.captures = isatty(1) == 0 && isatty(2) == 0
         request.interactive = interactive
         guard client.send(request) else {
-            runUngated("daemon unavailable, running \(tool) ungated", cause: "the daemon was unavailable", tool: tool, real: real, args: args, paths: paths)
+            runUngated(
+                "daemon unavailable, running \(tool) ungated", cause: "the daemon was unavailable", tool: tool,
+                real: real, args: args, paths: paths)
         }
 
         var lastText: String?
@@ -95,7 +110,9 @@ enum Supervisor {
             // A daemon answers at once, and repeats itself every 30s while a job waits; silence means it's wedged.
             switch client.read(timeout: heard ? 90 : 10) {
             case .timeout:
-                runUngated("the daemon stopped answering, running \(tool) ungated (see \(paths.daemonLog))", cause: "the daemon stopped answering", tool: tool, real: real, args: args, paths: paths)
+                runUngated(
+                    "the daemon stopped answering, running \(tool) ungated (see \(paths.daemonLog))",
+                    cause: "the daemon stopped answering", tool: tool, real: real, args: args, paths: paths)
             case .closed:
                 // A crashed daemon: requeue with a fresh one rather than letting every waiting job start at once.
                 reconnects += 1
@@ -104,13 +121,17 @@ enum Supervisor {
                     heard = false
                     continue
                 }
-                runUngated("lost the daemon while waiting, running \(tool) ungated (see \(paths.daemonLog))", cause: "lost the daemon while waiting", tool: tool, real: real, args: args, paths: paths)
+                runUngated(
+                    "lost the daemon while waiting, running \(tool) ungated (see \(paths.daemonLog))",
+                    cause: "lost the daemon while waiting", tool: tool, real: real, args: args, paths: paths)
             case let .message(message):
                 heard = true
                 switch message.type {
                 case "release":
                     // No text: a nested call inside a running job, which passes straight through.
-                    if let text = message.text { runUngated(text, cause: text, tool: tool, real: real, args: args, paths: paths) }
+                    if let text = message.text {
+                        runUngated(text, cause: text, tool: tool, real: real, args: args, paths: paths)
+                    }
                     execReal(real, args)
                 case "queued":
                     if let text = message.text {
@@ -126,7 +147,9 @@ enum Supervisor {
                     // The run it joined ended without a result, so run it here instead.
                     reruns += 1
                     guard reruns <= 3, let fresh = Client.connectOrStart(paths: paths), fresh.send(request) else {
-                        runUngated("running \(tool) ungated", cause: "the runs it joined kept ending without a result", tool: tool, real: real, args: args, paths: paths)
+                        runUngated(
+                            "running \(tool) ungated", cause: "the runs it joined kept ending without a result",
+                            tool: tool, real: real, args: args, paths: paths)
                     }
                     client = fresh
                     heard = false
@@ -153,16 +176,23 @@ enum Supervisor {
     }
 
     /// Fails open, and leaves a record so `turnstile doctor` can say it happened.
-    static func runUngated(_ text: String, cause: String, tool: String, real: String, args: [String], paths: Paths) -> Never {
+    static func runUngated(_ text: String, cause: String, tool: String, real: String, args: [String], paths: Paths)
+        -> Never
+    {
         warn(text)
-        let entry = UngatedLog.Entry(time: Date().timeIntervalSince1970, cause: cause, cwd: FileManager.default.currentDirectoryPath, command: ([tool] + args).joined(separator: " "))
+        let entry = UngatedLog.Entry(
+            time: Date().timeIntervalSince1970, cause: cause, cwd: FileManager.default.currentDirectoryPath,
+            command: ([tool] + args).joined(separator: " "))
         UngatedLog.append(entry, to: paths.ungatedLog)
         execReal(real, args)
     }
 
     // MARK: Running an admitted job
 
-    static func run(client: Client, request: Message, tool: String, real: String, args: [String], job: Int64, limits: JobLimits, agent: Bool, paths: Paths, announce: String?) -> Never {
+    static func run(
+        client: Client, request: Message, tool: String, real: String, args: [String], job: Int64, limits: JobLimits,
+        agent: Bool, paths: Paths, announce: String?
+    ) -> Never {
         if let announce { warn(announce) }
         var environment = ProcessInfo.processInfo.environment
         environment["TURNSTILE_TOKEN"] = "\(job):\(getpid())"
@@ -228,12 +258,14 @@ enum Supervisor {
             }
         }
 
-        guard let child = spawn(
-            path: path, argv: argv, environment: environment,
-            stdoutFD: logPath != nil ? outPipe[1] : nil,
-            stderrFD: logPath != nil ? errPipe[1] : nil,
-            closeOthers: false
-        ) else {
+        guard
+            let child = spawn(
+                path: path, argv: argv, environment: environment,
+                stdoutFD: logPath != nil ? outPipe[1] : nil,
+                stderrFD: logPath != nil ? errPipe[1] : nil,
+                closeOthers: false
+            )
+        else {
             warn("can't run \(real): \(String(cString: strerror(errno)))")
             var finished = Message(type: "finished")
             finished.exitCode = 126
@@ -296,14 +328,17 @@ enum Supervisor {
                         streams[index].read = -1
                     }
                 } else if client.ingest() {
-                    for message in client.takePending() where ["notice", "release", "cancelled"].contains(message.type) {
+                    for message in client.takePending() where ["notice", "release", "cancelled"].contains(message.type)
+                    {
                         if let text = message.text { warn(text) }
                         if message.type == "release" { released = true }
                         // The daemon signals the tree too; this covers a child it hasn't seen start yet.
-                        if message.type == "cancelled" && !cancelled && !exited {
+                        if message.type == "cancelled" && !cancelled {
                             cancelled = true
-                            kill(child, SIGTERM)
-                            resume(child)
+                            if !exited {
+                                kill(child, SIGTERM)
+                                resume(child)
+                            }
                         }
                     }
                 } else {
@@ -514,6 +549,9 @@ enum Supervisor {
 }
 
 // The wait(2) status macros aren't imported into Swift.
+// swift-format-ignore
 private func WIFSIGNALED(_ status: Int32) -> Bool { (status & 0x7f) != 0 && (status & 0x7f) != 0x7f }
+// swift-format-ignore
 private func WTERMSIG(_ status: Int32) -> Int32 { status & 0x7f }
+// swift-format-ignore
 private func WEXITSTATUS(_ status: Int32) -> Int32 { (status >> 8) & 0xff }

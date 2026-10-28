@@ -11,6 +11,7 @@ public struct RunArguments: Equatable, Sendable {
     public enum Problem: Error, Equatable {
         case unknownClass(String)
         case noCommand
+        case helpRequested
     }
 
     public static func parse(_ args: [String]) throws -> RunArguments {
@@ -18,9 +19,14 @@ public struct RunArguments: Equatable, Sendable {
         var index = 0
         while index < args.count {
             let arg = args[index]
-            if arg == "--" { index += 1; break }
+            if arg == "--help" || arg == "-h" { throw Problem.helpRequested }
+            if arg == "--" {
+                index += 1
+                break
+            }
             let value: String
-            if arg == "--class", index + 1 < args.count {
+            if arg == "--class" {
+                guard index + 1 < args.count else { throw Problem.noCommand }
                 value = args[index + 1]
                 index += 2
             } else if arg.hasPrefix("--class=") {

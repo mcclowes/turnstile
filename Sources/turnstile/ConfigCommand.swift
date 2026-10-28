@@ -18,13 +18,17 @@ enum ConfigCommand {
         switch args.first(where: { !$0.hasPrefix("-") }) ?? "show" {
         case "show": show()
         case "check": exit(check(printOK: true) ? 0 : 1)
-        case "path": print(path(project: project)); exit(0)
+        case "path":
+            print(path(project: project))
+            exit(0)
         case "init":
             let file = path(project: project)
             if create(file, project: project) { print("Created \(file)") } else { print("\(file) already exists") }
             exit(0)
         case "edit": edit(project: project)
-        case "help": print(usage); exit(0)
+        case "help":
+            print(usage)
+            exit(0)
         case let other:
             warn("unknown config command \(other)\n\n\(usage)")
             exit(64)
@@ -80,16 +84,22 @@ enum ConfigCommand {
         let globalPath = ConfigLoader.globalPath(environment: environment)
         let machine = config.machine
         var lines: [String] = []
-        lines.append("global:  \(tilde(globalPath))\(FileManager.default.fileExists(atPath: globalPath) ? "" : " (not found, using defaults)")")
+        lines.append(
+            "global:  \(tilde(globalPath))\(FileManager.default.fileExists(atPath: globalPath) ? "" : " (not found, using defaults)")"
+        )
         lines.append("project: \(config.projectRoot.map { tilde($0 + "/" + ConfigLoader.projectFileName) } ?? "none")")
         lines.append("")
         lines.append("machine:")
         let slots = ResourceClass.allCases.map { "\($0.rawValue) \(machine.concurrencyLimit(for: $0))" }
         lines.append("  concurrency   \(slots.joined(separator: ", "))")
         lines.append("  reserve       keep \(Bytes.format(machine.reserveBytes)) free for everything else")
-        lines.append("  pressure      pause agent jobs below \(machine.pauseBelowPercent)% free, resume above \(machine.resumeAbovePercent)%")
+        lines.append(
+            "  pressure      pause agent jobs below \(machine.pauseBelowPercent)% free, resume above \(machine.resumeAbovePercent)%"
+        )
         lines.append("  shims         \(CLI.shimNames(config: machine).joined(separator: " "))")
-        if let extra = machine.agentEnv, !extra.isEmpty { lines.append("  agentEnv      \(extra.joined(separator: " "))") }
+        if let extra = machine.agentEnv, !extra.isEmpty {
+            lines.append("  agentEnv      \(extra.joined(separator: " "))")
+        }
 
         let throttle = config.throttle
         lines.append("")
@@ -100,9 +110,11 @@ enum ConfigCommand {
         if let hard = throttle.maxMemory {
             lines.append("  kill above    \(Bytes.format(hard)), whatever the machine is doing")
         } else {
-            lines.append("  runaway above \(formatMultiplier(throttle.killMultiplier ?? Pressure.defaultKillMultiplier))× a command's high-water peak, "
-                + "at least \(machine.killFloorPercent)% of RAM (75% before there's history)")
-            lines.append("  kill above    only under \(machine.pauseBelowPercent)% free, and only after a pause doesn't help")
+            lines.append(
+                "  runaway above \(formatMultiplier(throttle.killMultiplier ?? Pressure.defaultKillMultiplier))× a command's high-water peak, "
+                    + "at least \(machine.killFloorPercent)% of RAM (75% before there's history)")
+            lines.append(
+                "  kill above    only under \(machine.pauseBelowPercent)% free, and only after a pause doesn't help")
         }
         lines.append("  pause         \(PausePolicy(configured: throttle.pause).summary)")
 
@@ -112,7 +124,9 @@ enum ConfigCommand {
             lines.append("")
             lines.append("rules:")
             for (key, rule) in commands.sorted(by: { $0.key < $1.key }) { lines.append("  \(key)  \(describe(rule))") }
-            for (key, rule) in scripts.sorted(by: { $0.key < $1.key }) { lines.append("  script \(key)  \(describe(rule))") }
+            for (key, rule) in scripts.sorted(by: { $0.key < $1.key }) {
+                lines.append("  script \(key)  \(describe(rule))")
+            }
         }
 
         let found = problems()
@@ -129,7 +143,8 @@ enum ConfigCommand {
         switch rule {
         case .pass: return "pass through"
         case let .gate(cls, memory):
-            return [cls?.rawValue ?? "gate", memory.map { "~\(Bytes.format($0))" }].compactMap { $0 }.joined(separator: ", ")
+            return [cls?.rawValue ?? "gate", memory.map { "~\(Bytes.format($0))" }].compactMap { $0 }.joined(
+                separator: ", ")
         }
     }
 
@@ -174,7 +189,8 @@ enum ConfigCommand {
     static func create(_ file: String, project: Bool) -> Bool {
         guard !FileManager.default.fileExists(atPath: file) else { return false }
         do {
-            try FileManager.default.createDirectory(atPath: (file as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                atPath: (file as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
             try template(project: project).write(toFile: file, atomically: true, encoding: .utf8)
             return true
         } catch {
@@ -194,7 +210,11 @@ enum ConfigCommand {
 
     /// Runs `script` with /bin/sh on the terminal, passing `argument` as $1, and returns its exit status.
     static func runShell(_ script: String, _ argument: String) -> Int32 {
-        guard let pid = spawn(path: "/bin/sh", argv: ["sh", "-c", script, "sh", argument], environment: environment, closeOthers: false) else {
+        guard
+            let pid = spawn(
+                path: "/bin/sh", argv: ["sh", "-c", script, "sh", argument], environment: environment,
+                closeOthers: false)
+        else {
             warn("can't start /bin/sh")
             return 1
         }

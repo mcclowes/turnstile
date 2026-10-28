@@ -39,7 +39,9 @@ enum Top {
                 footer = "#\(pending.id) finished before it was killed"
             }
             let prompt = confirmingKill.map { "kill #\($0.id) \($0.label)? y/n" } ?? footer
-            draw(TopScreen.render(snapshot, selected: selected, now: now, width: size().width, height: size().height, footer: prompt))
+            draw(
+                TopScreen.render(
+                    snapshot, selected: selected, now: now, width: size().width, height: size().height, footer: prompt))
 
             for key in readKeys(timeout: 1 - (Date().timeIntervalSince1970 - lastPoll)) {
                 if let pending = confirmingKill {

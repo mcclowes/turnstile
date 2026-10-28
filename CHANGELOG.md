@@ -4,17 +4,38 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ## Unreleased
 
+### Added
+
+- Daemon logs report slow scheduler ticks with their longest phase and long gaps between ticks, using monotonic elapsed time.
+- The menu bar flags a job running far longer than usual, or for hours with no history, as "Stuck?": the row says how long it usually takes and how much memory it's holding back from the queue, the icon turns orange, and a notification offers to kill it (#73).
+
 ### Changed
 
-- Correct the documentation toolchain's Node requirement to `^22.18.0 || ^24.0.0 || >=26.0.0`.
+- CI now fails on Swift formatting violations using the checked-in rules.
 
 ### Fixed
 
-- Stop local release and app packaging helpers if Git cannot inspect working-tree changes.
-- Reject whitespace-only release notes before checking or publishing a release.
-- Reject invalid or extra release-helper arguments before building, signing, or publishing.
-- Keep prior app and ZIP artifacts after failed packaging or publication, preserve release ZIPs in dev mode, and retain recovery files if restoration fails.
-- Preserve the prior distribution through assembly and publication failures, restore it after handled interruptions, and report retained recovery data if restoration fails.
+- `run --help` and `run -h` show usage before executable lookup. Help flags after the command or `--` remain unchanged.
+- Corrected the documentation site's supported Node range to match CSpell and Vitest.
+- A missing value for `run --class` is rejected as a usage error instead of being looked up as a command.
+- E2E restart polling retries invalid snapshots quietly and requires a valid replacement PID from a successful status command.
+- Fixed rounding at the grace period boundary in the daemon test for runaway jobs.
+- Release publication rejects missing or whitespace-only changelog notes before checking GitHub releases.
+- Pressure, restart, and memory-warning E2E fixtures wait for observed state before releasing fake jobs.
+- Cancellation received while draining an exited tool's output still returns 125, preserving the instruction not to retry.
+- The history-report helper rejects invalid arguments before reading history or invoking SQLite.
+- App packaging restores prior artifacts on failed publication or handled interruptions, validates the checksum before promotion, and retains recovery files if restoration fails.
+- Distribution publication restores previous output on failed moves or handled interruptions and retains recovery data if restoration fails.
+- Updated the documentation site's DOMPurify sanitizer to 3.4.17.
+- Distribution assembly preserves the previous release directory when archiving, app packaging, copying, or checksum generation fails.
+- Packaging keeps previous app and ZIP artifacts until release validation succeeds; dev packaging preserves the release ZIP.
+- Workspace fingerprints use Git status and file metadata instead of serializing binary diffs, restoring the performance fix from #28. Staging and edits with restored modification times produce distinct fingerprints.
+- Removed Swift compiler warnings in history migrations and process-path decoding.
+- The suspended-client E2E check confirms queueing and process suspension before admission, and verifies the daemon's reclamation reason.
+- The top E2E check selects its target row, waits for job and terminal shutdown handshakes, and reports each failed condition separately.
+- E2E escaped-server checks and cleanup use a unique run marker, so concurrent runs cannot detect or stop each other's servers.
+- Local release and app packaging helpers stop if Git cannot inspect working-tree changes.
+- Release helpers reject unsupported options, empty arguments, and extra operands before building, signing, or publishing.
 
 ## 0.9.0
 

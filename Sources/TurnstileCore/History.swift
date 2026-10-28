@@ -11,7 +11,10 @@ public struct HistoryRow: Equatable, Sendable {
     public var wait: Double?
     public var finishedAt: Double
 
-    public init(root: String, key: String, agent: Bool, outcome: String, peak: UInt64?, duration: Double?, wait: Double?, finishedAt: Double) {
+    public init(
+        root: String, key: String, agent: Bool, outcome: String, peak: UInt64?, duration: Double?, wait: Double?,
+        finishedAt: Double
+    ) {
         self.root = root
         self.key = key
         self.agent = agent
@@ -36,7 +39,8 @@ public struct CommandSummary: Codable, Equatable, Sendable {
     /// The median of the last five successful runs, as the scheduler reads it.
     public var usualDuration: Double?
 
-    public init(project: String, key: String, runs: Int, estimate: UInt64?, worstPeak: UInt64?, usualDuration: Double?) {
+    public init(project: String, key: String, runs: Int, estimate: UInt64?, worstPeak: UInt64?, usualDuration: Double?)
+    {
         self.project = project
         self.key = key
         self.runs = runs
@@ -75,7 +79,10 @@ public struct HistorySummary: Codable, Equatable, Sendable {
     /// Commands left out by the limit.
     public var more: Int
 
-    public init(days: Int, jobs: Int, projects: Int, agentJobs: Int, outcomes: [String: Int], waits: WaitSummary?, commands: [CommandSummary], more: Int) {
+    public init(
+        days: Int, jobs: Int, projects: Int, agentJobs: Int, outcomes: [String: Int], waits: WaitSummary?,
+        commands: [CommandSummary], more: Int
+    ) {
         self.days = days
         self.jobs = jobs
         self.projects = projects
@@ -111,7 +118,8 @@ public struct HistorySummary: Codable, Equatable, Sendable {
                 project: projectName(group[0].root),
                 key: group[0].key,
                 runs: group.count,
-                estimate: peaks.filter { $0.outcome == "ok" || $0.outcome == "failed" }.prefix(20).compactMap(\.peak).max(),
+                estimate: peaks.filter { $0.outcome == "ok" || $0.outcome == "failed" }.prefix(20).compactMap(\.peak)
+                    .max(),
                 worstPeak: peaks.compactMap(\.peak).max(),
                 usualDuration: median(times.prefix(5).compactMap(\.duration))
             )
@@ -160,12 +168,15 @@ public enum HistoryFormatter {
     static let notable = ["failed", "killed", "signaled", "cancelled", "lost"]
 
     public static func render(_ summary: HistorySummary, here: String?) -> String {
-        let scope = here.map { "in \(projectName($0))" } ?? "in \(summary.projects) project\(summary.projects == 1 ? "" : "s")"
+        let scope =
+            here.map { "in \(projectName($0))" } ?? "in \(summary.projects) project\(summary.projects == 1 ? "" : "s")"
         guard summary.jobs > 0 else {
             return "history: nothing ran\(here.map { " in \(projectName($0))" } ?? "") in the last \(summary.days) days"
         }
-        var lines = ["history: \(summary.jobs) job\(summary.jobs == 1 ? "" : "s") \(scope) over \(summary.days) days, "
-            + "\(summary.agentJobs) from agents"]
+        var lines = [
+            "history: \(summary.jobs) job\(summary.jobs == 1 ? "" : "s") \(scope) over \(summary.days) days, "
+                + "\(summary.agentJobs) from agents"
+        ]
 
         lines.append("")
         lines.append("commands:")
@@ -182,8 +193,9 @@ public enum HistoryFormatter {
 
         let merged = (summary.outcomes["joined"] ?? 0) + (summary.outcomes["superseded"] ?? 0)
         if merged > 0 {
-            lines.append("merged: \(summary.outcomes["joined"] ?? 0) joined a run already going, "
-                + "\(summary.outcomes["superseded"] ?? 0) replaced by a newer request")
+            lines.append(
+                "merged: \(summary.outcomes["joined"] ?? 0) joined a run already going, "
+                    + "\(summary.outcomes["superseded"] ?? 0) replaced by a newer request")
         }
         let trouble = notable.compactMap { name in summary.outcomes[name].map { "\($0) \(name)" } }
         if !trouble.isEmpty { lines.append("outcomes: \(trouble.joined(separator: ", "))") }
@@ -208,10 +220,11 @@ public enum HistoryFormatter {
         let alignRight = Array(repeating: false, count: rows[0].count - 4) + [true, true, true, true]
         let widths = (0..<rows[0].count).map { column in rows.map { $0[column].count }.max() ?? 0 }
         return rows.map { row in
-            "  " + row.enumerated().map { column, cell in
-                let padding = String(repeating: " ", count: widths[column] - cell.count)
-                return alignRight[column] ? padding + cell : cell + padding
-            }.joined(separator: "  ").trimmingTrailingSpaces()
+            "  "
+                + row.enumerated().map { column, cell in
+                    let padding = String(repeating: " ", count: widths[column] - cell.count)
+                    return alignRight[column] ? padding + cell : cell + padding
+                }.joined(separator: "  ").trimmingTrailingSpaces()
         }
     }
 }

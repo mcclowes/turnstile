@@ -35,7 +35,9 @@ public enum Classifier {
 
     static let nodeRunners: Set<String> = ["npm", "pnpm", "yarn", "bun"]
 
-    public static func classify(tool: String, args: [String], context: ClassifierContext = ClassifierContext()) -> Classification? {
+    public static func classify(tool: String, args: [String], context: ClassifierContext = ClassifierContext())
+        -> Classification?
+    {
         if let rule = context.config.commandRule(for: [tool] + args) {
             let builtIn = builtIn(tool: tool, args: args, context: context)
             switch rule {
@@ -61,9 +63,12 @@ public enum Classifier {
         case "npx": return exec(tool: tool, args, valueFlags: ["-p", "--package", "-c", "--call"], context: context)
         case "vitest": return vitest(args, context: context)
         case "jest": return jest(args)
-        case "playwright": return firstPositional(args) == "test" ? Classification(.browser, key: "playwright test") : nil
+        case "playwright":
+            return firstPositional(args) == "test" ? Classification(.browser, key: "playwright test") : nil
         case "cypress": return firstPositional(args) == "run" ? Classification(.browser, key: "cypress run") : nil
-        case "tsc": return args.contains(where: { ["-w", "--watch", "--init"].contains($0) }) ? nil : Classification(.compile, key: "tsc")
+        case "tsc":
+            return args.contains(where: { ["-w", "--watch", "--init"].contains($0) })
+                ? nil : Classification(.compile, key: "tsc")
         case "xcrun": return xcrun(args, context: context)
         case "corepack": return corepack(args, context: context)
         default: return nil
@@ -76,17 +81,27 @@ public enum Classifier {
     }
 
     /// First argument that isn't a flag, skipping the values of flags that take one.
-    static func firstPositional(_ args: [String], valueFlags: Set<String> = [], skip: (String) -> Bool = { _ in false }) -> String? {
+    static func firstPositional(_ args: [String], valueFlags: Set<String> = [], skip: (String) -> Bool = { _ in false })
+        -> String?
+    {
         positionals(args, valueFlags: valueFlags, skip: skip).first
     }
 
-    static func positionals(_ args: [String], valueFlags: Set<String> = [], skip: (String) -> Bool = { _ in false }) -> [String] {
+    static func positionals(_ args: [String], valueFlags: Set<String> = [], skip: (String) -> Bool = { _ in false })
+        -> [String]
+    {
         var result: [String] = []
         var index = 0
         while index < args.count {
             let arg = args[index]
-            if arg == "--" { result += args[(index + 1)...]; break }
-            if valueFlags.contains(arg) { index += 2; continue }
+            if arg == "--" {
+                result += args[(index + 1)...]
+                break
+            }
+            if valueFlags.contains(arg) {
+                index += 2
+                continue
+            }
             if !arg.hasPrefix("-") && !skip(arg) { result.append(arg) }
             index += 1
         }
@@ -97,7 +112,10 @@ public enum Classifier {
         var index = 0
         while index < args.count {
             let arg = args[index]
-            if valueFlags.contains(arg) { index += 2; continue }
+            if valueFlags.contains(arg) {
+                index += 2
+                continue
+            }
             if !arg.hasPrefix("-") { return index }
             index += 1
         }
@@ -108,8 +126,12 @@ public enum Classifier {
 
     static func swift(_ args: [String]) -> Classification? {
         switch args.first {
-        case "build": return Classification(.compile, key: "swift build" + configuration(args, flags: ["-c", "--configuration"], default: "debug"))
-        case "test": return Classification(.test, key: "swift test" + configuration(args, flags: ["-c", "--configuration"], default: "debug"))
+        case "build":
+            return Classification(
+                .compile, key: "swift build" + configuration(args, flags: ["-c", "--configuration"], default: "debug"))
+        case "test":
+            return Classification(
+                .test, key: "swift test" + configuration(args, flags: ["-c", "--configuration"], default: "debug"))
         default: return nil  // run, package, format, repl, scripts
         }
     }
@@ -121,13 +143,17 @@ public enum Classifier {
         var index = 0
         while index < args.count {
             let arg = args[index]
-            if valueFlags.contains(arg) { index += 2; continue }
+            if valueFlags.contains(arg) {
+                index += 2
+                continue
+            }
             if arg.hasPrefix("-") {
                 if arg == "-f" || arg == "--find" || arg.hasPrefix("--show-") { return nil }
                 index += 1
                 continue
             }
-            return classify(tool: (arg as NSString).lastPathComponent, args: Array(args[(index + 1)...]), context: context)
+            return classify(
+                tool: (arg as NSString).lastPathComponent, args: Array(args[(index + 1)...]), context: context)
         }
         return nil
     }
@@ -149,17 +175,21 @@ public enum Classifier {
         ]
         if args.contains(where: queries.contains) { return nil }
         if args.contains("test") || args.contains("test-without-building") {
-            return Classification(.test, key: "xcodebuild test" + configuration(args, flags: ["-configuration"], default: "Debug"))
+            return Classification(
+                .test, key: "xcodebuild test" + configuration(args, flags: ["-configuration"], default: "Debug"))
         }
         if args.contains("clean") && !args.contains("build") { return nil }
-        return Classification(.compile, key: "xcodebuild build" + configuration(args, flags: ["-configuration"], default: "Debug"))
+        return Classification(
+            .compile, key: "xcodebuild build" + configuration(args, flags: ["-configuration"], default: "Debug"))
     }
 
     static func cargo(_ args: [String]) -> Classification? {
         let sub = firstPositional(args, valueFlags: ["-C", "--config", "-Z", "--color"], skip: { $0.hasPrefix("+") })
         switch sub {
         case "build", "b", "check", "c", "clippy", "doc", "d", "install", "rustc", "rustdoc", "fix":
-            return Classification(.compile, key: "cargo \(canonical(sub!, ["b": "build", "c": "check", "d": "doc"]))" + cargoProfile(args))
+            return Classification(
+                .compile, key: "cargo \(canonical(sub!, ["b": "build", "c": "check", "d": "doc"]))" + cargoProfile(args)
+            )
         case "test", "t", "bench", "nextest", "miri":
             return Classification(.test, key: "cargo \(canonical(sub!, ["t": "test"]))" + cargoProfile(args))
         default: return nil
@@ -168,7 +198,8 @@ public enum Classifier {
 
     static func go(_ args: [String]) -> Classification? {
         switch firstPositional(args, valueFlags: ["-C"]) {
-        case "build", "install", "vet": return Classification(.compile, key: "go \(firstPositional(args, valueFlags: ["-C"])!)")
+        case "build", "install", "vet":
+            return Classification(.compile, key: "go \(firstPositional(args, valueFlags: ["-C"])!)")
         case "test": return Classification(.test, key: "go test")
         default: return nil
         }
@@ -177,8 +208,15 @@ public enum Classifier {
     static func gradle(_ tool: String, _ args: [String]) -> Classification? {
         let passFlags: Set<String> = ["-v", "--stop", "--status", "--help", "-?"]
         if args.contains(where: passFlags.contains) { return nil }
-        let tasks = positionals(args, valueFlags: ["-p", "--project-dir", "-b", "--build-file", "-c", "--settings-file", "-x", "--exclude-task", "-I", "--init-script", "-g", "--gradle-user-home", "--console", "--warning-mode", "--priority", "-D", "-P"])
-        let queryTasks: Set<String> = ["tasks", "help", "dependencies", "properties", "projects", "wrapper", "init", "clean"]
+        let tasks = positionals(
+            args,
+            valueFlags: [
+                "-p", "--project-dir", "-b", "--build-file", "-c", "--settings-file", "-x", "--exclude-task", "-I",
+                "--init-script", "-g", "--gradle-user-home", "--console", "--warning-mode", "--priority", "-D", "-P",
+            ])
+        let queryTasks: Set<String> = [
+            "tasks", "help", "dependencies", "properties", "projects", "wrapper", "init", "clean",
+        ]
         if !tasks.isEmpty && tasks.allSatisfy(queryTasks.contains) { return nil }
         if tasks.contains(where: { $0.lowercased().contains("test") || $0.hasSuffix("check") }) {
             return Classification(.test, key: "gradle test")
@@ -187,9 +225,13 @@ public enum Classifier {
     }
 
     static func make(_ tool: String, _ args: [String]) -> Classification? {
-        let passFlags: Set<String> = ["-n", "--dry-run", "--just-print", "-q", "--question", "-p", "--print-data-base", "-v"]
+        let passFlags: Set<String> = [
+            "-n", "--dry-run", "--just-print", "-q", "--question", "-p", "--print-data-base", "-v",
+        ]
         if args.contains(where: passFlags.contains) { return nil }
-        let targets = positionals(args, valueFlags: ["-C", "-f", "--file", "-I", "-o", "-W", "--directory"], skip: { $0.contains("=") || Int($0) != nil })
+        let targets = positionals(
+            args, valueFlags: ["-C", "-f", "--file", "-I", "-o", "-W", "--directory"],
+            skip: { $0.contains("=") || Int($0) != nil })
         let quiet: Set<String> = ["clean", "distclean", "help", "install", "fmt", "format", "lint-fix"]
         if !targets.isEmpty && targets.allSatisfy(quiet.contains) { return nil }
         if targets.contains(where: { $0.contains("test") || $0.contains("check") }) {
@@ -200,7 +242,13 @@ public enum Classifier {
 
     static func vitest(_ args: [String], context: ClassifierContext) -> Classification? {
         if args.contains(where: { $0 == "--watch" || $0 == "-w" || $0 == "--ui" }) { return nil }
-        switch firstPositional(args, valueFlags: ["--config", "-c", "--root", "-r", "--project", "--dir", "--reporter", "--environment", "--pool", "-t", "--testNamePattern"]) {
+        switch firstPositional(
+            args,
+            valueFlags: [
+                "--config", "-c", "--root", "-r", "--project", "--dir", "--reporter", "--environment", "--pool", "-t",
+                "--testNamePattern",
+            ])
+        {
         case "run", "related", "bench": return Classification(.test, key: "vitest run")
         case "watch", "dev", "list", "init": return nil
         default:
@@ -220,17 +268,23 @@ public enum Classifier {
 
     static let npmBuiltins: Set<String> = [
         "install", "i", "ci", "add", "uninstall", "remove", "rm", "update", "up", "upgrade", "outdated", "ls", "list",
-        "why", "explain", "link", "ln", "unlink", "publish", "pack", "version", "view", "info", "show", "init", "create",
-        "config", "set", "get", "cache", "store", "prune", "dedupe", "ddp", "audit", "fund", "doctor", "login", "logout",
-        "whoami", "search", "root", "bin", "prefix", "env", "setup", "patch", "patch-commit", "licenses", "fetch", "import",
-        "rebuild", "rb", "server", "deploy", "self-update", "approve-builds", "workspaces", "workspace", "plugin", "npm",
+        "why", "explain", "link", "ln", "unlink", "publish", "pack", "version", "view", "info", "show", "init",
+        "create",
+        "config", "set", "get", "cache", "store", "prune", "dedupe", "ddp", "audit", "fund", "doctor", "login",
+        "logout",
+        "whoami", "search", "root", "bin", "prefix", "env", "setup", "patch", "patch-commit", "licenses", "fetch",
+        "import",
+        "rebuild", "rb", "server", "deploy", "self-update", "approve-builds", "workspaces", "workspace", "plugin",
+        "npm",
         "constraints", "dlx", "x", "exec", "node", "help", "outdated", "owner", "team", "token", "access", "profile",
         "completion", "edit", "explore", "repo", "docs", "bugs", "hook", "org", "ping", "restart", "stop", "shrinkwrap",
         "star", "stars", "unstar", "unpublish", "deprecate", "dist-tag", "pkg", "query", "sbom", "diff", "install-test",
         "it", "install-ci-test", "cit", "upgrade-interactive", "why", "catalog", "pm", "outdated",
     ]
 
-    static let runnerValueFlags: Set<String> = ["--filter", "-F", "--dir", "-C", "--prefix", "-w", "--workspace", "--cwd", "--loglevel"]
+    static let runnerValueFlags: Set<String> = [
+        "--filter", "-F", "--dir", "-C", "--prefix", "-w", "--workspace", "--cwd", "--loglevel",
+    ]
 
     static func nodeRunner(_ tool: String, _ args: [String], context: ClassifierContext) -> Classification? {
         let valueFlags = tool == "npm" ? runnerValueFlags : runnerValueFlags.subtracting(["-w"])
@@ -276,13 +330,19 @@ public enum Classifier {
         let pass: Set<String> = ["dev", "start", "serve", "watch", "preview", "storybook", "open", "ui"]
         if !words.isDisjoint(with: pass) { return nil }
         if !words.isDisjoint(with: ["e2e", "playwright", "cypress", "browser", "visual"]) { return .browser }
-        if !words.isDisjoint(with: ["test", "tests", "spec", "vitest", "jest", "coverage", "ci", "check"]) { return .test }
-        if !words.isDisjoint(with: ["build", "compile", "typecheck", "tsc", "lint", "bundle", "package", "dist"]) { return .compile }
+        if !words.isDisjoint(with: ["test", "tests", "spec", "vitest", "jest", "coverage", "ci", "check"]) {
+            return .test
+        }
+        if !words.isDisjoint(with: ["build", "compile", "typecheck", "tsc", "lint", "bundle", "package", "dist"]) {
+            return .compile
+        }
         return nil
     }
 
     /// `npx vitest run`, `pnpm exec jest`: classify the command being run.
-    static func exec(tool: String, _ args: [String], valueFlags: Set<String>, context: ClassifierContext) -> Classification? {
+    static func exec(tool: String, _ args: [String], valueFlags: Set<String>, context: ClassifierContext)
+        -> Classification?
+    {
         guard let index = positionalIndex(args, valueFlags: valueFlags) else { return nil }
         var inner = args[index]
         if let at = inner.lastIndex(of: "@"), at != inner.startIndex { inner = String(inner[..<at]) }  // vitest@3

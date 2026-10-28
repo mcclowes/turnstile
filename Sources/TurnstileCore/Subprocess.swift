@@ -16,12 +16,15 @@ enum Subprocess {
         process.standardError = FileHandle.nullDevice
         process.standardInput = FileHandle.nullDevice
         do { try process.run() } catch { return nil }
-        let timeout = DispatchWorkItem { process.terminate() }
-        DispatchQueue.global().asyncAfter(deadline: .now() + max(0, deadline.timeIntervalSinceNow), execute: timeout)
+        // A thread of its own: a GCD timer can fire late when the shared pool is busy with blocking work.
+        let watchdog = Thread {
+            while process.isRunning && Date() < deadline { usleep(10_000) }
+            if process.isRunning { process.terminate() }
+        }
+        watchdog.start()
         let reader = output.fileHandleForReading
         while case let chunk = reader.availableData, !chunk.isEmpty { consume(chunk) }
         process.waitUntilExit()
-        timeout.cancel()
         guard process.terminationReason == .exit, Date() < deadline else { return nil }
         return process.terminationStatus
     }

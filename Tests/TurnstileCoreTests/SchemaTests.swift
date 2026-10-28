@@ -39,6 +39,20 @@ struct SchemaTests {
         #expect(keys(machine?["concurrency"] as? [String: Any]) == Set(ResourceClass.allCases.map(\.rawValue)))
     }
 
+    /// The project schema is a hand-kept subset of the global one, so its shared parts must not drift.
+    @Test func projectSchemaMatchesTheGlobalOneWhereTheyOverlap() throws {
+        let global = try schema("config.schema.json")
+        let project = try schema("turnstilerc.schema.json")
+        #expect(NSDictionary(dictionary: global["definitions"] as? [String: Any] ?? [:])
+            == NSDictionary(dictionary: project["definitions"] as? [String: Any] ?? [:]))
+        let globalProperties = global["properties"] as? [String: Any] ?? [:]
+        for (key, value) in project["properties"] as? [String: Any] ?? [:] {
+            #expect(
+                NSDictionary(dictionary: ["v": value]) == NSDictionary(dictionary: ["v": globalProperties[key] as Any]),
+                "\(key) differs")
+        }
+    }
+
     @Test func schemaKeyIsTreatedAsAComment() {
         let json = #"{"$schema": "https://example.com/config.schema.json", "throttle": {}}"#
         #expect(ConfigLint.warnings(Data(json.utf8), scope: .project).isEmpty)

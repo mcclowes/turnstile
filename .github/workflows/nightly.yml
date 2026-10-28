@@ -1,0 +1,51 @@
+name: Nightly release
+
+on:
+  schedule:
+    - cron: "41 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  deployments: write
+  id-token: write
+  attestations: write
+
+jobs:
+  plan:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.plan.outputs.changed }}
+      sha: ${{ steps.plan.outputs.sha }}
+      fingerprint: ${{ steps.plan.outputs.fingerprint }}
+      tag: ${{ steps.plan.outputs.tag }}
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+      - run: node --test scripts/nightly-release.test.mjs
+      - name: Compare with the last delivered nightly
+        id: plan
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/nightly-release.mjs plan
+  release:
+    needs: plan
+    if: needs.plan.outputs.changed == 'true'
+    uses: ./.github/workflows/release.yml
+    with:
+      nightly: true
+      candidate: ${{ needs.plan.outputs.sha }}
+      fingerprint: ${{ needs.plan.outputs.fingerprint }}
+      nightly_tag: ${{ needs.plan.outputs.tag }}
+      nightly_version: ${{ needs.plan.outputs.version }}
+    secrets: inherit

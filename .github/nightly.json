@@ -1,0 +1,38 @@
+{
+  "channel": "homebrew",
+  "inputs": [
+    "Sources",
+    "Tests",
+    "Package.swift",
+    "Package.resolved",
+    "package.json",
+    "package-lock.json",
+    "scripts",
+    ".github",
+    "Vendor",
+    "ThirdParty",
+    ".swiftformat",
+    ".swiftlint.yml",
+    ".saggar-kit-ref",
+    "Fixtures"
+  ],
+  "managedVersion": false,
+  "recipes": [
+    {
+      "kind": "formula",
+      "stable": "turnstile",
+      "nightly": "turnstile-nightly",
+      "artifact": ".build/dist/turnstile-*-macos.tar.gz"
+    },
+    {
+      "kind": "cask",
+      "stable": "turnstile-app",
+      "nightly": "turnstile-app@nightly",
+      "artifact": ".build/dist/Turnstile-*.zip",
+      "nightlyDependency": "mcclowes/turnstile/turnstile-nightly"
+    }
+  ],
+  "artifactRepository": "mcclowes/homebrew-turnstile",
+  "versionFile": "Sources/TurnstileCore/Paths.swift",
+  "versionPattern": "public static let version = \"([^\"]+)\""
+}

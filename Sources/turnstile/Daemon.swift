@@ -709,12 +709,7 @@ final class Daemon {
     func readMemory() {
         let sample = SystemMemory.sample(at: Daemon.clock())
         memory.record(sample)
-        observe(
-            MemoryReading(
-                level: sample.level,
-                pressure: MemoryPressure(level: Int64(sample.kernelPressure)),
-                swapUsed: sample.swapUsed
-            ))
+        observe(MemoryReading(sample))
         let effective = memory.pressure
         if effective != memoryPressure {
             log(

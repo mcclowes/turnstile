@@ -50,20 +50,6 @@ public enum SystemMemory {
         ProcessInfo.processInfo.activeProcessorCount
     }
 
-    /// The kernel's own pressure verdict. It can say warn while `level` still reads 30% or more, because
-    /// compressed and swapped pages count as available. Normal while the level is faked for tests.
-    public static func pressure(environment: [String: String] = ProcessInfo.processInfo.environment) -> MemoryPressure {
-        if environment["TURNSTILE_MEMORY_LEVEL_FILE"] != nil { return .normal }
-        return MemoryPressure(level: sysctlInt("kern.memorystatus_vm_pressure_level"))
-    }
-
-    public static var swapUsed: UInt64 {
-        var usage = xsw_usage()
-        var size = MemoryLayout<xsw_usage>.size
-        guard sysctlbyname("vm.swapusage", &usage, &size, nil, 0) == 0 else { return 0 }
-        return usage.xsu_used
-    }
-
     public static func free(level: Int, of physical: UInt64 = SystemMemory.physical) -> UInt64 {
         physical / 100 * UInt64(max(0, min(100, level)))
     }
@@ -125,10 +111,16 @@ public struct MemoryReading: Equatable, Sendable {
         self.swapUsed = swapUsed
     }
 
+    /// The kernel's pressure verdict can say warn while `level` still reads 30% or more, because compressed and
+    /// swapped pages count as available.
+    public init(_ sample: MemorySample) {
+        self.init(
+            level: sample.level, pressure: MemoryPressure(level: Int64(sample.kernelPressure)),
+            swapUsed: sample.swapUsed)
+    }
+
     public static func now(environment: [String: String] = ProcessInfo.processInfo.environment) -> MemoryReading {
-        MemoryReading(
-            level: SystemMemory.level(environment: environment),
-            pressure: SystemMemory.pressure(environment: environment), swapUsed: SystemMemory.swapUsed)
+        MemoryReading(SystemMemory.sample(environment: environment, at: 0))
     }
 
     /// A new pressure verdict, or a level at least 5 points from the last one logged. Swap alone follows the others.

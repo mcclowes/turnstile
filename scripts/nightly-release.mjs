@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { appendFileSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, globSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
@@ -102,6 +102,9 @@ export async function publishHomebrew(config, candidate, { run = command, env = 
   const paths = [];
   const checksums = new Map();
   for (const recipe of config.recipes) {
+    if (recipe.nightlyAlias && (recipe.kind !== 'formula' || recipe.nightlyAlias !== `${recipe.stable}@nightly`)) {
+      throw new Error('Nightly formula alias must be <stable>@nightly');
+    }
     const matches = env.NIGHTLY_ARTIFACT ? [env.NIGHTLY_ARTIFACT] : globSync(recipe.artifact);
     if (matches.length !== 1) throw new Error(`Expected one artifact for ${recipe.stable}, found ${matches.length}`);
     const artifact = resolve(matches[0]);
@@ -127,6 +130,17 @@ export async function publishHomebrew(config, candidate, { run = command, env = 
     writeFileSync(join(tap, path), content);
     run('ruby', ['-c', join(tap, path)]);
     paths.push(path);
+    if (recipe.nightlyAlias) {
+      const alias = `Aliases/${recipe.nightlyAlias}`;
+      const target = `../${path}`;
+      const entry = lstatSync(join(tap, alias), { throwIfNoEntry: false });
+      if (entry && (!entry.isSymbolicLink() || readlinkSync(join(tap, alias)) !== target)) {
+        throw new Error(`Nightly alias has an unexpected target: ${alias}`);
+      }
+      mkdirSync(join(tap, 'Aliases'), { recursive: true });
+      if (!entry) symlinkSync(target, join(tap, alias));
+      paths.push(alias);
+    }
   }
   git('config', 'user.name', 'github-actions[bot]');
   git('config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com');

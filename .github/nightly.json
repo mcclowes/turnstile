@@ -22,6 +22,7 @@
       "kind": "formula",
       "stable": "turnstile",
       "nightly": "turnstile-nightly",
+      "nightlyAlias": "turnstile@nightly",
       "artifact": ".build/dist/turnstile-*-macos.tar.gz"
     },
     {
@@ -29,7 +30,7 @@
       "stable": "turnstile-app",
       "nightly": "turnstile-app@nightly",
       "artifact": ".build/dist/Turnstile-*.zip",
-      "nightlyDependency": "mcclowes/turnstile/turnstile-nightly"
+      "nightlyDependency": "mcclowes/turnstile/turnstile@nightly"
     }
   ],
   "artifactRepository": "mcclowes/homebrew-turnstile",

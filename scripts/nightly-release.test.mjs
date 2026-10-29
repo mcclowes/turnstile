@@ -85,7 +85,7 @@ test('Homebrew publication verifies the remote artifact before pushing only the 
     git('add', '.'); git('commit', '-qm', 'Stable'); git('remote', 'add', 'origin', origin); git('push', '-q', 'origin', 'main');
     const artifact = join(root, 'demo.tar.gz'); writeFileSync(artifact, 'a packaged CLI');
     writeFileSync(join(root, 'package.json'), '{"version":"1.2.3"}');
-    const config = { versionFile: join(root, 'package.json'), recipes: [{ kind: 'formula', stable: 'demo', nightly: 'demo-nightly', artifact }] };
+    const config = { versionFile: join(root, 'package.json'), recipes: [{ kind: 'formula', stable: 'demo', nightly: 'demo-nightly', nightlyAlias: 'demo@nightly', artifact }] };
     const candidate = { tag: 'nightly-homebrew-123-1' };
     let corrupt = true;
     const run = (program, args, options) => {
@@ -108,6 +108,8 @@ test('Homebrew publication verifies the remote artifact before pushing only the 
     corrupt = false;
     await publishHomebrew(config, candidate, { run, env: { ...env, NIGHTLY_TAP_PATH: retryTap } });
     assert.match(real('git', ['--git-dir', origin, 'show', 'main:Formula/demo-nightly.rb']), /class DemoNightly/);
+    assert.equal(real('git', ['--git-dir', origin, 'show', 'main:Aliases/demo@nightly']), '../Formula/demo-nightly.rb');
+    assert.match(real('git', ['--git-dir', origin, 'ls-tree', 'main', 'Aliases/demo@nightly']), /^120000 blob/);
     assert.equal(real('git', ['--git-dir', origin, 'show', 'main:Formula/demo.rb']), stable);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

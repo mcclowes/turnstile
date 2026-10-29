@@ -1,7 +1,6 @@
 # Added by saggar — local files that shouldn't be committed
 .saggar/**/*.local.*
 .saggar/scratchpad.md
-.saggar/jobs/
 
 .build/
 .swiftpm/

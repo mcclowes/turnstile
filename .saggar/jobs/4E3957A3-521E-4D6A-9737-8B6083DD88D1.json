@@ -1,0 +1,8 @@
+{
+  "command" : "sh -c claude -p \"$(cat .saggar\/usage-review.md)\" --add-dir \"$HOME\/.turnstile\" --allowedTools \"Read Grep Glob Write Bash(sqlite3:*) Bash(turnstile history:*) Bash(gh issue list:*) Bash(ls:*) Bash(tail:*) Bash(git log:*)\"",
+  "createdAt" : "2026-09-26T20:23:53Z",
+  "id" : "4E3957A3-521E-4D6A-9737-8B6083DD88D1",
+  "name" : "turnstile usage review (report only)",
+  "schedule" : "0 9 * * 1",
+  "schemaVersion" : 12
+}

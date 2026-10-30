@@ -12,6 +12,8 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ### Changed
 
+- Generated agent guidance assigns machine-wide admission to Turnstile, explains concurrent scheduling and benchmark limits, and directs inaccessible admission to diagnosis rather than Saggar hold broadcasts (#142).
+
 - CI now fails on Swift formatting violations using the checked-in rules.
 
 ### Fixed

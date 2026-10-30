@@ -6,7 +6,7 @@ slug: /agents
 
 # Agents and people
 
-turnstile treats commands from coding agents differently from commands you type. Agent commands run at lower priority, queue behind yours, and are the first to be paused when memory runs out.
+turnstile treats commands from coding agents differently from commands you type. Agent commands run at lower priority and queue behind yours. Under memory pressure, agent compiles can be paused; test and browser jobs normally keep running.
 
 ## How a shell is identified
 
@@ -30,13 +30,27 @@ To teach turnstile about another harness, add its variable to [`agentEnv`](../re
 
 ## Telling agents how to start builds
 
-Shims only gate what PATH resolves, so an agent that runs `./node_modules/.bin/vitest` or `/usr/bin/swift build` goes around turnstile. `turnstile agents` prints a few lines for a project's `AGENTS.md` or `CLAUDE.md` that say to use the tool's usual name, or `turnstile run` for anything else heavy:
+Shims only gate what PATH resolves, so an agent that runs `./node_modules/.bin/vitest` or `/usr/bin/swift build` goes around turnstile. `turnstile agents` prints guidance for a project's `AGENTS.md` or `CLAUDE.md` that says to use the tool's usual name, or `turnstile run` for anything else heavy:
 
 ```sh
 turnstile agents >> AGENTS.md
 ```
 
 `turnstile doctor` reports what ran outside turnstile anyway.
+
+## Let Turnstile own admission
+
+Submit finite heavy work using the supported gated invocations below. Wait for visible queued or paused work; don't retry outside the gate, disable gating, or negotiate machine-wide heavy-work hold/release broadcasts through Saggar. Turnstile owns admission across the machine. Genuine code/worktree ownership coordination remains appropriate, including agreeing who edits shared files or owns a checkout.
+
+If admission is inaccessible or a command emits a failed-open warning, diagnose and report it rather than bypassing the gate. Run `turnstile doctor --shells` and `turnstile status --json` inside the actual harness. Verify a queued/running job or completed history row; exit zero alone doesn't prove admission. Report the harness, exact socket path, and connection error. A denied observation doesn't establish that the daemon is absent, and unknown memory reads don't establish healthy memory. See [troubleshooting](../troubleshooting.md) for the diagnostic limits and the socket requirements below for external configuration.
+
+## Concurrency and test expectations
+
+Default scheduling permits concurrency: three jobs per class, subject to available memory. Test/browser jobs aren't normally auto-paused because their timeouts keep counting during a pause. SourceKit/IDE work can remain unmanaged, and children of an admitted job share its slot. Admission doesn't promise an exclusive performance-test window or establish why a timing assertion failed.
+
+Prefer deterministic, bounded functional tests: synchronize on observable readiness, use finite deadlines, and retain failure diagnostics. Don't weaken assertions, inflate timeouts indiscriminately, or change Ambient's tests to accommodate shared load. Keep regression diagnosis independent of scheduler pressure unless evidence connects them.
+
+Benchmarks need deliberate methodology. Record competing load and pressure, build mode, warmup, repetitions, and variance; compare equivalent conditions and report interference as a limitation. Explicit machine-exclusive scheduling is a future product decision, not an agent-maintained lock or an existing admission guarantee.
 
 ## Codex command and socket integration
 

@@ -8,6 +8,10 @@ slug: /scheduling
 
 A job starts when its class has a free slot and its expected peak memory fits in free memory, minus a [reserve](../reference/configuration.md#machine-settings) for everything else and whatever running jobs are still expected to grow into. Nothing starts while the machine is [swapping](pressure.md) unless nothing is running, since free memory means nothing in that state.
 
+## Concurrency is not exclusivity
+
+The default limit is three jobs per class, subject to memory admission. Test and browser jobs aren't normally auto-paused, and SourceKit/IDE work can remain unmanaged. Admission doesn't reserve an exclusive performance-test window. Agents should submit supported gated commands and wait, rather than negotiate machine-wide hold/release broadcasts. See [agent guidance](../start/agents.md#let-turnstile-own-admission) for diagnosis, functional tests, and benchmark methodology. Explicit machine-exclusive scheduling remains a future product decision.
+
 ## Learned peaks
 
 A command's expected peak is the highest of its last twenty runs in that project over the past month, with release and debug builds kept apart. It's the high-water mark rather than an average, because a cold compile can be tens of times an incremental one. A command new to a project starts from its median peak in other projects.

@@ -20,6 +20,7 @@ swift test             # unit tests
 swift format lint --strict --recursive --parallel Sources Tests Package.swift
 node --test --test-concurrency=1 scripts/release-args-tests.mjs scripts/package-tests.mjs \
   scripts/dist-tests.mjs scripts/release-notes-tests.mjs # release helpers with isolated tools
+node --test scripts/agent-guidance-tests.mjs # published snippet and admission guidance contract
 node --test scripts/e2e-server-tests.mjs   # run-scoped process detection and cleanup
 /usr/bin/python3 scripts/e2e-restart-tests.py # restart polling with a fake status CLI
 node --test scripts/history-report-tests.mjs # report arguments and isolated SQLite data

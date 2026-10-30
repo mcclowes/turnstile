@@ -24,6 +24,7 @@ node --test scripts/e2e-server-tests.mjs   # run-scoped process detection and cl
 /usr/bin/python3 scripts/e2e-restart-tests.py # restart polling with a fake status CLI
 node --test scripts/history-report-tests.mjs # report arguments and isolated SQLite data
 /usr/bin/python3 scripts/e2e-top-tests.py # PTY handshakes and delayed terminal restoration
+/usr/bin/python3 scripts/invocation-tests.py # bash login installation and real admission with fake tools
 ./scripts/fingerprint-timing.sh # isolated 60k-file fingerprint timings; FILES changes the size
 ```
 
@@ -61,6 +62,8 @@ discarding the backup.
 The top driver checks exercise a fake CLI in a temporary home. Full E2E reports job visibility, pause, kill confirmation, target removal, UI exit, terminal restoration, driver errors, and caller status separately. Failures print the last status snapshot, PTY tail, and job output.
 
 The e2e script never touches your real `~/.turnstile`. To try a local build for real, run `.build/debug/turnstile init`, and `turnstile uninstall` when you're done.
+
+Invocation fixtures run actual login shells and an isolated daemon with fake Swift, npm, and Node tools. They require Unix socket access and macOS `sandbox-exec`; denied sockets fail setup rather than count as admission. Set `TURNSTILE_CODEX_BIN` to a Codex CLI supporting `sandbox --allow-unix-socket` to include that harness check with a disposable Codex home and network-disabled profile. This does not verify a separate managed agent session's permissions.
 
 Pressure and restart fixtures keep fake jobs alive with wait files until their
 state is observed. Allocation fixtures wait for a sampled peak and visible

@@ -37,3 +37,41 @@ turnstile agents >> AGENTS.md
 ```
 
 `turnstile doctor` reports what ran outside turnstile anyway.
+
+## Codex command and socket integration
+
+Codex can invoke Node by absolute path with a JavaScript entry point, bypassing PATH shims. For finite heavy commands, use the existing explicit wrapper with the appropriate class:
+
+```sh
+turnstile run --class test -- node node_modules/vitest/vitest.mjs run
+turnstile run --class compile -- /absolute/path/to/node node_modules/typescript/bin/tsc
+turnstile run --class browser -- node node_modules/@playwright/test/cli.js test
+```
+
+The wrapper preserves arguments, exit status, and nested-job protection. Children of an admitted job share its slot. `run` explicitly gates the requested command, even if normal classification would pass it through, so don't wrap interactive tools, dev servers, or watch commands. Node itself isn't shimmed. SourceKit and IDE compilers remain unmanaged load.
+
+Routing and socket permission are separate requirements. A socket-denied Codex sandbox still runs these wrappers **ungated**, with a warning, under turnstile's deliberate fail-open policy. Adding a writable directory or wrapping the command does not grant socket access.
+
+Codex CLI 0.166.0 exposes an exact socket grant for its standalone sandbox command:
+
+```sh
+codex sandbox --allow-unix-socket /Users/YOU/.turnstile/turnstiled.sock \
+  turnstile run --class test -- node node_modules/vitest/vitest.mjs run
+```
+
+The isolated invocation fixtures verify this path with general networking disabled. This standalone command doesn't configure the sandbox of an already-running agent session. Check `codex help sandbox` for availability in your version.
+
+For a harness that supports Codex permission profiles and Unix socket allowlisting, retain its existing filesystem restrictions and add only turnstile's exact socket path to the active profile. For example, merge this into an existing profile named `project-edit`, substituting your absolute home path:
+
+```toml
+[permissions.project-edit.network.unix_sockets]
+"/Users/YOU/.turnstile/turnstiled.sock" = "allow"
+```
+
+This is a configuration fragment, not a complete profile. The profile must be selected by the harness. Codex's [permissions documentation](https://learn.chatgpt.com/docs/permissions#unix-sockets) describes socket allowlisting and the required network proxy setup. Use the managed proxy with its existing domain policy; don't enable unrestricted network access, allow all Unix sockets, or disable the sandbox to make turnstile work. A socket grant exposes turnstile's local daemon protocol, including job controls, not just admission. Review that capability with the harness owner.
+
+The socket path is printed by `turnstile doctor`; a custom, deeply nested `TURNSTILE_HOME` can use a short `/tmp/turnstile-…sock` path instead. Start the daemon from an ordinary terminal. turnstile won't start one inside a sandbox. To retain captured output, grant write access only to the selected turnstile home's `logs` directory. Without that access, admission can still work, but output isn't retained there.
+
+Restart the harness after an approved configuration change, then run `turnstile doctor --shells` **inside that harness**. Verify admission with a finite command and its queued/running job or completed history row. An exit code of zero alone doesn't prove admission. Install bash startup blocks separately if `$SHELL` selected zsh; see [checking other shells](../troubleshooting.md#checking-other-shells).
+
+Some managed harnesses don't expose the socket permission or don't honor local Codex settings. In that case the integration is unavailable in that sandbox. Report the harness, exact socket path, and connection error to its owner. Don't claim coverage, silently broaden permissions, or treat an unreachable socket as proof the daemon is absent. An explicitly approved execution outside the sandbox can request admission, but that verifies only that approved execution path.

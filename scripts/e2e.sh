@@ -5,6 +5,7 @@ set -u
 cd "$(dirname "$0")/.."
 swift build -q || exit 1
 BIN="$(swift build --show-bin-path)/turnstile"
+TURNSTILE_BIN="$BIN" /usr/bin/python3 scripts/invocation-tests.py || exit 1
 SERVER_CONTROL="$PWD/scripts/e2e-server.sh"
 E2E_TOP_DRIVER="$PWD/scripts/e2e-top.py"
 

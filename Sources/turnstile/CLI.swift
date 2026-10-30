@@ -108,7 +108,7 @@ enum CLI {
         let shell = option("--shell", in: args).flatMap(ShellSetup.Shell.init(rawValue:)) ?? .detect(environment)
         let snippet = ShellSetup.snippet(shell: shell, shimsDir: paths.shims)
         let home = homeDirectory(environment)
-        for file in shell.startupFiles {
+        for file in shell.installationFiles(home: home) {
             let path = home + "/" + file
             let existing = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
             let updated = ShellSetup.install(snippet, into: existing)

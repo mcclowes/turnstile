@@ -18,11 +18,13 @@ Calls by absolute path, such as `/usr/bin/make`, always go around the shims. See
 
 ## Commands in a sandboxed agent run ungated
 
-Agent sandboxes, such as Codex's, usually block the daemon's socket, so gated commands there run ungated and print `can't reach the daemon from inside this sandbox`. To gate them, allow the sandbox to connect to `~/.turnstile/turnstiled.sock` (for Codex, that may mean turning on network access in its sandbox settings). turnstile never starts the daemon from inside a sandbox, so it can't pick up the sandbox's limits. Run `turnstile doctor` once from an ordinary shell to start it.
+Agent sandboxes can block the daemon's socket, so gated commands there run ungated and print `can't reach the daemon from inside this sandbox`. Allow only the exact socket reported by doctor if the harness supports it. A `turnstile run` wrapper can't grant that permission. See [Codex command and socket integration](./start/agents.md#codex-command-and-socket-integration) for supported invocation forms, permission requirements, and unavailable-harness diagnostics. turnstile never starts the daemon from inside a sandbox, so it can't pick up the sandbox's limits. Run `turnstile doctor` once from an ordinary shell to start it.
 
 ## Checking other shells
 
 `turnstile doctor --shells` runs `zsh -c`, `zsh -lc`, `zsh -ic`, and `bash -lc` from a bare environment and reports any shell where a tool resolves ahead of the shims. It also checks the newest Claude Code shell snapshot: a session that started before `turnstile init` keeps the PATH it had, so its commands run ungated until you start a new one.
+
+`init` installs startup blocks for the selected shell only (by default, `$SHELL`). If your terminal uses zsh but your agent also starts bash, run `turnstile init --shell bash` from an ordinary terminal, then start a new agent session. This updates `.bashrc` and the first readable login file among `.bash_profile`, `.bash_login`, and `.profile`, creating `.bash_profile` only if none exists. Bash `-c` does not read those files; its parent must supply the shim PATH, or explicitly evaluate `turnstile env --shell bash` before starting commands.
 
 ## Finding runs that went ungated
 

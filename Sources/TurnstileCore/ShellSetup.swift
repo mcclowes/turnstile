@@ -23,9 +23,19 @@ public enum ShellSetup {
         public var startupFiles: [String] {
             switch self {
             case .zsh: return [".zshenv", ".zshrc", ".zlogin"]
-            case .bash: return [".bashrc", ".bash_profile"]
+            case .bash: return [".bashrc", ".bash_profile", ".bash_login", ".profile"]
             case .fish: return [".config/fish/conf.d/turnstile.fish"]
             }
+        }
+
+        /// Bash reads only the first readable login file. Creating .bash_profile would hide the others.
+        public func installationFiles(home: String) -> [String] {
+            guard self == .bash else { return startupFiles }
+            let login =
+                startupFiles.dropFirst().first {
+                    FileManager.default.isReadableFile(atPath: home + "/" + $0)
+                } ?? ".bash_profile"
+            return [".bashrc", login]
         }
     }
 
@@ -46,6 +56,7 @@ public enum ShellSetup {
         case .bash:
             return """
                 \(begin)
+                if [ -n "${BASH_VERSION:-}" ]; then
                 _turnstile_shims_first() {
                   local shims="\(quoted)"
                   PATH=":$PATH:"; PATH="${PATH//":$shims:"/:}"; PATH="${PATH#:}"; PATH="${PATH%:}"
@@ -57,6 +68,7 @@ public enum ShellSetup {
                   *_turnstile_shims_first*) ;;
                   *) PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND;}_turnstile_shims_first" ;;
                 esac
+                fi
                 \(end)
                 """
         case .fish:

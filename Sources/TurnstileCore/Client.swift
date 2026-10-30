@@ -17,14 +17,19 @@ public final class Client {
     deinit { close(fd) }
 
     public static func connect(socketPath: String) -> Client? {
+        try? connecting(socketPath: socketPath).get()
+    }
+
+    /// Retains the observation error; command callers can keep using the fail-open optional API.
+    public static func connecting(socketPath: String) -> Result<Client, ConnectionFailure> {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return nil }
+        guard fd >= 0 else { return .failure(ConnectionFailure(code: errno)) }
         var address = sockaddr_un()
         address.sun_family = sa_family_t(AF_UNIX)
         let bytes = Array(socketPath.utf8)
         guard bytes.count < MemoryLayout.size(ofValue: address.sun_path) else {
             close(fd)
-            return nil
+            return .failure(ConnectionFailure(code: ENAMETOOLONG))
         }
         withUnsafeMutableBytes(of: &address.sun_path) { buffer in
             buffer.copyBytes(from: bytes)
@@ -36,10 +41,11 @@ public final class Client {
             }
         }
         guard result == 0 else {
+            let code = errno
             close(fd)
-            return nil
+            return .failure(ConnectionFailure(code: code))
         }
-        return Client(fd: fd)
+        return .success(Client(fd: fd))
     }
 
     @discardableResult

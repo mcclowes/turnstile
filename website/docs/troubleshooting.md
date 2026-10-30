@@ -20,6 +20,14 @@ Calls by absolute path, such as `/usr/bin/make`, always go around the shims. See
 
 Agent sandboxes can block the daemon's socket, so gated commands there run ungated and print `can't reach the daemon from inside this sandbox`. Allow only the exact socket reported by doctor if the harness supports it. A `turnstile run` wrapper can't grant that permission. See [Codex command and socket integration](./start/agents.md#codex-command-and-socket-integration) for supported invocation forms, permission requirements, and unavailable-harness diagnostics. turnstile never starts the daemon from inside a sandbox, so it can't pick up the sandbox's limits. Run `turnstile doctor` once from an ordinary shell to start it.
 
+## Status says observation is blocked
+
+Use `status` or doctor for these diagnostics. The current `top` and menu bar missing-snapshot displays do not distinguish connection errors.
+
+`permissionDenied` means the process could not inspect the daemon endpoint. It does not mean the daemon stopped. Grant the active harness permission to connect to the exact Unix socket printed by status or doctor, then retry in a new session. Keep the rest of the sandbox policy intact. If the harness has no socket permission control, its owner must provide one; a command wrapper cannot fix this.
+
+`unreachable` means the endpoint could not be queried or did not return a status reply. Check the reported error and daemon log from a permitted terminal before restarting anything. `absent` means there was no listener at the reported endpoint at the time of the check. Memory marked unknown includes failed or unsupported sysctl reads; repeat the diagnostic from a permitted terminal instead of treating the scheduler's fallback values as measured capacity.
+
 ## Checking other shells
 
 `turnstile doctor --shells` runs `zsh -c`, `zsh -lc`, `zsh -ic`, and `bash -lc` from a bare environment and reports any shell where a tool resolves ahead of the shims. It also checks the newest Claude Code shell snapshot: a session that started before `turnstile init` keeps the PATH it had, so its commands run ungated until you start a new one.

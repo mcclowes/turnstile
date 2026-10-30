@@ -270,13 +270,23 @@ enum CLI {
     }
 
     static func statusText(json: Bool) -> String {
-        guard let client = Client.connect(socketPath: paths.socket),
-            let reply = client.roundTrip(Message(type: "status")), let snapshot = reply.status
-        else {
-            if json { return #"{"daemon":false}"# }
+        let observation = DaemonObservation.read(socket: paths.socket)
+        guard case .reachable(let snapshot) = observation else {
+            let memory = SystemMemory.observation()
+            if json, case .failed(let state, let code, let error) = observation {
+                var result: [String: Any] = [
+                    "daemon": state == "absent" ? false : NSNull(), "observation": state,
+                    "socket": paths.socket, "error": error, "action": observation.action(socket: paths.socket),
+                    "memoryObservation": (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(memory))) ?? [:],
+                ]
+                if let code { result["errno"] = code }
+                let data = (try? JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])) ?? Data()
+                return String(decoding: data, as: UTF8.self)
+            }
             var lines = [
-                "turnstile: daemon not running (starts with the first gated command)",
-                "memory: \(SystemMemory.level())% free of \(Bytes.format(SystemMemory.physical))",
+                "turnstile: " + observation.text(socket: paths.socket),
+                "action: " + observation.action(socket: paths.socket),
+                "memory: " + memory.summary,
             ]
             if let store = try? Store(path: paths.database) {
                 let recent = store.recent(limit: 10)

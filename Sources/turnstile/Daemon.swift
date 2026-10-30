@@ -168,6 +168,7 @@ final class Daemon {
     var timer: DispatchSourceTimer?
     var memoryLevel = 100
     var pressure = MemoryPressure.normal
+    var memoryObservation: MemoryObservation?
     var lastLoggedMemory: MemoryReading?
     var memory = MemoryPressureTracker()
     var memoryPressure = EffectiveMemoryPressure.normal
@@ -707,10 +708,13 @@ final class Daemon {
 
     /// The free-memory level plus what swap is doing, which is what tells us whether that level means anything.
     func readMemory() {
-        let sample = SystemMemory.sample(at: Daemon.clock())
+        let observation = SystemMemory.observation(source: "daemon")
+        memoryObservation = observation
+        let sample = observation.schedulingSample(at: Daemon.clock())
         memory.record(sample)
         observe(MemoryReading(sample))
         let effective = memory.pressure
+        memoryObservation?.effectivePressure = String(describing: effective)
         if effective != memoryPressure {
             log(
                 "effective memory pressure is \(effective), \(sample.level)% free, \(Bytes.format(sample.swapUsed)) swapped"
@@ -1201,7 +1205,7 @@ final class Daemon {
         }
         var limits: [String: Int] = [:]
         for (cls, limit) in policy.classLimits { limits[cls.rawValue] = limit }
-        return StatusSnapshot(
+        var snapshot = StatusSnapshot(
             memoryLevel: memoryLevel, physicalMemory: physical, reserve: config.machine.reserveBytes, limits: limits,
             running: jobs.values.filter { $0.state != .queued }.sorted { ($0.startedAt ?? 0) < ($1.startedAt ?? 0) }
                 .map(describe),
@@ -1210,6 +1214,8 @@ final class Daemon {
             daemonPid: getpid(),
             ungated: store.escapes(since: Daemon.now() - 3600, limit: 3)
         )
+        snapshot.memoryObservation = memoryObservation
+        return snapshot
     }
 
     // MARK: Housekeeping

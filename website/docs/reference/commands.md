@@ -18,6 +18,12 @@ Jobs can be named by queue number, pid, or name.
 | `turnstile history [--days 30] [--here] [--limit 20] [--json]` | What each command costs and how long jobs waited. `--here` narrows it to this project |
 | `turnstile apps [--days 7] [--limit 10] [--json]` | Which apps usually hold memory outside turnstile's jobs, so you can see what your builds are queuing behind |
 
+When the daemon answers, `status --json` keeps the status snapshot fields (`daemonPid`, `memoryLevel`, `running`, and `queued`). New daemons also include `memoryObservation`, with source, sample time, optional observed values, effective pressure, and per-read errors. Older daemons omit that field. Required numeric fields remain compatible with older consumers and can contain scheduling fallbacks; use `memoryObservation` to establish whether values were observed.
+
+When status cannot be observed, JSON includes `observation` (`absent`, `permissionDenied`, `unreachable`, or `unknown`), `socket`, `error`, and `action`. `daemon: false` means no listener was found at that endpoint; `daemon: null` means presence could not be established. Do not interpret a successful status command exit as proof of daemon reachability; require a positive `daemonPid`. Status remains read-only and exits zero for these diagnostic results.
+
+Without a reachable daemon, memory is sampled locally and labeled with its source. Failed reads are unknown, never healthy defaults. No disk snapshot is used as live status. Doctor prefers the reachable daemon's observation; older daemons can supply only free level and physical memory, so other signals remain unknown. Diagnostic failures do not change the intentional fail-open behavior of gated commands.
+
 ![turnstile status with two running jobs and recent runs](/img/screenshots/status.webp)
 
 ## History

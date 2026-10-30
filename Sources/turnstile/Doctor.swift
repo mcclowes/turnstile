@@ -40,9 +40,29 @@ enum Doctor {
         findings += shims(paths: paths, config: config, environment: environment)
         findings += switches(paths: paths, environment: environment)
         findings += configuration()
-        findings += daemon(paths: paths)
+        var observation = DaemonObservation.read(socket: paths.socket)
+        if case .failed(let state, _, _) = observation, state == "absent", !Sandbox.isActive {
+            if let client = Client.connectOrStart(paths: paths),
+                let reply = client.roundTrip(Message(type: "status")), let snapshot = reply.status
+            {
+                observation = .reachable(snapshot)
+            } else {
+                observation = DaemonObservation.read(socket: paths.socket)
+            }
+        }
+        findings += daemon(paths: paths, observation: observation)
         findings += ungated(paths: paths, environment: environment)
-        findings += system(environment: environment, config: config)
+        let memory: MemoryObservation
+        if case .reachable(let status) = observation {
+            memory =
+                status.memoryObservation
+                ?? MemoryObservation(
+                    source: "daemon (legacy status)", sampledAt: nil,
+                    level: status.memoryLevel, physical: status.physicalMemory, kernelPressure: nil, swapUsed: nil)
+        } else {
+            memory = SystemMemory.observation(environment: environment)
+        }
+        findings += system(environment: environment, config: config, memory: memory)
         return findings
     }
 
@@ -168,31 +188,12 @@ enum Doctor {
         ]
     }
 
-    /// Starts the daemon if needed, so a broken daemon shows up here rather than on the next build.
-    static func daemon(paths: Paths) -> [Finding] {
-        guard let client = Client.connectOrStart(paths: paths) else {
-            if Sandbox.isActive {
-                return [
-                    Finding(
-                        level: .problem, topic: "daemon",
-                        text:
-                            "this shell is sandboxed and can't reach the daemon on \(paths.socket), so commands here run ungated",
-                        fix:
-                            "let the agent's sandbox connect to that unix socket (for Codex, that may mean network access), and run `turnstile doctor` once outside the sandbox to start the daemon"
-                    )
-                ]
-            }
+    static func daemon(paths: Paths, observation: DaemonObservation) -> [Finding] {
+        guard case .reachable(let status) = observation else {
             return [
                 Finding(
-                    level: .problem, topic: "daemon", text: "can't start or reach the daemon on \(paths.socket)",
-                    fix: "check \(paths.daemonLog); gated commands run ungated until this is fixed")
-            ]
-        }
-        guard let reply = client.roundTrip(Message(type: "status")), let status = reply.status else {
-            return [
-                Finding(
-                    level: .problem, topic: "daemon", text: "the daemon isn't answering",
-                    fix: "turnstile stop, then run any gated command")
+                    level: .problem, topic: "daemon", text: observation.text(socket: paths.socket),
+                    fix: observation.action(socket: paths.socket) + "; commands here fail open until reachable")
             ]
         }
         guard status.version == Turnstile.version else {
@@ -312,14 +313,17 @@ enum Doctor {
         return findings
     }
 
-    static func system(environment: [String: String], config: Config) -> [Finding] {
+    static func system(environment: [String: String], config: Config, memory: MemoryObservation) -> [Finding] {
         var findings: [Finding] = []
-        let reading = MemoryReading.now(environment: environment)
+        let pressured =
+            (memory.kernelPressure ?? 1) >= 2
+            || memory.effectivePressure == "swapping" || memory.effectivePressure == "critical"
         findings.append(
             Finding(
-                level: .ok, topic: "memory",
-                text:
-                    "\(reading.level)% free of \(Bytes.format(SystemMemory.physical)), pressure \(reading.pressure.name), swap \(Bytes.format(reading.swapUsed)) used"
+                level: memory.complete && !pressured ? .ok : .problem, topic: "memory", text: memory.summary,
+                fix: !memory.complete
+                    ? "retry from a permitted terminal; failed reads are not measured capacity"
+                    : pressured ? "wait for memory pressure to settle; inspect `turnstile status` for queued work" : nil
             ))
         if !FileManager.default.isExecutableFile(atPath: Supervisor.taskpolicy) {
             findings.append(

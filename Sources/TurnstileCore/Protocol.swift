@@ -166,6 +166,7 @@ public struct StatusSnapshot: Codable, Equatable, Sendable {
     public var queued: [JobSnapshot]
     public var recent: [HistoryEntry]
     public var daemonPid: Int32
+    public var memoryObservation: MemoryObservation?
     /// Nil from daemons older than 0.2.
     public var version: String?
     /// Heavy processes seen running outside every job in the last hour.

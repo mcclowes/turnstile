@@ -16,6 +16,8 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ### Fixed
 
+- Status and doctor distinguish blocked daemon observation from absence, report unknown memory reads, and prefer the reachable daemon’s sample (#141).
+
 - Bash startup installation preserves an existing `.bash_login` or `.profile` instead of hiding it behind a new `.bash_profile` (#137).
 - `run --help` and `run -h` show usage before executable lookup. Help flags after the command or `--` remain unchanged.
 - Corrected the documentation site's supported Node range to match CSpell and Vitest.

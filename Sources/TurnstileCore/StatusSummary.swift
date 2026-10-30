@@ -4,6 +4,7 @@ import Foundation
 extension StatusSnapshot {
     /// "40% free (~6.4 GB of 16 GB)".
     public var memorySummary: String {
+        if let observation = memoryObservation { return observation.summary }
         let free = SystemMemory.free(level: memoryLevel, of: physicalMemory)
         return "\(memoryLevel)% free (~\(Bytes.format(free)) of \(Bytes.format(physicalMemory)))"
     }

@@ -4,6 +4,11 @@ The commands this repo already uses, from CONTRIBUTING.md, the CI workflows, and
 
 Effects describe the listed invocations with their default environment. Safe commands may write build output and caches. Global installation, process controls, and stress workloads require explicit execution intent. Interactive commands need a terminal; long-running commands stay open until stopped.
 
+Nightly fixtures require Node 24, Git, and Ruby. Repository setup and local
+publication use private Git configuration and empty templates, so developer hooks
+and signing settings stay out of those Git commands. Publishing requests and
+artifact downloads are stubbed; pushes stay within temporary local repositories.
+
 - Build: `swift build` #safe #quick
 - Tests: `swift test` — unit tests #safe #monitor
 - Fingerprint timing: `./scripts/fingerprint-timing.sh` — disposable 60k-file repository in four states #safe #monitor

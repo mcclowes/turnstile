@@ -1,16 +1,56 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync, cpSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, cpSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { fingerprint, lastDelivered, nightlyRecipe, deliver, publishHomebrew } from './nightly-release.mjs';
+
+const fixtureGitEnv = {
+  ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_'))),
+  GIT_CONFIG_GLOBAL: '/dev/null',
+  GIT_CONFIG_NOSYSTEM: '1',
+};
+
+test('nightly Git fixtures ignore developer hooks, signing, and templates', () => {
+  const root = mkdtempSync(join(tmpdir(), 'nightly git config '));
+  try {
+    const hooks = join(root, 'hooks');
+    const template = join(root, 'template');
+    const calls = join(root, 'external-calls');
+    const config = join(root, 'global.gitconfig');
+    const signer = join(root, 'fake-signer');
+    const blockedTool = '#!/bin/sh\nprintf "%s\\n" "${0##*/}" >> "$NIGHTLY_FIXTURE_EXTERNAL_CALLS"\nexit 97\n';
+    mkdirSync(hooks);
+    mkdirSync(join(template, 'hooks'), { recursive: true });
+    writeFileSync(join(hooks, 'pre-commit'), blockedTool, { mode: 0o755 });
+    writeFileSync(join(template, 'hooks', 'pre-commit'), blockedTool, { mode: 0o755 });
+    writeFileSync(signer, blockedTool, { mode: 0o755 });
+    writeFileSync(config, `[core]\n  hooksPath = ${JSON.stringify(hooks)}\n[commit]\n  gpgSign = true\n[gpg]\n  program = ${JSON.stringify(signer)}\n`);
+    const childEnv = { ...process.env, GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: '1', GIT_TEMPLATE_DIR: template, NIGHTLY_FIXTURE_EXTERNAL_CALLS: calls };
+    // A nested test run needs a fresh runner context.
+    delete childEnv.NODE_TEST_CONTEXT;
+    const child = spawnSync(process.execPath, [
+      '--test', '--test-reporter=tap',
+      '--test-name-pattern=^(deployable inputs change|Homebrew publication verifies)',
+      fileURLToPath(import.meta.url),
+    ], {
+      cwd: root, encoding: 'utf8', timeout: 25000,
+      env: childEnv,
+    });
+    assert.equal(child.error, undefined);
+    assert.equal(child.status, 0, child.stdout + child.stderr);
+    assert.match(child.stdout, /^# tests 2$/m);
+    assert.equal(existsSync(calls), false, 'Developer hooks and signing tools must not run.');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 
 test('deployable inputs change the fingerprint; documentation-only commits do not', () => {
   const root = mkdtempSync(join(tmpdir(), 'nightly-inputs-'));
-  const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' });
+  const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', env: fixtureGitEnv });
   try {
-    git('init', '-q');
+    git('init', '--template=', '-q');
     git('config', 'user.name', 'Nightly test');
     git('config', 'user.email', 'nightly@example.invalid');
     mkdirSync(join(root, 'Sources'));
@@ -97,10 +137,10 @@ test('Homebrew publication verifies the remote artifact before pushing only the 
   const root = mkdtempSync(join(tmpdir(), 'nightly-publish-'));
   const tap = join(root, 'tap');
   const origin = join(root, 'remote.git');
-  const real = (program, args, options = {}) => execFileSync(program, args, { encoding: 'utf8', ...options });
+  const real = (program, args, options = {}) => execFileSync(program, args, { encoding: 'utf8', env: fixtureGitEnv, ...options });
   try {
-    real('git', ['init', '--bare', '-q', origin]);
-    real('git', ['init', '-q', '-b', 'main', tap]);
+    real('git', ['init', '--template=', '--bare', '-q', origin]);
+    real('git', ['init', '--template=', '-q', '-b', 'main', tap]);
     const git = (...args) => real('git', ['-C', tap, ...args]);
     git('config', 'user.name', 'Nightly test'); git('config', 'user.email', 'nightly@example.invalid');
     mkdirSync(join(tap, 'Formula'));
@@ -123,12 +163,12 @@ test('Homebrew publication verifies the remote artifact before pushing only the 
       }
       return real(program, args, options);
     };
-    const env = { ...process.env, NIGHTLY_TAP_PATH: tap, GITHUB_REPOSITORY: 'o/app', GITHUB_TOKEN: 'test' };
+    const env = { ...fixtureGitEnv, NIGHTLY_TAP_PATH: tap, GITHUB_REPOSITORY: 'o/app', GITHUB_TOKEN: 'test' };
     await assert.rejects(publishHomebrew(config, candidate, { run, env }), /checksum mismatch/);
     assert.doesNotMatch(real('git', ['--git-dir', origin, 'ls-tree', '-r', 'main']), /demo-nightly/);
     // A fresh runner retries from the still-published tap, not the failed local commit.
     const retryTap = join(root, 'retry');
-    real('git', ['clone', '-q', '-b', 'main', origin, retryTap]);
+    real('git', ['clone', '--template=', '-q', '-b', 'main', origin, retryTap]);
     corrupt = false;
     await publishHomebrew(config, candidate, { run, env: { ...env, NIGHTLY_TAP_PATH: retryTap } });
     assert.match(real('git', ['--git-dir', origin, 'show', 'main:Formula/demo-nightly.rb']), /class DemoNightly/);

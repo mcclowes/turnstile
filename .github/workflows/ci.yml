@@ -22,6 +22,8 @@ jobs:
           node scripts/license-check.mjs
       - name: Release helper checks
         run: node --test --test-concurrency=1 scripts/release-args-tests.mjs scripts/package-tests.mjs scripts/dist-tests.mjs
+      - name: Nightly release helper checks
+        run: node --test scripts/nightly-release.test.mjs
       - name: History report input checks
         run: node --test scripts/history-report-tests.mjs
       - name: Agent guidance contract

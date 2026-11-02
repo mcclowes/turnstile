@@ -55,6 +55,30 @@ test('nightly recipes use immutable downloads and cannot replace stable package 
   assert.throws(() => nightlyRecipe(source, { kind: 'cask', stable: 'demo', nightly: 'demo' }, {}), /distinct/);
 });
 
+for (const fixture of [
+  { name: 'license and dependency', license: '  license "MIT"\n', dependencies: '  depends_on macos: :tahoe\n', dependencyStanzas: ['depends_on'] },
+  { name: 'multiline license and platform dependencies', license: '  license any_of: [\n    "MIT",\n    "Apache-2.0",\n  ]\n', dependencies: '  on_macos do\n    depends_on "demo-data"\n  end\n', dependencyStanzas: ['on_macos'] },
+  { name: 'optional license and dependencies omitted', license: '', dependencies: '', dependencyStanzas: [] },
+]) {
+  test(`nightly formula stanza order preserves ${fixture.name}`, () => {
+    const body = '  resource "demo-data" do\n    url "https://example.invalid/data.tar.gz"\n    sha256 "resource-checksum"\n  end\n\n  def install\n    bin.install "demo"\n  end\n\n  test do\n    assert_equal version.to_s, shell_output("#{bin}/demo --version").strip\n  end\nend\n';
+    const source = `class Demo < Formula\n  desc "Demo"\n  homepage "https://example.invalid/demo"\n  url "https://example.invalid/stable.tar.gz"\n  version "0.9.0"\n  sha256 "stable-checksum"\n${fixture.license}  revision 2\n\n${fixture.dependencies}\n${body}`;
+    const artifact = { version: '1.2.3', revision: 123, url: 'https://example.invalid/nightly-123/demo.tar.gz', sha256: 'a'.repeat(64) };
+    const rendered = nightlyRecipe(source, { kind: 'formula', stable: 'demo', nightly: 'demo-nightly' }, artifact);
+    const declarations = [...rendered.matchAll(/^  ([a-z_][a-z_0-9]*)(?:\s|$)/gm)].map((match) => match[1]).filter((name) => name !== 'end');
+    assert.deepEqual(declarations, ['desc', 'homepage', 'url', 'version', 'sha256', ...(fixture.license ? ['license'] : []), 'revision', ...fixture.dependencyStanzas, 'conflicts_with', 'resource', 'def', 'test']);
+    assert.match(rendered, /^class DemoNightly < Formula\n/);
+    assert.ok(rendered.includes(`  url "${artifact.url}"\n`));
+    assert.ok(rendered.includes(`  version "${artifact.version}"\n`));
+    assert.ok(rendered.includes(`  sha256 "${artifact.sha256}"\n`));
+    assert.ok(rendered.includes(`  revision ${artifact.revision}\n`));
+    assert.ok(rendered.includes('  conflicts_with "demo"\n'));
+    assert.ok(rendered.includes(fixture.license));
+    assert.ok(rendered.includes(fixture.dependencies));
+    assert.ok(rendered.endsWith(body));
+  });
+}
+
 test('only a successful deployment advances the nightly baseline, including across pages', async () => {
   const calls = [];
   const request = async (path) => {

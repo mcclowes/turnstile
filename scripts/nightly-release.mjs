@@ -42,7 +42,15 @@ export function nightlyRecipe(source, recipe, artifact) {
     const className = recipe.nightly.split('-').map((part) => part[0].toUpperCase() + part.slice(1)).join('');
     replace(/^class \w+ < Formula/m, `class ${className} < Formula`);
     source = source.replace(/^  (version|revision) .+\n/gm, '');
-    source = source.replace(/^(  sha256 .+)$/m, `$1\n  version "${artifact.version}"\n  revision ${artifact.revision}\n  conflicts_with "${recipe.stable}"`);
+    const insertBefore = (pattern, declaration) => {
+      const boundary = source.match(pattern) ?? source.match(/^end\b/m);
+      if (!boundary) throw new Error('Unsupported stable formula: missing end');
+      const prefix = source.slice(0, boundary.index).trimEnd();
+      source = `${prefix}\n${declaration}\n${boundary[0].startsWith('end') ? '' : '\n'}${source.slice(boundary.index)}`;
+    };
+    replace(/^(  sha256 .+)$/m, `  version "${artifact.version}"\n$1`);
+    insertBefore(/^  (?!(?:include|desc|homepage|url|mirror|version|sha256|license|end)\b)[a-z_]/m, `  revision ${artifact.revision}`);
+    insertBefore(/^  (?:conflicts_with|preserve_rpath|skip_clean|cxxstdlib_check|link_overwrite|fails_with|pypi_packages|resource|patch|needs|allow_network_access!|deny_network_access!|def|test)(?:[ \t(]|$)/m, `\n  conflicts_with "${recipe.stable}"`);
   }
   replace(/^  url .+$/m, `  url "${artifact.url}"`);
   replace(/^  sha256 .+$/m, `  sha256 "${artifact.sha256}"`);

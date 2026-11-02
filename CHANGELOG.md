@@ -18,6 +18,7 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ### Fixed
 
+- Nightly Homebrew formulas keep version, revision, and conflict declarations in Homebrew order.
 - Status and doctor distinguish blocked daemon observation from absence, report unknown memory reads, and prefer the reachable daemon’s sample (#141).
 
 - Bash startup installation preserves an existing `.bash_login` or `.profile` instead of hiding it behind a new `.bash_profile` (#137).

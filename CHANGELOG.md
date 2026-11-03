@@ -4,6 +4,8 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ## Unreleased
 
+## 0.10.0
+
 ### Added
 
 - `turnstile apps` shows which apps usually hold memory outside turnstile's jobs. While it runs, the daemon samples every minute, grouping helpers under their app and dropping the long tail (#140).
@@ -16,6 +18,7 @@ Notable changes to turnstile. Versions follow [semantic versioning](https://semv
 
 ### Fixed
 
+- Custom tools added in the Tools tab now use the compile queue instead of passing through without admission. Help and version queries still pass through, and command rules can select another queue (#147).
 - `run --help` and `run -h` show usage before executable lookup. Help flags after the command or `--` remain unchanged.
 - Corrected the documentation site's supported Node range to match CSpell and Vitest.
 - A missing value for `run --class` is rejected as a usage error instead of being looked up as a command.

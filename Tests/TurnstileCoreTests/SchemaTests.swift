@@ -43,8 +43,9 @@ struct SchemaTests {
     @Test func projectSchemaMatchesTheGlobalOneWhereTheyOverlap() throws {
         let global = try schema("config.schema.json")
         let project = try schema("turnstilerc.schema.json")
-        #expect(NSDictionary(dictionary: global["definitions"] as? [String: Any] ?? [:])
-            == NSDictionary(dictionary: project["definitions"] as? [String: Any] ?? [:]))
+        #expect(
+            NSDictionary(dictionary: global["definitions"] as? [String: Any] ?? [:])
+                == NSDictionary(dictionary: project["definitions"] as? [String: Any] ?? [:]))
         let globalProperties = global["properties"] as? [String: Any] ?? [:]
         for (key, value) in project["properties"] as? [String: Any] ?? [:] {
             #expect(

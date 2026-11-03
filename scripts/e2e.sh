@@ -18,7 +18,7 @@ export TURNSTILE_AGENT=1
 unset TURNSTILE_TOKEN TURNSTILE_DISABLE
 mkdir -p "$T/bin" "$T/config" "$T/work"
 echo 90 > "$T/level"
-echo '{"concurrency": {"test": 1, "compile": 2}}' > "$T/config/config.json"
+echo '{"concurrency": {"test": 1, "compile": 2}, "shims": {"add": ["godot"]}}' > "$T/config/config.json"
 
 # A fake `swift`: logs each run, can sleep, fail, nest, or allocate memory.
 cat > "$T/bin/swift" <<'EOF'
@@ -49,6 +49,16 @@ echo "fake swift done" >&2
 exit "${FAKE_EXIT:-0}"
 EOF
 chmod +x "$T/bin/swift"
+cat > "$T/bin/godot" <<'EOF'
+#!/bin/bash
+echo "fake godot $*"
+if [ "$1" != --version ]; then
+  [ -n "${TURNSTILE_TOKEN:-}" ] || exit 99
+  while [ -e "${FAKE_WAIT_FILE:-}" ]; do sleep 0.05; done
+fi
+exit "${FAKE_EXIT:-0}"
+EOF
+chmod +x "$T/bin/godot"
 export FAKE_RUNS="$T/runs"
 : > "$FAKE_RUNS"
 
@@ -110,6 +120,8 @@ trap cleanup EXIT
 cd "$T/work"
 
 # Pass-through never touches the daemon.
+out="$(godot --version 2>&1)"
+check "custom tool quick queries pass through" '[ "$out" = "fake godot --version" ] && [ ! -S "$TURNSTILE_HOME/turnstiled.sock" ]'
 out="$(swift --version 2>&1)"
 check "quick verbs pass through" '[ "$out" = "fake swift --version
 fake swift done" ] && [ ! -S "$TURNSTILE_HOME/turnstiled.sock" ]'
@@ -120,6 +132,15 @@ check "exit code propagates" '[ $code = 3 ]'
 check "output is unchanged" '[ "$out" = "fake swift build
 fake swift done" ]'
 check "daemon started on demand" '[ -S "$TURNSTILE_HOME/turnstiled.sock" ]'
+
+# A configured custom tool is admitted through its shim without a command rule.
+touch "$T/custom.wait"
+FAKE_WAIT_FILE="$T/custom.wait" godot --headless > "$T/custom.out" 2>&1 & custom_pid=$!
+custom_visible=false
+wait_for_job running work godot && custom_visible=true
+rm "$T/custom.wait"
+wait "$custom_pid"; code=$?
+check "custom tool runs as a visible admitted job" '[ "$custom_visible" = true ] && [ "$code" = 0 ]'
 
 # Two tests with one test slot: the second waits and says why.
 mkdir -p a b

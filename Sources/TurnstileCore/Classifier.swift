@@ -71,7 +71,11 @@ public enum Classifier {
                 ? nil : Classification(.compile, key: "tsc")
         case "xcrun": return xcrun(args, context: context)
         case "corepack": return corepack(args, context: context)
-        default: return nil
+        default:
+            guard context.config.machine.shims?.add?.contains(tool) == true,
+                context.config.machine.shims?.remove?.contains(tool) != true
+            else { return nil }
+            return Classification(.compile, key: tool)
         }
     }
 

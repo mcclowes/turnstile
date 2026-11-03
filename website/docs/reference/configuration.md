@@ -75,6 +75,8 @@ Either file.
 
 `commands` keys are command prefixes, and the longest match wins, with project rules checked before global ones. A rule is a class (`compile`, `test`, or `browser`), `"pass"` to never gate, or an object with a `class` and a `memory` estimate. `scripts` does the same for package.json script names run through npm, pnpm, yarn, or bun.
 
+Custom tools added with `shims.add` use the compile queue by default. Help and version queries pass through. Use command rules to choose another queue or pass through interactive sessions. For example, `"godot --headless": "test"` gates headless Godot runs as tests.
+
 | `throttle` key | Default | Meaning |
 | --- | --- | --- |
 | `inject` | `true` | Add parallelism and heap limits to commands. Anything you pass yourself wins |
